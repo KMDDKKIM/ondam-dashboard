@@ -8,6 +8,7 @@ import {
   updateHappyCallPatient,
 } from '@/lib/supabase/happyCallPatients';
 import type { HappyCallPatient, Staff } from '@/lib/types';
+import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 
@@ -165,6 +166,7 @@ export default function HappyCallRegisterPage() {
           ))}
         </tbody>
       </table>
+      <HappyCallStatsPanel patients={patients} staffList={staffList} />
     </div>
   );
 }
