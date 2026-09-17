@@ -31,7 +31,7 @@
 
 - Next.js (App Router), TypeScript
 - Supabase — Auth(이메일/비밀번호) + Postgres + Realtime
-- 예약관리 앱과 별개의 새 Supabase 프로젝트 (테이블이 8~9개까지 늘어날 수 있어 기존 `hanyak-ondam` 프로젝트와 섞지 않음)
+- Supabase 프로젝트: 무료 티어 2개 제한 때문에 예약관리 앱과 같은 `hanyak-ondam` 프로젝트를 공유 (Phase 1+2 구현 중 사용자 승인, 2026-09-17). 테이블 이름은 prefix 없이 그대로 추가 — 지금까지 `staff` 하나뿐이고 기존 테이블(`prescriptions`, `daily_records`, `reservations`, `monthly_goals`)과 겹치지 않았음. **앞으로 나머지 7개 테이블(§5 "스펙에만 제안" 목록)을 만들 때마다 먼저 `hanyak-ondam`에 같은 이름의 테이블이 이미 있는지 확인할 것** — 특히 `events`처럼 흔한 이름은 충돌 가능성이 있음. 두 앱은 같은 프로젝트의 anon key와 service_role key를 공유하므로, service_role key를 쓰는 예약관리 앱의 서버 코드는 이 앱의 `staff` 테이블도 RLS 없이 접근 가능함 — 별도 접근 제어가 필요해지면 그때 재검토
 - 배포: Vercel (나중에, 예약관리 앱과 동일 패턴 — GitHub 연결 후 push 시 자동 배포)
 
 ## 4. 인증
@@ -39,7 +39,7 @@
 - Supabase Auth(이메일/비밀번호)로 원장·직원 개인별 로그인 — 예약관리 앱의 "공유 비밀번호 1개" 방식과 다름
 - `staff` 테이블에 로그인한 사용자의 이름·역할을 저장, 물품신청 등에서 "누가 했는지" 기록에 사용
 - Next.js `proxy.ts`(미들웨어)로 미로그인 접근을 `/login`으로 리다이렉트 — 예약관리 앱에서 이미 검증된 패턴 재사용
-- RLS: 로그인한 사용자(authenticated)는 모두 읽기/쓰기 가능 — 원장 전용 기능(예: 물품신청 승인)이 필요한 페이지는 그 페이지를 만들 때 `staff.role`을 확인하는 조건을 추가한다. 지금 단계에서 세분화된 권한 체계를 미리 만들지 않는다(YAGNI)
+- RLS: 로그인한 사용자(authenticated)는 `staff` 전체 조회 가능(직원 목록 표시용). 본인 행은 `name`만 수정 가능 — `role`은 authenticated 권한으로 수정 불가(컬럼 단위 GRANT로 제한, 최종 리뷰에서 발견된 자가 권한상승 문제 수정). 원장 전용 기능(예: 물품신청 승인)이 필요한 페이지는 그 페이지를 만들 때 `staff.role`을 확인하는 조건을 추가한다. 지금 단계에서 세분화된 권한 체계를 미리 만들지 않는다(YAGNI)
 
 ## 5. 데이터 모델
 

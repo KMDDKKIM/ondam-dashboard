@@ -5,8 +5,8 @@
 
 ## 로컬 실행
 
-1. Supabase 프로젝트를 만들고 `supabase/schema.sql`을 SQL Editor에서 실행합니다.
-2. `.env.local.example`을 복사해 `.env.local`을 만들고 Project URL / anon public key를 채웁니다.
+1. Supabase 프로젝트: 예약관리 앱(`kh-ondam-reservation`)과 같은 `hanyak-ondam` 프로젝트를 공유합니다(무료 티어 2개 제한 때문 — 별도 프로젝트를 새로 만들지 않습니다). 그 프로젝트의 SQL Editor에서 `supabase/schema.sql`을 실행합니다. 새 테이블을 추가할 때는 기존 테이블(`prescriptions`, `daily_records`, `reservations`, `monthly_goals`, `staff`)과 이름이 겹치지 않는지 먼저 확인하세요.
+2. `.env.local.example`을 복사해 `.env.local`을 만들고 `hanyak-ondam`의 Project URL / anon public key를 채웁니다.
 3. 최소 한 명의 원장 계정을 Supabase Auth에 만들고, `staff` 테이블에 같은 id로
    `role = 'owner'` 행을 추가합니다 (앱 안에서는 가입 폼을 제공하지 않습니다).
 4. 의존성 설치: `npm install`
