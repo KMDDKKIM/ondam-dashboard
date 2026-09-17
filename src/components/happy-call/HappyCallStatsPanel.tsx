@@ -5,11 +5,17 @@ import { computeFirstVisitStats, getWeekRange } from '@/lib/happyCallStats';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function formatPercent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
+}
+
+function formatMaturityGatedPercent(rate: number, matureCount: number): string {
+  return matureCount === 0 ? '-' : formatPercent(rate);
 }
 
 const cellStyle = { border: '1px solid #ddd', padding: 6 };
@@ -78,19 +84,24 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
             <td style={cellStyle}>{clinicStats.patientCount}</td>
           </tr>
           <tr>
+            <td style={cellStyle}>성숙 환자수(3주 경과)</td>
+            <td style={cellStyle}>{doctorStats.matureCount}</td>
+            <td style={cellStyle}>{clinicStats.matureCount}</td>
+          </tr>
+          <tr>
             <td style={cellStyle}>재진율</td>
             <td style={cellStyle}>{formatPercent(doctorStats.revisitRate)}</td>
             <td style={cellStyle}>{formatPercent(clinicStats.revisitRate)}</td>
           </tr>
           <tr>
             <td style={cellStyle}>이탈률</td>
-            <td style={cellStyle}>{formatPercent(doctorStats.dropoutRate)}</td>
-            <td style={cellStyle}>{formatPercent(clinicStats.dropoutRate)}</td>
+            <td style={cellStyle}>{formatMaturityGatedPercent(doctorStats.dropoutRate, doctorStats.matureCount)}</td>
+            <td style={cellStyle}>{formatMaturityGatedPercent(clinicStats.dropoutRate, clinicStats.matureCount)}</td>
           </tr>
           <tr>
             <td style={cellStyle}>삼진율</td>
-            <td style={cellStyle}>{formatPercent(doctorStats.tripleVisitRate)}</td>
-            <td style={cellStyle}>{formatPercent(clinicStats.tripleVisitRate)}</td>
+            <td style={cellStyle}>{formatMaturityGatedPercent(doctorStats.tripleVisitRate, doctorStats.matureCount)}</td>
+            <td style={cellStyle}>{formatMaturityGatedPercent(clinicStats.tripleVisitRate, clinicStats.matureCount)}</td>
           </tr>
         </tbody>
       </table>
@@ -112,8 +123,8 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
               <td style={cellStyle}>{type}</td>
               <td style={cellStyle}>{stats.patientCount}</td>
               <td style={cellStyle}>{formatPercent(stats.revisitRate)}</td>
-              <td style={cellStyle}>{formatPercent(stats.dropoutRate)}</td>
-              <td style={cellStyle}>{formatPercent(stats.tripleVisitRate)}</td>
+              <td style={cellStyle}>{formatMaturityGatedPercent(stats.dropoutRate, stats.matureCount)}</td>
+              <td style={cellStyle}>{formatMaturityGatedPercent(stats.tripleVisitRate, stats.matureCount)}</td>
             </tr>
           ))}
         </tbody>

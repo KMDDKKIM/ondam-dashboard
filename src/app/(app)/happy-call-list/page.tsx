@@ -19,7 +19,9 @@ import {
 import type { HerbMedicinePrescription, HappyCallManualEntry, DietPackage } from '@/lib/types';
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 type WorklistRow =
@@ -37,6 +39,7 @@ export default function HappyCallListPage() {
   const [dietPackages, setDietPackages] = useState<DietPackage[]>([]);
   const [manualEntries, setManualEntries] = useState<HappyCallManualEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const [herbName, setHerbName] = useState('');
   const [herbPickupDate, setHerbPickupDate] = useState('');
@@ -57,17 +60,22 @@ export default function HappyCallListPage() {
 
   async function load() {
     setLoading(true);
-    const [herb, diet, packages, manual] = await Promise.all([
-      listPendingHerbCalls(supabase, today),
-      listPendingDietCalls(supabase, today),
-      listDietPackages(supabase),
-      listPendingManualEntries(supabase, today),
-    ]);
-    setHerbPrescriptions(herb);
-    setDietCalls(diet);
-    setDietPackages(packages);
-    setManualEntries(manual);
-    setLoading(false);
+    try {
+      const [herb, diet, packages, manual] = await Promise.all([
+        listPendingHerbCalls(supabase, today),
+        listPendingDietCalls(supabase, today),
+        listDietPackages(supabase),
+        listPendingManualEntries(supabase, today),
+      ]);
+      setHerbPrescriptions(herb);
+      setDietCalls(diet);
+      setDietPackages(packages);
+      setManualEntries(manual);
+    } catch {
+      setError('불러오기에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -85,53 +93,69 @@ export default function HappyCallListPage() {
   async function handleAddHerb(event: React.FormEvent) {
     event.preventDefault();
     if (!herbName || !herbPickupDate || !herbDuration) return;
-    await createHerbPrescription(supabase, {
-      patientName: herbName,
-      pickupDate: herbPickupDate,
-      durationDays: Number(herbDuration),
-      createdBy: await currentUserId(),
-    });
-    setHerbName('');
-    setHerbPickupDate('');
-    setHerbDuration('');
-    await load();
+    try {
+      await createHerbPrescription(supabase, {
+        patientName: herbName,
+        pickupDate: herbPickupDate,
+        durationDays: Number(herbDuration),
+        createdBy: await currentUserId(),
+      });
+      setHerbName('');
+      setHerbPickupDate('');
+      setHerbDuration('');
+      await load();
+    } catch {
+      setError('저장에 실패했습니다.');
+    }
   }
 
   async function handleAddDiet(event: React.FormEvent) {
     event.preventDefault();
     if (!dietName || !dietStartDate) return;
-    await createDietPackage(supabase, {
-      patientName: dietName,
-      detoxStartDate: dietStartDate,
-      createdBy: await currentUserId(),
-    });
-    setDietName('');
-    setDietStartDate('');
-    await load();
+    try {
+      await createDietPackage(supabase, {
+        patientName: dietName,
+        detoxStartDate: dietStartDate,
+        createdBy: await currentUserId(),
+      });
+      setDietName('');
+      setDietStartDate('');
+      await load();
+    } catch {
+      setError('저장에 실패했습니다.');
+    }
   }
 
   async function handleAddExtraDietCall(event: React.FormEvent) {
     event.preventDefault();
     if (!extraCallPackageId || !extraCallDate) return;
-    await addDietPackageCall(supabase, extraCallPackageId, extraCallDate);
-    setExtraCallPackageId('');
-    setExtraCallDate('');
-    await load();
+    try {
+      await addDietPackageCall(supabase, extraCallPackageId, extraCallDate);
+      setExtraCallPackageId('');
+      setExtraCallDate('');
+      await load();
+    } catch {
+      setError('저장에 실패했습니다.');
+    }
   }
 
   async function handleAddManual(event: React.FormEvent) {
     event.preventDefault();
     if (!manualName || !manualCallDate) return;
-    await createManualEntry(supabase, {
-      patientName: manualName,
-      note: manualNote,
-      callDate: manualCallDate,
-      createdBy: await currentUserId(),
-    });
-    setManualName('');
-    setManualNote('');
-    setManualCallDate(todayISO());
-    await load();
+    try {
+      await createManualEntry(supabase, {
+        patientName: manualName,
+        note: manualNote,
+        callDate: manualCallDate,
+        createdBy: await currentUserId(),
+      });
+      setManualName('');
+      setManualNote('');
+      setManualCallDate(todayISO());
+      await load();
+    } catch {
+      setError('저장에 실패했습니다.');
+    }
   }
 
   const rows: WorklistRow[] = [
@@ -150,15 +174,20 @@ export default function HappyCallListPage() {
   ].sort((a, b) => a.callDate.localeCompare(b.callDate));
 
   async function handleComplete(row: WorklistRow) {
-    const note = window.prompt('통화 메모 (선택)') ?? '';
-    if (row.kind === 'herb') {
-      await markHerbCallDone(supabase, row.prescriptionId, row.callNumber, note);
-    } else if (row.kind === 'diet') {
-      await markDietCallDone(supabase, row.id, note);
-    } else {
-      await markManualEntryDone(supabase, row.id, note);
+    const note = window.prompt('통화 메모 (선택)');
+    if (note === null) return;
+    try {
+      if (row.kind === 'herb') {
+        await markHerbCallDone(supabase, row.prescriptionId, row.callNumber, note);
+      } else if (row.kind === 'diet') {
+        await markDietCallDone(supabase, row.id, note);
+      } else {
+        await markManualEntryDone(supabase, row.id, note);
+      }
+      await load();
+    } catch {
+      setError('처리에 실패했습니다.');
     }
-    await load();
   }
 
   const kindLabel: Record<WorklistRow['kind'], string> = { herb: '한약', diet: '린다이어트', manual: '초진' };
@@ -168,6 +197,7 @@ export default function HappyCallListPage() {
   return (
     <div>
       <h1 style={{ marginBottom: 16 }}>해피콜 목록</h1>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
 
       <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 32 }}>
         <thead>

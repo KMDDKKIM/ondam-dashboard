@@ -47,7 +47,8 @@ export async function listHappyCallPatients(supabase: SupabaseClient): Promise<H
   const { data, error } = await supabase
     .from('happy_call_patients')
     .select('*')
-    .order('first_visit_date', { ascending: false });
+    .order('first_visit_date', { ascending: false })
+    .limit(300);
   if (error) throw error;
   return (data as HappyCallPatientRow[]).map(rowToPatient);
 }

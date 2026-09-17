@@ -116,6 +116,10 @@ drop policy if exists "authenticated can insert diet_packages" on diet_packages;
 create policy "authenticated can insert diet_packages" on diet_packages
   for insert with check (auth.role() = 'authenticated');
 
+drop policy if exists "authenticated can update diet_packages" on diet_packages;
+create policy "authenticated can update diet_packages" on diet_packages
+  for update using (auth.role() = 'authenticated');
+
 create table if not exists diet_package_calls (
   id uuid primary key default gen_random_uuid(),
   package_id uuid not null references diet_packages(id) on delete cascade,
