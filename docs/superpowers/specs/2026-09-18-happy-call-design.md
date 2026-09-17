@@ -79,7 +79,7 @@ RLS: `authenticated` 전체 조회/입력/수정 가능.
 |---|---|---|
 | id | uuid, PK | |
 | patient_name | text, not null | |
-| start_date | date, not null | 처방(시작)일 |
+| detox_start_date | date, not null | 디톡스 시작일 — 처방일이 아니라 실제로 다이어트를 시작하는 날짜를 직원이 직접 지정(처방일과 다를 수 있음, 나중에 시작하는 환자도 있음) |
 | created_by | uuid, references staff(id) | |
 | created_at | timestamptz, not null, default now() | |
 
@@ -94,7 +94,7 @@ RLS: `authenticated` 전체 조회/입력/수정 가능.
 | note | text, nullable | |
 | unique(package_id, call_date) | | 같은 패키지에 같은 날짜 중복 방지 |
 
-패키지 생성 시 `start_date + 1`부터 `start_date + 7`까지 7개 행을 앱에서 자동 생성한다(수령 다음날부터 7일 매일, 한약 규칙과 동일한 "다음날 시작" 패턴). 8일째부터는 직원이 이 화면에서 직접 행을 추가한다.
+패키지 생성 시 `detox_start_date + 1`부터 `detox_start_date + 7`까지 7개 행을 앱에서 자동 생성한다(지정한 디톡스 시작일 다음날부터 7일 매일, 한약 규칙과 동일한 "다음날 시작" 패턴 — 사용자 확인 완료). 8일째부터는 직원이 이 화면에서 직접 행을 추가한다.
 
 RLS: `authenticated` 전체 조회/입력/수정 가능. `diet_package_calls`도 동일.
 
@@ -153,7 +153,7 @@ RLS: `authenticated` 전체 조회/입력/수정 가능.
 
 ### 린다이어트 콜 자동 생성
 
-패키지 생성 시 `start_date + 1`부터 `start_date + 7`까지 7개의 `diet_package_calls` 행을 자동 생성. 8일째 이후는 자동 생성하지 않으며, 필요 시 직원이 직접 행을 추가한다.
+패키지 생성 시 `detox_start_date + 1`부터 `detox_start_date + 7`까지 7개의 `diet_package_calls` 행을 자동 생성. 8일째 이후는 자동 생성하지 않으며, 필요 시 직원이 직접 행을 추가한다. `detox_start_date`는 처방일과 별개로 직원이 직접 지정하는 날짜다 — 처방받은 날 바로 시작하지 않고 나중에 디톡스를 시작하는 환자가 있기 때문.
 
 ## 7. 테스트 전략
 
@@ -167,7 +167,6 @@ CRUD 동작과 RLS는 Phase 1+2와 동일하게 브라우저로 직접 검증한
 
 ## 8. 미해결 리스크 / 확인 필요 사항
 
-- 린다이어트 "처방 후 7일간 매일"이 **처방 당일**부터가 아니라 **다음날부터**(한약과 동일 패턴)라고 가정했다 — 브레인스토밍 중 이 부분은 명시적으로 재확인받지 못했으므로, 구현 계획 단계에서 다시 한 번 확인한다.
 - `jabo_herb_1/2/3`는 환자구분이 '자보'가 아닌 환자에게도 DB상으로는 입력 가능하다(제약 없음) — 실수 입력을 막을 필요가 있는지는 실제 사용해보고 판단(YAGNI).
 - 향후 한약/린다이어트에도 이탈률류 통계가 필요해지면 별도 스펙으로 다룬다(§2에서 이번 범위 아님으로 명시).
 - 한약 기간이 매우 짧으면(`duration_days` ≤ 3) `call_date_3`(수령일+기간-3) 공식이 수령일보다 앞선 날짜를 계산할 수 있다. 실제로 이렇게 짧은 처방은 없을 것으로 보이지만, 구현 시 `call_date_3`이 `call_date_1`보다 빠르면 `call_date_1`과 같은 날로 보정하는 안전장치를 넣는다.
