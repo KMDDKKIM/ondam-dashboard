@@ -20,3 +20,11 @@ create policy "authenticated can read staff" on staff
 -- out-of-band, via the Supabase Auth Admin API (see the plan's Prerequisites section).
 create policy "users can update own staff row" on staff
   for update using (auth.uid() = id);
+
+-- RLS alone isn't enough here: the UPDATE policy's USING clause is reused as
+-- the CHECK clause when none is given, so it permits changing ANY column of
+-- the caller's own row, including role -- letting a staff member promote
+-- themselves to owner. Column-level grants close that: staff can rename
+-- themselves, nothing else.
+revoke update on staff from authenticated;
+grant update (name) on staff to authenticated;
