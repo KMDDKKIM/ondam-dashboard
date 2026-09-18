@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { searchMessages } from '@/lib/supabase/chatMessages';
 import { groupRoomsByKind } from '@/lib/chatHelpers';
+import { NewRoomForm } from './NewRoomForm';
 import type { ChatRoomWithUnread, ChatSearchResult } from '@/lib/types';
 
 interface ChatRoomListProps {
@@ -16,6 +17,7 @@ interface ChatRoomListProps {
 export function ChatRoomList({ rooms, selectedRoomId, onSelectRoom, onRoomCreated }: ChatRoomListProps) {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ChatSearchResult[] | null>(null);
+  const [showNewRoomForm, setShowNewRoomForm] = useState(false);
 
   const supabase = createClient();
   const { topics, chats } = groupRoomsByKind(rooms);
@@ -132,12 +134,28 @@ export function ChatRoomList({ rooms, selectedRoomId, onSelectRoom, onRoomCreate
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 700, fontSize: 13 }}>토픽</span>
+            <button
+              onClick={() => setShowNewRoomForm(true)}
+              style={{ border: 'none', background: 'none', fontSize: 18, lineHeight: 1 }}
+              aria-label="새 방 만들기"
+            >
+              +
+            </button>
           </div>
           {topics.map(roomButton)}
 
           <span style={{ fontWeight: 700, fontSize: 13, marginTop: 8 }}>채팅</span>
           {chats.map(roomButton)}
         </>
+      )}
+      {showNewRoomForm && (
+        <NewRoomForm
+          onClose={() => setShowNewRoomForm(false)}
+          onCreated={() => {
+            setShowNewRoomForm(false);
+            onRoomCreated();
+          }}
+        />
       )}
     </div>
   );
