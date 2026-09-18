@@ -81,6 +81,10 @@ export async function createHappyCallPatient(
 }
 
 export type HappyCallPatientPatch = Partial<{
+  patientName: string;
+  doctorStaffId: string | null;
+  patientType: '건보' | '자보' | '비급여';
+  firstVisitDate: string;
   revisit1: string | null;
   revisit2: string | null;
   revisit3: string | null;
@@ -99,6 +103,10 @@ export async function updateHappyCallPatient(
   patch: HappyCallPatientPatch
 ): Promise<void> {
   const dbPatch: Record<string, unknown> = {};
+  if ('patientName' in patch) dbPatch.patient_name = patch.patientName;
+  if ('doctorStaffId' in patch) dbPatch.doctor_staff_id = patch.doctorStaffId;
+  if ('patientType' in patch) dbPatch.patient_type = patch.patientType;
+  if ('firstVisitDate' in patch) dbPatch.first_visit_date = patch.firstVisitDate;
   if ('revisit1' in patch) dbPatch.revisit_1 = patch.revisit1;
   if ('revisit2' in patch) dbPatch.revisit_2 = patch.revisit2;
   if ('revisit3' in patch) dbPatch.revisit_3 = patch.revisit3;
