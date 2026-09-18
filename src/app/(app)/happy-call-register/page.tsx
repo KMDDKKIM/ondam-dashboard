@@ -9,6 +9,9 @@ import {
 } from '@/lib/supabase/happyCallPatients';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
+import { addDays } from '@/lib/happyCallStats';
+
+const MATURITY_DAYS = 21;
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const PACKAGE_OPTIONS = ['성공', '실패', '비포함'] as const;
@@ -39,6 +42,9 @@ export default function HappyCallRegisterPage() {
   const [error, setError] = useState('');
   const [draft, setDraft] = useState(emptyDraft());
   const [saving, setSaving] = useState(false);
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
+
+  const highlightFirstVisitDate = highlightDate ? addDays(highlightDate, -MATURITY_DAYS) : null;
 
   const supabase = createClient();
 
@@ -131,10 +137,13 @@ export default function HappyCallRegisterPage() {
       <h1 style={{ marginBottom: 16 }}>초진환자 해피콜</h1>
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      <HappyCallStatsPanel patients={patients} staffList={staffList} />
+      {/* 이 페이지만 대시보드 본문의 1100px 폭 제한을 벗어나서 화면 가로 전체를
+          쓴다 — 표 칸이 많아서(성함~메모) 최대한 스크롤 없이 보이게 하려는 것. */}
+      <div style={{ width: '100vw', position: 'relative', left: '50%', right: '50%', marginLeft: '-50vw', marginRight: '-50vw', padding: '0 16px' }}>
+        <HappyCallStatsPanel patients={patients} staffList={staffList} onDateClick={setHighlightDate} />
 
-      <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1500 }}>
+        <div style={{ overflowX: 'auto', marginTop: 20 }}>
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1500, width: '100%', maxWidth: 1700, margin: '0 auto' }}>
         <colgroup>
           <col style={{ width: 110 }} />
           <col style={{ width: 85 }} />
@@ -162,7 +171,14 @@ export default function HappyCallRegisterPage() {
         </thead>
         <tbody>
           {patients.map((p) => (
-            <tr key={p.id}>
+            <tr
+              key={p.id}
+              style={
+                highlightFirstVisitDate && p.firstVisitDate === highlightFirstVisitDate
+                  ? { background: '#fff3cd' }
+                  : undefined
+              }
+            >
               <td style={cellStyle}>
                 <input defaultValue={p.patientName} onBlur={(e) => handleNameUpdate(p.id, e.target.value)} style={textInputStyle} />
               </td>
@@ -281,6 +297,7 @@ export default function HappyCallRegisterPage() {
           </tr>
         </tbody>
       </table>
+        </div>
       </div>
     </div>
   );

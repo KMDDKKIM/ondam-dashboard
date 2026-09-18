@@ -1,8 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { computeFirstVisitStats, computeWeeklyTrend, getWeekRange } from '@/lib/happyCallStats';
 import type { HappyCallPatient, Staff } from '@/lib/types';
+
+const TYPE_FILTERS: (HappyCallPatient['patientType'] | '')[] = ['', '건보', '자보', '비급여'];
+const TYPE_FILTER_LABEL: Record<HappyCallPatient['patientType'] | '', string> = {
+  '': '전체',
+  건보: '건보',
+  자보: '자보',
+  비급여: '비급여',
+};
 
 function todayISO(): string {
   const d = new Date();
@@ -21,14 +29,37 @@ function formatMaturityGatedPercent(rate: number, matureCount: number): string {
 const cellStyle = { border: '1px solid #eee', padding: '3px 6px', fontSize: 11 };
 const cardStyle = { flex: '1 1 260px', minWidth: 260, padding: 10 } as const;
 
-export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCallPatient[]; staffList: Staff[] }) {
+interface HappyCallStatsPanelProps {
+  patients: HappyCallPatient[];
+  staffList: Staff[];
+  onDateClick?: (date: string) => void;
+}
+
+export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyCallStatsPanelProps) {
   const [referenceDate, setReferenceDate] = useState(todayISO());
   const [doctorId, setDoctorId] = useState('');
+  const [typeFilter, setTypeFilter] = useState<HappyCallPatient['patientType'] | ''>('');
   const today = todayISO();
+
+  useEffect(() => {
+    onDateClick?.(referenceDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceDate]);
 
   const { start, end } = useMemo(() => getWeekRange(referenceDate), [referenceDate]);
 
+  const typeFilteredPatients = useMemo(
+    () => (typeFilter ? patients.filter((p) => p.patientType === typeFilter) : patients),
+    [patients, typeFilter]
+  );
+
   const weekPatients = useMemo(
+    () => typeFilteredPatients.filter((p) => p.firstVisitDate >= start && p.firstVisitDate <= end),
+    [typeFilteredPatients, start, end]
+  );
+  // 환자구분별 카드는 위쪽 구분 필터와 무관하게 항상 건보/자보/비급여를 나란히
+  // 비교해서 보여준다.
+  const weekPatientsAllTypes = useMemo(
     () => patients.filter((p) => p.firstVisitDate >= start && p.firstVisitDate <= end),
     [patients, start, end]
   );
@@ -46,17 +77,17 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
     return types.map((type) => ({
       type,
       stats: computeFirstVisitStats(
-        weekPatients.filter((p) => p.patientType === type),
+        weekPatientsAllTypes.filter((p) => p.patientType === type),
         today
       ),
     }));
-  }, [weekPatients, today]);
+  }, [weekPatientsAllTypes, today]);
 
-  // 진료의별 주별 추이 — 선택한 진료의(없으면 전체)를 기준으로 최근 5주를
-  // 거슬러 본다. 시트의 "진료의별 통계"에 해당.
+  // 진료의별 주별 추이 — 선택한 진료의(없으면 전체)와 구분 필터를 기준으로 최근
+  // 5주를 거슬러 본다. 시트의 "진료의별 통계"에 해당.
   const trendSourcePatients = useMemo(
-    () => (doctorId ? patients.filter((p) => p.doctorStaffId === doctorId) : patients),
-    [patients, doctorId]
+    () => (doctorId ? typeFilteredPatients.filter((p) => p.doctorStaffId === doctorId) : typeFilteredPatients),
+    [typeFilteredPatients, doctorId]
   );
   const weeklyTrend = useMemo(
     () => computeWeeklyTrend(trendSourcePatients, referenceDate, today, 5),
@@ -79,6 +110,26 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
         <span style={{ fontSize: 11, color: '#888' }}>
           {start} ~ {end}
         </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {TYPE_FILTERS.map((t) => (
+            <button
+              key={t || 'all'}
+              type="button"
+              onClick={() => setTypeFilter(t)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: 999,
+                border: '1px solid #ddd',
+                background: typeFilter === t ? '#2c8fd6' : '#fff',
+                color: typeFilter === t ? '#fff' : '#333',
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              {TYPE_FILTER_LABEL[t]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
