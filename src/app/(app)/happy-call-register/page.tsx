@@ -122,7 +122,7 @@ export default function HappyCallRegisterPage() {
       <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
-            {['성함', '진료의', '구분', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '약침성공', '다음내원메모', '통화내역', '메모'].map((h) => (
+            {['성함', '진료의', '구분', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모'].map((h) => (
               <th key={h} style={{ ...cellStyle, textAlign: 'left' }}>
                 {h}
               </th>
@@ -135,17 +135,6 @@ export default function HappyCallRegisterPage() {
               <td style={cellStyle}>{p.patientName}</td>
               <td style={cellStyle}>{staffName(p.doctorStaffId)}</td>
               <td style={cellStyle}>{p.patientType}</td>
-              <td style={cellStyle}>{p.firstVisitDate}</td>
-              {(['revisit1', 'revisit2', 'revisit3'] as const).map((field) => (
-                <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ width: 130 }} />
-                </td>
-              ))}
-              {(['jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
-                <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ width: 130 }} />
-                </td>
-              ))}
               <td style={cellStyle}>
                 <select defaultValue={p.acupunctureSuccess ?? ''} onChange={(e) => handleSuccessUpdate(p.id, e.target.value as '성공' | '실패' | '비포함' | '')}>
                   <option value=""></option>
@@ -160,6 +149,17 @@ export default function HappyCallRegisterPage() {
               <td style={cellStyle}>
                 <input defaultValue={p.callLog ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'callLog', e.target.value)} style={{ width: 160 }} />
               </td>
+              <td style={cellStyle}>{p.firstVisitDate}</td>
+              {(['revisit1', 'revisit2', 'revisit3'] as const).map((field) => (
+                <td key={field} style={cellStyle}>
+                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ width: 130 }} />
+                </td>
+              ))}
+              {(['jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
+                <td key={field} style={cellStyle}>
+                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ width: 130 }} />
+                </td>
+              ))}
               <td style={cellStyle}>
                 <input defaultValue={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={{ width: 120 }} />
               </td>

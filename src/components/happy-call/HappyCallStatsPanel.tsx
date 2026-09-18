@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { computeFirstVisitStats, getWeekRange } from '@/lib/happyCallStats';
+import { computeFirstVisitStats, computeWeeklyTrend, getWeekRange } from '@/lib/happyCallStats';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
 function todayISO(): string {
@@ -50,6 +50,18 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
       ),
     }));
   }, [weekPatients, today]);
+
+  // 진료의별 주별 추이 — 선택한 진료의(없으면 전체)를 기준으로 최근 5주를
+  // 거슬러 본다. 시트의 "진료의별 통계"에 해당.
+  const trendSourcePatients = useMemo(
+    () => (doctorId ? patients.filter((p) => p.doctorStaffId === doctorId) : patients),
+    [patients, doctorId]
+  );
+  const weeklyTrend = useMemo(
+    () => computeWeeklyTrend(trendSourcePatients, referenceDate, today, 5),
+    [trendSourcePatients, referenceDate, today]
+  );
+  const doctorLabel = doctorId ? staffList.find((s) => s.id === doctorId)?.name ?? '선택 진료의' : '전체 진료의';
 
   return (
     <div style={{ marginTop: 32, border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
@@ -105,6 +117,52 @@ export function HappyCallStatsPanel({ patients, staffList }: { patients: HappyCa
           </tr>
         </tbody>
       </table>
+
+      <h3 style={{ fontSize: 14, marginBottom: 8 }}>주별 추이 ({doctorLabel})</h3>
+      <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+        <table style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f0f0f0' }}>
+              <th style={cellStyle}></th>
+              {weeklyTrend.map((point) => (
+                <th key={point.start} style={cellStyle}>
+                  {point.start.slice(5)}~{point.end.slice(5)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={cellStyle}>초진환자수</td>
+              {weeklyTrend.map((point) => (
+                <td key={point.start} style={cellStyle}>{point.stats.patientCount}</td>
+              ))}
+            </tr>
+            <tr>
+              <td style={cellStyle}>재진율</td>
+              {weeklyTrend.map((point) => (
+                <td key={point.start} style={cellStyle}>{formatPercent(point.stats.revisitRate)}</td>
+              ))}
+            </tr>
+            <tr>
+              <td style={cellStyle}>이탈률</td>
+              {weeklyTrend.map((point) => (
+                <td key={point.start} style={cellStyle}>
+                  {formatMaturityGatedPercent(point.stats.dropoutRate, point.stats.matureCount)}
+                </td>
+              ))}
+            </tr>
+            <tr>
+              <td style={cellStyle}>삼진율</td>
+              {weeklyTrend.map((point) => (
+                <td key={point.start} style={cellStyle}>
+                  {formatMaturityGatedPercent(point.stats.tripleVisitRate, point.stats.matureCount)}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <h3 style={{ fontSize: 14, marginBottom: 8 }}>환자구분별</h3>
       <table style={{ borderCollapse: 'collapse' }}>

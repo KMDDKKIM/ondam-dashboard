@@ -4,6 +4,7 @@ import {
   computeDietCallDates,
   computeFirstVisitStats,
   listPendingFirstVisitCalls,
+  computeWeeklyTrend,
   getWeekRange,
 } from './happyCallStats';
 import type { HappyCallPatient } from './types';
@@ -137,6 +138,22 @@ describe('listPendingFirstVisitCalls', () => {
     const patients = [makePatient({ id: 'a', firstVisitDate: '2026-09-17', callLog: '통화 완료' })];
     const pending = listPendingFirstVisitCalls(patients, '2026-09-20');
     expect(pending).toEqual([]);
+  });
+});
+
+describe('computeWeeklyTrend', () => {
+  it('returns the most recent week first, one week per patient bucket', () => {
+    const patients = [
+      makePatient({ id: 'a', firstVisitDate: '2026-09-15' }), // week of 09-14~09-20
+      makePatient({ id: 'b', firstVisitDate: '2026-09-08' }), // week of 09-07~09-13
+    ];
+    const trend = computeWeeklyTrend(patients, '2026-09-18', '2026-09-18', 3);
+    expect(trend).toHaveLength(3);
+    expect(trend[0]).toMatchObject({ start: '2026-09-14', end: '2026-09-20' });
+    expect(trend[0].stats.patientCount).toBe(1);
+    expect(trend[1]).toMatchObject({ start: '2026-09-07', end: '2026-09-13' });
+    expect(trend[1].stats.patientCount).toBe(1);
+    expect(trend[2].stats.patientCount).toBe(0);
   });
 });
 

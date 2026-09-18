@@ -2,7 +2,7 @@ import type { HappyCallPatient } from './types';
 
 const MATURITY_DAYS = 21;
 
-function addDays(dateStr: string, days: number): string {
+export function addDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   date.setUTCDate(date.getUTCDate() + days);
@@ -93,6 +93,30 @@ export function listPendingFirstVisitCalls(
     .filter((p) => !p.callLog)
     .map((p) => ({ id: p.id, patientName: p.patientName, callDate: addDays(p.firstVisitDate, 1) }))
     .filter((p) => p.callDate <= today);
+}
+
+export interface WeeklyTrendPoint {
+  start: string;
+  end: string;
+  stats: FirstVisitStats;
+}
+
+// 초진환자 시트의 "진료의별 통계"처럼, 기준일이 속한 주부터 거슬러 최근 N주
+// 흐름을 본다. 배열 맨 앞(index 0)이 가장 최근 주다.
+export function computeWeeklyTrend(
+  patients: HappyCallPatient[],
+  referenceDate: string,
+  today: string,
+  weeksBack = 5
+): WeeklyTrendPoint[] {
+  const points: WeeklyTrendPoint[] = [];
+  for (let i = 0; i < weeksBack; i++) {
+    const shifted = addDays(referenceDate, -7 * i);
+    const { start, end } = getWeekRange(shifted);
+    const weekPatients = patients.filter((p) => p.firstVisitDate >= start && p.firstVisitDate <= end);
+    points.push({ start, end, stats: computeFirstVisitStats(weekPatients, today) });
+  }
+  return points;
 }
 
 export function getWeekRange(dateStr: string): { start: string; end: string } {
