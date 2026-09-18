@@ -5,6 +5,15 @@ create table if not exists staff (
   created_at timestamptz not null default now()
 );
 
+-- 직원 가입신청 승인 흐름: 새 계정은 'pending'으로 시작하고, 원장이 승인해야
+-- 'approved'로 바뀐다 (src/lib/supabase/middleware.ts가 pending인 동안 앱 화면
+-- 대신 /pending-approval만 보여준다). 기존에 만들어둔 원장 계정처럼 이미 있는
+-- 행은 이 컬럼이 없다가 새로 생기면 기본값 'pending'이 붙으므로, 아래에서 한 번
+-- role = 'owner' 행만 'approved'로 백필한다.
+alter table staff add column if not exists status text not null default 'pending'
+  check (status in ('pending', 'approved'));
+update staff set status = 'approved' where role = 'owner' and status <> 'approved';
+
 alter table staff enable row level security;
 
 -- Every logged-in user can see the staff list (used to render names in the UI).
@@ -16,8 +25,11 @@ create policy "authenticated can read staff" on staff
   for select using (auth.role() = 'authenticated');
 
 -- Users can only edit their own row (e.g. changing their own display name later).
--- Row creation is NOT exposed here — the two initial owner accounts are seeded once,
--- out-of-band, via the Supabase Auth Admin API (see the plan's Prerequisites section).
+-- Row creation is NOT exposed here — the owner account(s) were seeded once via the
+-- Supabase Auth Admin API, and every staff signup after that goes through
+-- src/app/api/signup/route.ts, which uses the service_role key (bypasses RLS
+-- entirely) instead of an INSERT policy, so a not-yet-approved account can never
+-- insert its own staff row directly.
 create policy "users can update own staff row" on staff
   for update using (auth.uid() = id);
 
@@ -28,6 +40,25 @@ create policy "users can update own staff row" on staff
 -- themselves, nothing else.
 revoke update on staff from authenticated;
 grant update (name) on staff to authenticated;
+
+-- 이름 기반 로그인: staff.name으로 auth.users.email을 찾아준다. staff 테이블에
+-- email을 따로 복제하지 않고 항상 auth.users를 그대로 조회해 계정 생성 시점의
+-- 이메일과 어긋날 일이 없다. SECURITY DEFINER로 RLS/anon 제한을 우회하되,
+-- 정확히 일치하는 이름 하나의 이메일만 돌려주므로 목록 전체가 새지는 않는다.
+create or replace function public.email_for_staff_name(p_name text)
+returns text
+language sql
+security definer
+set search_path = public, auth
+as $$
+  select u.email
+  from staff s
+  join auth.users u on u.id = s.id
+  where s.name = p_name
+  limit 1
+$$;
+
+grant execute on function public.email_for_staff_name(text) to anon, authenticated;
 
 -- Happy call: 초진환자 해피콜
 create table if not exists happy_call_patients (

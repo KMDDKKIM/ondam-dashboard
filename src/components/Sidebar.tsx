@@ -29,11 +29,15 @@ const NAV_ITEMS: NavItem[] = [
 
 interface SidebarProps {
   staffName: string | null;
+  isOwner?: boolean;
 }
 
-export function Sidebar({ staffName }: SidebarProps) {
+export function Sidebar({ staffName, isOwner }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const navItems = isOwner
+    ? [...NAV_ITEMS, { href: '/staff-approval', label: '직원 승인' }]
+    : NAV_ITEMS;
 
   async function handleLogout() {
     const supabase = createClient();
@@ -55,7 +59,7 @@ export function Sidebar({ staffName }: SidebarProps) {
       <h2 style={{ fontSize: 16, marginBottom: 16 }}>경희온담한의원</h2>
       <nav style={{ flex: 1 }}>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <li key={item.href}>
               {item.external ? (
                 <a
