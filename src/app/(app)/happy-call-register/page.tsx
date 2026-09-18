@@ -133,7 +133,24 @@ export default function HappyCallRegisterPage() {
 
       <HappyCallStatsPanel patients={patients} staffList={staffList} />
 
-      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, marginTop: 20 }}>
+      <div style={{ overflowX: 'auto', marginTop: 20 }}>
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1500 }}>
+        <colgroup>
+          <col style={{ width: 110 }} />
+          <col style={{ width: 85 }} />
+          <col style={{ width: 70 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 170 }} />
+          <col style={{ width: 170 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 95 }} />
+          <col style={{ width: 140 }} />
+        </colgroup>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
             {['성함', '진료의', '구분', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모'].map((h) => (
@@ -183,26 +200,26 @@ export default function HappyCallRegisterPage() {
                 </select>
               </td>
               <td style={cellStyle}>
-                <input defaultValue={p.nextVisitNote ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'nextVisitNote', e.target.value)} style={{ ...textInputStyle, minWidth: 200 }} />
+                <input defaultValue={p.nextVisitNote ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'nextVisitNote', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
-                <input defaultValue={p.callLog ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'callLog', e.target.value)} style={{ ...textInputStyle, minWidth: 200 }} />
+                <input defaultValue={p.callLog ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'callLog', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
-                <input type="date" defaultValue={p.firstVisitDate} onBlur={(e) => handleDateUpdate(p.id, e.target.value)} style={{ ...textInputStyle, width: 130 }} />
+                <input type="date" defaultValue={p.firstVisitDate} onBlur={(e) => handleDateUpdate(p.id, e.target.value)} style={textInputStyle} />
               </td>
               {(['revisit1', 'revisit2', 'revisit3'] as const).map((field) => (
                 <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ ...textInputStyle, width: 130 }} />
+                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={textInputStyle} />
                 </td>
               ))}
               {(['jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
                 <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={{ ...textInputStyle, width: 130 }} />
+                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={textInputStyle} />
                 </td>
               ))}
               <td style={cellStyle}>
-                <input defaultValue={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={{ ...textInputStyle, minWidth: 120 }} />
+                <input defaultValue={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={textInputStyle} />
               </td>
             </tr>
           ))}
@@ -257,13 +274,14 @@ export default function HappyCallRegisterPage() {
                 value={draft.firstVisitDate}
                 onChange={(e) => setDraft((d) => ({ ...d, firstVisitDate: e.target.value }))}
                 onBlur={() => commitDraftIfReady()}
-                style={{ ...textInputStyle, width: 130 }}
+                style={textInputStyle}
               />
             </td>
             <td style={cellStyle} colSpan={7}></td>
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
