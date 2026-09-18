@@ -70,7 +70,7 @@ export default async function HomePage() {
     {
       href: '/treatment-timer',
       label: '치료실 타이머',
-      sublabel: '준비 중',
+      sublabel: '베드별 치료 시간 관리',
       icon: '⏱️',
       accent: '#fdece0',
     },
