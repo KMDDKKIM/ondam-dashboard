@@ -5,11 +5,15 @@ import { createClient } from '@/lib/supabase/client';
 import {
   listNonCoveredPurchases,
   createNonCoveredPurchase,
+  updateNonCoveredPurchase,
+  deleteNonCoveredPurchase,
   listKnownPatients,
   defaultHappyCallDate,
   suggestGoalCategory,
+  DURATION_PRESETS,
   type KnownPatient,
 } from '@/lib/supabase/nonCoveredPurchases';
+import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
 
 const GOAL_CATEGORY_LABEL: Record<GoalCategory, string> = {
@@ -45,10 +49,24 @@ export default function NonCoveredPatientsPage() {
   const [amount, setAmount] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(todayString());
   const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(todayString()));
+  const [durationDays, setDurationDays] = useState('');
   const [goalCategory, setGoalCategory] = useState<GoalCategory | null>(null);
   const [goalCategoryTouched, setGoalCategoryTouched] = useState(false);
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    patientName: string;
+    chartNo: string;
+    phone: string;
+    category: string;
+    productName: string;
+    amount: string;
+    purchaseDate: string;
+    goalCategory: GoalCategory | null;
+    memo: string;
+  } | null>(null);
 
   const [activeTab, setActiveTab] = useState('전체');
   const [compareA, setCompareA] = useState('');
@@ -108,6 +126,7 @@ export default function NonCoveredPatientsPage() {
     setAmount('');
     setPurchaseDate(todayString());
     setHappyCallDate(defaultHappyCallDate(todayString()));
+    setDurationDays('');
     setGoalCategory(null);
     setGoalCategoryTouched(false);
     setMemo('');
@@ -133,6 +152,7 @@ export default function NonCoveredPatientsPage() {
         purchaseDate,
         memo: memo.trim() || null,
         happyCallDate: happyCallDate || null,
+        durationDays: durationDays ? Number(durationDays) : null,
         goalCategory,
         createdBy: user?.id ?? null,
       });
@@ -142,6 +162,53 @@ export default function NonCoveredPatientsPage() {
       setError('등록에 실패했습니다.');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEdit(p: NonCoveredPurchase) {
+    setEditingId(p.id);
+    setEditDraft({
+      patientName: p.patientName,
+      chartNo: p.chartNo,
+      phone: p.phone ?? '',
+      category: p.category,
+      productName: p.productName,
+      amount: p.amount != null ? String(p.amount) : '',
+      purchaseDate: p.purchaseDate,
+      goalCategory: p.goalCategory,
+      memo: p.memo ?? '',
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingId || !editDraft) return;
+    try {
+      await updateNonCoveredPurchase(supabase, editingId, {
+        patientName: editDraft.patientName.trim(),
+        chartNo: editDraft.chartNo.trim(),
+        phone: editDraft.phone.trim() || null,
+        category: editDraft.category.trim() || '일반',
+        productName: editDraft.productName.trim(),
+        amount: editDraft.amount ? Number(editDraft.amount) : null,
+        purchaseDate: editDraft.purchaseDate,
+        memo: editDraft.memo.trim() || null,
+        goalCategory: editDraft.goalCategory,
+      });
+      setEditingId(null);
+      setEditDraft(null);
+      await load();
+    } catch {
+      setError('수정에 실패했습니다.');
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('이 기록을 삭제할까요?')) return;
+    try {
+      await deleteNonCoveredPurchase(supabase, id);
+      await load();
+    } catch {
+      setError('삭제에 실패했습니다.');
     }
   }
 
@@ -375,7 +442,7 @@ export default function NonCoveredPatientsPage() {
             </div>
             <div>
               <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
-                해피콜 예정일 (자동: +7일)
+                한약 수령일 (해피콜 기준일, 자동: +7일)
               </label>
               <input
                 type="date"
@@ -384,6 +451,47 @@ export default function NonCoveredPatientsPage() {
                 className="input-field"
                 style={{ maxWidth: 160 }}
               />
+            </div>
+            <div>
+              <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
+                처방일수 (한약일 때만)
+              </label>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {DURATION_PRESETS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDurationDays(String(d))}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--color-line)',
+                      background: durationDays === String(d) ? 'var(--color-brand-b)' : 'var(--color-surface-2)',
+                      color: durationDays === String(d) ? '#fff' : 'var(--color-ink)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {d}일
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  placeholder="직접입력"
+                  value={durationDays}
+                  onChange={(e) => setDurationDays(e.target.value)}
+                  className="input-field"
+                  style={{ maxWidth: 90 }}
+                />
+              </div>
+              {durationDays && happyCallDate && (
+                <p className="muted-text" style={{ fontSize: 11, marginTop: 4 }}>
+                  {(() => {
+                    const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, Number(durationDays));
+                    return `해피콜: ${callDate1} · ${callDate2} · ${callDate3}`;
+                  })()}
+                </p>
+              )}
             </div>
           </div>
 
@@ -442,7 +550,7 @@ export default function NonCoveredPatientsPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--color-surface-2)' }}>
-              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '해피콜', '목표', '메모'].map((h) => (
+              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '한약수령일/해피콜', '목표', '메모', ''].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '10px 12px' }}>
                   {h}
                 </th>
@@ -452,29 +560,116 @@ export default function NonCoveredPatientsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
+                <td colSpan={11} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
                   기록이 없어요.
                 </td>
               </tr>
             ) : (
-              filtered.map((p) => (
-                <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 600 }}>{p.patientName}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.chartNo}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.phone ?? '-'}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.category}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.productName}</td>
-                  <td style={{ padding: '10px 12px' }}>{formatAmount(p.amount)}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.purchaseDate}</td>
-                  <td style={{ padding: '10px 12px' }}>{p.happyCallDate ?? '-'}</td>
-                  <td style={{ padding: '10px 12px' }} className="muted-text">
-                    {p.goalCategory ? GOAL_CATEGORY_LABEL[p.goalCategory] : '-'}
-                  </td>
-                  <td style={{ padding: '10px 12px' }} className="muted-text">
-                    {p.memo ?? ''}
-                  </td>
-                </tr>
-              ))
+              filtered.map((p) => {
+                if (editingId === p.id && editDraft) {
+                  return (
+                    <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)', background: 'var(--color-surface-2)' }}>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.patientName} onChange={(e) => setEditDraft({ ...editDraft, patientName: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.chartNo} onChange={(e) => setEditDraft({ ...editDraft, chartNo: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.phone} onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value })} className="input-field" style={{ minWidth: 110 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.productName} onChange={(e) => setEditDraft({ ...editDraft, productName: e.target.value })} className="input-field" style={{ minWidth: 110 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input type="number" value={editDraft.amount} onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input type="date" value={editDraft.purchaseDate} onChange={(e) => setEditDraft({ ...editDraft, purchaseDate: e.target.value })} className="input-field" style={{ minWidth: 140 }} />
+                      </td>
+                      <td style={{ padding: 6 }} className="muted-text">
+                        (해피콜 일정은 편집 불가)
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <select
+                          value={editDraft.goalCategory ?? ''}
+                          onChange={(e) => setEditDraft({ ...editDraft, goalCategory: (e.target.value || null) as GoalCategory | null })}
+                          className="input-field"
+                        >
+                          <option value="">없음</option>
+                          {(Object.keys(GOAL_CATEGORY_LABEL) as GoalCategory[]).map((key) => (
+                            <option key={key} value={key}>
+                              {GOAL_CATEGORY_LABEL[key]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        <input value={editDraft.memo} onChange={(e) => setEditDraft({ ...editDraft, memo: e.target.value })} className="input-field" style={{ minWidth: 110 }} />
+                      </td>
+                      <td style={{ padding: 6, whiteSpace: 'nowrap' }}>
+                        <button onClick={saveEdit} className="btn-primary" style={{ padding: '4px 10px', fontSize: 12, marginRight: 4 }}>
+                          저장
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditDraft(null);
+                          }}
+                          style={{ padding: '4px 10px', fontSize: 12, border: '1px solid var(--color-line)', background: 'var(--color-surface)', borderRadius: 8 }}
+                        >
+                          취소
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                const callDates =
+                  p.happyCallDate && p.durationDays
+                    ? computeHerbCallDates(p.happyCallDate, p.durationDays)
+                    : null;
+
+                return (
+                  <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{p.patientName}</td>
+                    <td style={{ padding: '10px 12px' }}>{p.chartNo}</td>
+                    <td style={{ padding: '10px 12px' }}>{p.phone ?? '-'}</td>
+                    <td style={{ padding: '10px 12px' }}>{p.category}</td>
+                    <td style={{ padding: '10px 12px' }}>{p.productName}</td>
+                    <td style={{ padding: '10px 12px' }}>{formatAmount(p.amount)}</td>
+                    <td style={{ padding: '10px 12px' }}>{p.purchaseDate}</td>
+                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
+                      {callDates ? (
+                        <span className="muted-text">
+                          {p.happyCallDate} (처방{p.durationDays}일)
+                          <br />
+                          1차 {callDates.callDate1} · 2차 {callDates.callDate2} · 3차 {callDates.callDate3}
+                        </span>
+                      ) : (
+                        p.happyCallDate ?? '-'
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px' }} className="muted-text">
+                      {p.goalCategory ? GOAL_CATEGORY_LABEL[p.goalCategory] : '-'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }} className="muted-text">
+                      {p.memo ?? ''}
+                    </td>
+                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => startEdit(p)} style={{ border: 'none', background: 'transparent', color: 'var(--color-brand-b)', fontSize: 12, fontWeight: 600, marginRight: 6 }}>
+                        수정
+                      </button>
+                      <button onClick={() => handleDelete(p.id)} style={{ border: 'none', background: 'transparent', color: 'var(--color-error)', fontSize: 12, fontWeight: 600 }}>
+                        삭제
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

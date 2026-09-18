@@ -289,11 +289,23 @@ drop policy if exists "authenticated can update non_covered_purchases" on non_co
 create policy "authenticated can update non_covered_purchases" on non_covered_purchases
   for update using (auth.role() = 'authenticated');
 
+drop policy if exists "authenticated can delete non_covered_purchases" on non_covered_purchases;
+create policy "authenticated can delete non_covered_purchases" on non_covered_purchases
+  for delete using (auth.role() = 'authenticated');
+
 -- 비급여 구매 후 해피콜 예정일. 등록 시 자동으로 채워지지만(구매일+7일) 필요하면
 -- 고쳐 쓸 수 있고, 값이 있으면 happy_call_manual_entries에도 행을 만들어(또는
 -- 갱신해) 해피콜 목록/홈 화면 "오늘 할 일"에 그 날짜에 뜨도록 연결한다.
 alter table non_covered_purchases add column if not exists happy_call_date date;
 alter table non_covered_purchases add column if not exists happy_call_entry_id uuid references happy_call_manual_entries(id);
+
+-- 한약류 비급여 상품(공진단 등)은 "수령일"(happy_call_date를 그 의미로 쓴다) +
+-- 처방일수를 넣으면 한약 처방(herb_medicine_prescriptions)과 같은 공식으로
+-- 해피콜 3회를 계산해 각각 happy_call_manual_entries에 행을 만든다
+-- (computeHerbCallDates: 수령일+1일 / 수령일+처방일수÷2 / 수령일+처방일수-3).
+alter table non_covered_purchases add column if not exists duration_days integer;
+alter table non_covered_purchases add column if not exists happy_call_entry_id_2 uuid references happy_call_manual_entries(id);
+alter table non_covered_purchases add column if not exists happy_call_entry_id_3 uuid references happy_call_manual_entries(id);
 
 -- 이 비급여 항목을 이번달 현황의 어느 목표(한약/다이어트/특수한약/추나)에 셀지.
 -- null이면 목표에 반영하지 않는다. 특수한약(공진단/경옥고/녹용관절고/보폐고엔오

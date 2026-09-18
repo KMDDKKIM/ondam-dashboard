@@ -102,6 +102,9 @@ export interface NonCoveredPurchase {
   memo: string | null;
   happyCallDate: string | null;
   happyCallEntryId: string | null;
+  happyCallEntryId2: string | null;
+  happyCallEntryId3: string | null;
+  durationDays: number | null;
   goalCategory: GoalCategory | null;
   createdBy: string | null;
   createdAt: string;
