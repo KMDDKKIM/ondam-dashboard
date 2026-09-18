@@ -6,9 +6,10 @@ import { createClient } from '@/lib/supabase/client';
 
 interface TopBarProps {
   staffName: string | null;
+  unreadCount: number;
 }
 
-export function TopBar({ staffName }: TopBarProps) {
+export function TopBar({ staffName, unreadCount }: TopBarProps) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -52,6 +53,46 @@ export function TopBar({ staffName }: TopBarProps) {
         <span style={{ fontWeight: 700, fontSize: 14 }}>경희온담한의원</span>
       </Link>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Link
+          href="/chat"
+          style={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            border: '1px solid var(--color-line)',
+            background: 'var(--color-surface-2)',
+            textDecoration: 'none',
+            fontSize: 16,
+          }}
+        >
+          💬
+          {unreadCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                minWidth: 16,
+                height: 16,
+                padding: '0 4px',
+                borderRadius: 8,
+                background: 'var(--color-error)',
+                color: '#fff',
+                fontSize: 10,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </Link>
         <span className="muted-text">{staffName ?? '로그인됨'}</span>
         <button
           onClick={handleLogout}
