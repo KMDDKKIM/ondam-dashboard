@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { Sidebar } from '@/components/Sidebar';
+import { TopBar } from '@/components/TopBar';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -18,12 +18,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq('id', user.id)
     .maybeSingle();
   const staffName = staff?.name ?? user.email ?? null;
-  const isOwner = staff?.role === 'owner';
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar staffName={staffName} isOwner={isOwner} />
-      <main style={{ flex: 1, padding: 24 }}>{children}</main>
+    <div style={{ minHeight: '100vh' }}>
+      <TopBar staffName={staffName} />
+      <main style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>{children}</main>
     </div>
   );
 }

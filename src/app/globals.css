@@ -1,16 +1,128 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
+/* 해피님이 참고하신 draphant-blog.vercel.app의 톤(크림 배경 + 화이트 카드 +
+   청록/블루 포인트, 18px 라운드 카드)을 그대로 가져왔다. */
+:root {
+  --color-bg: #e9e2d4;
+  --color-bg-2: #e2d9c8;
+  --color-surface: #faf7f0;
+  --color-surface-2: #f2ede2;
+  --color-ink: #2b2a27;
+  --color-muted: #726b5e;
+  --color-line: #ddd3c2;
+  --color-brand-a: #21b8c4;
+  --color-brand-b: #2c8fd6;
+  --color-teal: #16b3a6;
+  --color-teal-deep: #0e8c86;
+  --color-blue: #3e82c4;
+  --color-purple: #8b7bc7;
+  --color-gold: #c99a2e;
+  --color-orange: #ef8a3e;
+  --color-green: #4fae6a;
+  --color-error: #d1453b;
+  --radius-card: 18px;
+  --radius-md: 10px;
+  --shadow-card: 0 1px 2px rgba(43, 42, 39, 0.04), 0 8px 24px rgba(43, 42, 39, 0.06);
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 700;
 }
 
 button {
   cursor: pointer;
+  font-family: inherit;
 }
 
 a {
   color: inherit;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+a.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(43, 42, 39, 0.06), 0 12px 28px rgba(43, 42, 39, 0.1);
+}
+
+.btn-primary {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b));
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-field {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-brand-b);
+  box-shadow: 0 0 0 3px rgba(44, 143, 214, 0.15);
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 32px 28px;
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: 13px;
+  margin: 12px 0 0;
+}
+
+.muted-text {
+  color: var(--color-muted);
+  font-size: 13px;
 }

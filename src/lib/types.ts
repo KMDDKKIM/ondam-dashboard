@@ -68,3 +68,22 @@ export interface HappyCallManualEntry {
   createdBy: string | null;
   createdAt: string;
 }
+
+export interface HerbInventoryItem {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  lowStockThreshold: number | null;
+  updatedAt: string;
+}
+
+export interface HerbInventoryLog {
+  id: string;
+  herbId: string;
+  changeType: 'use' | 'restock';
+  amount: number;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}

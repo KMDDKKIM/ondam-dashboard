@@ -192,6 +192,55 @@ drop policy if exists "authenticated can read happy_call_manual_entries" on happ
 create policy "authenticated can read happy_call_manual_entries" on happy_call_manual_entries
   for select using (auth.role() = 'authenticated');
 
+-- 한약재 재고 현황: 현재 재고를 한눈에 보고, 다 써서 새 봉지를 뜯을 때 사용량을
+-- 입력하면 차감되고, 새로 주문이 오면 입고량을 더한다. low_stock_threshold를
+-- 밑돌면 화면에서 부족 표시를 한다 (주문 타이밍을 놓치지 않기 위함).
+create table if not exists herb_inventory (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  unit text not null default 'g',
+  current_stock numeric not null default 0,
+  low_stock_threshold numeric,
+  created_by uuid references staff(id),
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+alter table herb_inventory enable row level security;
+
+drop policy if exists "authenticated can read herb_inventory" on herb_inventory;
+create policy "authenticated can read herb_inventory" on herb_inventory
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert herb_inventory" on herb_inventory;
+create policy "authenticated can insert herb_inventory" on herb_inventory
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can update herb_inventory" on herb_inventory;
+create policy "authenticated can update herb_inventory" on herb_inventory
+  for update using (auth.role() = 'authenticated');
+
+-- 사용/입고 이력 — 현재고 숫자만으로는 "언제 얼마나 썼는지"가 안 남아서 따로 둔다.
+create table if not exists herb_inventory_logs (
+  id uuid primary key default gen_random_uuid(),
+  herb_id uuid not null references herb_inventory(id) on delete cascade,
+  change_type text not null check (change_type in ('use', 'restock')),
+  amount numeric not null check (amount > 0),
+  note text,
+  created_by uuid references staff(id),
+  created_at timestamptz not null default now()
+);
+
+alter table herb_inventory_logs enable row level security;
+
+drop policy if exists "authenticated can read herb_inventory_logs" on herb_inventory_logs;
+create policy "authenticated can read herb_inventory_logs" on herb_inventory_logs
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert herb_inventory_logs" on herb_inventory_logs;
+create policy "authenticated can insert herb_inventory_logs" on herb_inventory_logs
+  for insert with check (auth.role() = 'authenticated');
+
 drop policy if exists "authenticated can insert happy_call_manual_entries" on happy_call_manual_entries;
 create policy "authenticated can insert happy_call_manual_entries" on happy_call_manual_entries
   for insert with check (auth.role() = 'authenticated');

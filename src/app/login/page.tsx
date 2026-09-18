@@ -48,31 +48,55 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 320, margin: '80px auto' }}>
-      <h1>경희온담한의원 운영 대시보드</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="이름"
-          style={{ width: '100%', padding: 8, marginBottom: 8 }}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="비밀번호"
-          style={{ width: '100%', padding: 8, marginBottom: 8 }}
-        />
-        <button type="submit" disabled={submitting} style={{ width: '100%', padding: 8 }}>
-          로그인
-        </button>
-      </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <p style={{ marginTop: 16 }}>
-        <a href="/signup">처음이신가요? 직원 가입 신청</a>
-      </p>
+    <main className="auth-shell">
+      <div className="card auth-card">
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 18,
+            marginBottom: 16,
+          }}
+        >
+          경
+        </span>
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>경희온담한의원</h1>
+        <p className="muted-text" style={{ marginBottom: 24 }}>
+          운영 대시보드에 로그인하세요.
+        </p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="이름"
+            className="input-field"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="비밀번호"
+            className="input-field"
+          />
+          <button type="submit" disabled={submitting} className="btn-primary" style={{ marginTop: 6 }}>
+            로그인
+          </button>
+        </form>
+        {error && <p className="error-text">{error}</p>}
+        <p className="muted-text" style={{ marginTop: 20, textAlign: 'center' }}>
+          <a href="/signup" style={{ color: 'var(--color-blue)', fontWeight: 600 }}>
+            처음이신가요? 직원 가입 신청
+          </a>
+        </p>
+      </div>
     </main>
   );
 }

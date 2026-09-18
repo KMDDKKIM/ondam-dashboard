@@ -43,55 +43,62 @@ export default function SignupPage() {
 
   if (done) {
     return (
-      <main style={{ maxWidth: 320, margin: '80px auto' }}>
-        <h1>가입 신청 완료</h1>
-        <p>
-          원장님이 승인하면 로그인할 수 있어요. 승인 전까지는 이름과 비밀번호로 로그인해도
-          대기 화면만 보입니다.
-        </p>
-        <button
-          onClick={() => router.push('/login')}
-          style={{ width: '100%', padding: 8, marginTop: 8 }}
-        >
-          로그인 화면으로
-        </button>
+      <main className="auth-shell">
+        <div className="card auth-card">
+          <span style={{ fontSize: 32, marginBottom: 12, display: 'block' }}>✅</span>
+          <h1 style={{ fontSize: 20, marginBottom: 8 }}>가입 신청 완료</h1>
+          <p className="muted-text" style={{ marginBottom: 20 }}>
+            원장님이 승인하면 로그인할 수 있어요. 승인 전까지는 이름과 비밀번호로 로그인해도
+            대기 화면만 보입니다.
+          </p>
+          <button onClick={() => router.push('/login')} className="btn-primary" style={{ width: '100%' }}>
+            로그인 화면으로
+          </button>
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 320, margin: '80px auto' }}>
-      <h1>직원 가입 신청</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="이름"
-          style={{ width: '100%', padding: 8, marginBottom: 8 }}
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="비밀번호 (8자 이상)"
-          style={{ width: '100%', padding: 8, marginBottom: 8 }}
-        />
-        <input
-          type="password"
-          value={passwordConfirm}
-          onChange={(event) => setPasswordConfirm(event.target.value)}
-          placeholder="비밀번호 확인"
-          style={{ width: '100%', padding: 8, marginBottom: 8 }}
-        />
-        <button type="submit" disabled={submitting} style={{ width: '100%', padding: 8 }}>
-          가입 신청
-        </button>
-      </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <p style={{ marginTop: 16 }}>
-        <a href="/login">이미 계정이 있으신가요? 로그인</a>
-      </p>
+    <main className="auth-shell">
+      <div className="card auth-card">
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>직원 가입 신청</h1>
+        <p className="muted-text" style={{ marginBottom: 24 }}>
+          이름과 비밀번호로 신청하면 원장님 승인 후 이용할 수 있어요.
+        </p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="이름"
+            className="input-field"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="비밀번호 (8자 이상)"
+            className="input-field"
+          />
+          <input
+            type="password"
+            value={passwordConfirm}
+            onChange={(event) => setPasswordConfirm(event.target.value)}
+            placeholder="비밀번호 확인"
+            className="input-field"
+          />
+          <button type="submit" disabled={submitting} className="btn-primary" style={{ marginTop: 6 }}>
+            가입 신청
+          </button>
+        </form>
+        {error && <p className="error-text">{error}</p>}
+        <p className="muted-text" style={{ marginTop: 20, textAlign: 'center' }}>
+          <a href="/login" style={{ color: 'var(--color-blue)', fontWeight: 600 }}>
+            이미 계정이 있으신가요? 로그인
+          </a>
+        </p>
+      </div>
     </main>
   );
 }

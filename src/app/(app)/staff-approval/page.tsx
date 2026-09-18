@@ -77,47 +77,83 @@ export default function StaffApprovalPage() {
     }
   }
 
-  if (loading) return <p>불러오는 중...</p>;
-  if (!isOwner) return <p>원장만 볼 수 있는 화면이에요.</p>;
+  if (loading) return <p className="muted-text">불러오는 중...</p>;
+  if (!isOwner) return <p className="muted-text">원장만 볼 수 있는 화면이에요.</p>;
 
   return (
     <div>
-      <h1 style={{ marginBottom: 16 }}>직원 승인</h1>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <h1 style={{ fontSize: 24, marginBottom: 4 }}>직원 승인</h1>
+      <p className="muted-text" style={{ marginBottom: 24 }}>
+        가입 신청한 직원을 확인하고 승인하세요.
+      </p>
+      {error && <p className="error-text" style={{ marginBottom: 16 }}>{error}</p>}
 
-      <h2 style={{ fontSize: 16, marginBottom: 8 }}>승인 대기 중 ({pending.length}명)</h2>
-      {pending.length === 0 ? (
-        <p style={{ color: '#888', marginBottom: 24 }}>대기 중인 가입 신청이 없어요.</p>
-      ) : (
-        <ul style={{ listStyle: 'none', padding: 0, marginBottom: 24 }}>
-          {pending.map((s) => (
+      <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 15, marginBottom: 12 }}>승인 대기 중 ({pending.length}명)</h2>
+        {pending.length === 0 ? (
+          <p className="muted-text">대기 중인 가입 신청이 없어요.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {pending.map((s) => (
+              <li
+                key={s.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--color-line)',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 28,
+                    height: 28,
+                    borderRadius: 999,
+                    background: 'var(--color-surface-2)',
+                    fontSize: 13,
+                  }}
+                >
+                  🙋
+                </span>
+                <span style={{ flex: 1, fontWeight: 600 }}>{s.name}</span>
+                <button
+                  onClick={() => handleApprove(s.id)}
+                  disabled={approvingId === s.id}
+                  className="btn-primary"
+                  style={{ padding: '6px 14px', fontSize: 13 }}
+                >
+                  승인
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="card" style={{ padding: 20 }}>
+        <h2 style={{ fontSize: 15, marginBottom: 12 }}>사용 중인 계정 ({approved.length}명)</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {approved.map((s) => (
             <li
               key={s.id}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '8px 0',
-                borderBottom: '1px solid #eee',
+                padding: '10px 0',
+                borderBottom: '1px solid var(--color-line)',
               }}
             >
-              <span style={{ flex: 1 }}>{s.name}</span>
-              <button onClick={() => handleApprove(s.id)} disabled={approvingId === s.id}>
-                승인
-              </button>
+              <span style={{ fontWeight: 600 }}>{s.name}</span>
+              <span className="muted-text">{s.role === 'owner' ? '원장' : '직원'}</span>
             </li>
           ))}
         </ul>
-      )}
-
-      <h2 style={{ fontSize: 16, marginBottom: 8 }}>사용 중인 계정 ({approved.length}명)</h2>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {approved.map((s) => (
-          <li key={s.id} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
-            {s.name} <span style={{ color: '#888' }}>({s.role === 'owner' ? '원장' : '직원'})</span>
-          </li>
-        ))}
-      </ul>
+      </div>
     </div>
   );
 }
