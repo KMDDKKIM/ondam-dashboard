@@ -281,3 +281,41 @@ create policy "authenticated can insert non_covered_purchases" on non_covered_pu
 drop policy if exists "authenticated can update non_covered_purchases" on non_covered_purchases;
 create policy "authenticated can update non_covered_purchases" on non_covered_purchases
   for update using (auth.role() = 'authenticated');
+
+-- 비급여 구매 후 해피콜 예정일. 등록 시 자동으로 채워지지만(구매일+7일) 필요하면
+-- 고쳐 쓸 수 있고, 값이 있으면 happy_call_manual_entries에도 행을 만들어(또는
+-- 갱신해) 해피콜 목록/홈 화면 "오늘 할 일"에 그 날짜에 뜨도록 연결한다.
+alter table non_covered_purchases add column if not exists happy_call_date date;
+alter table non_covered_purchases add column if not exists happy_call_entry_id uuid references happy_call_manual_entries(id);
+
+-- 일일/월말 결산표 붙여넣기로 채우는 날짜별 매출. daily_records(예약관리 앱 소유,
+-- RLS 전체 차단이라 이 앱은 admin 클라이언트로만 접근)와 달리 이 테이블은 이 앱
+-- 자신의 데이터라 authenticated RLS로 둔다. source='daily'면 당일결산 붙여넣기로
+-- 매일 갱신되는 값이고, source='monthly'면 월결산 붙여넣기로 그 달 전체를 새로
+-- 교체한 값이다 — 중간 수정이 필요할 때 월결산을 다시 붙여넣으면 그 달의 기존
+-- daily_revenue 행을 전부 지우고 다시 채워 "리셋"한다(src/lib/pasteImport.ts).
+create table if not exists daily_revenue (
+  date date primary key,
+  total_revenue numeric not null,
+  source text not null check (source in ('daily', 'monthly')),
+  updated_by uuid references staff(id),
+  updated_at timestamptz not null default now()
+);
+
+alter table daily_revenue enable row level security;
+
+drop policy if exists "authenticated can read daily_revenue" on daily_revenue;
+create policy "authenticated can read daily_revenue" on daily_revenue
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert daily_revenue" on daily_revenue;
+create policy "authenticated can insert daily_revenue" on daily_revenue
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can update daily_revenue" on daily_revenue;
+create policy "authenticated can update daily_revenue" on daily_revenue
+  for update using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can delete daily_revenue" on daily_revenue;
+create policy "authenticated can delete daily_revenue" on daily_revenue
+  for delete using (auth.role() = 'authenticated');

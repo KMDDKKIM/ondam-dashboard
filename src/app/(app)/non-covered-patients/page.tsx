@@ -6,6 +6,7 @@ import {
   listNonCoveredPurchases,
   createNonCoveredPurchase,
   listKnownPatients,
+  defaultHappyCallDate,
   type KnownPatient,
 } from '@/lib/supabase/nonCoveredPurchases';
 import type { NonCoveredPurchase } from '@/lib/types';
@@ -35,6 +36,7 @@ export default function NonCoveredPatientsPage() {
   const [productName, setProductName] = useState('');
   const [amount, setAmount] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(todayString());
+  const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(todayString()));
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -95,6 +97,7 @@ export default function NonCoveredPatientsPage() {
     setProductName('');
     setAmount('');
     setPurchaseDate(todayString());
+    setHappyCallDate(defaultHappyCallDate(todayString()));
     setMemo('');
     setAddingCategory(false);
     setNewCategory('');
@@ -117,6 +120,7 @@ export default function NonCoveredPatientsPage() {
         amount: amount ? Number(amount) : null,
         purchaseDate,
         memo: memo.trim() || null,
+        happyCallDate: happyCallDate || null,
         createdBy: user?.id ?? null,
       });
       setShowForm(false);
@@ -316,13 +320,33 @@ export default function NonCoveredPatientsPage() {
               className="input-field"
               style={{ maxWidth: 130 }}
             />
-            <input
-              type="date"
-              value={purchaseDate}
-              onChange={(e) => setPurchaseDate(e.target.value)}
-              className="input-field"
-              style={{ maxWidth: 160 }}
-            />
+            <div>
+              <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
+                구매일
+              </label>
+              <input
+                type="date"
+                value={purchaseDate}
+                onChange={(e) => {
+                  setPurchaseDate(e.target.value);
+                  setHappyCallDate(defaultHappyCallDate(e.target.value));
+                }}
+                className="input-field"
+                style={{ maxWidth: 160 }}
+              />
+            </div>
+            <div>
+              <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
+                해피콜 예정일 (자동: +7일)
+              </label>
+              <input
+                type="date"
+                value={happyCallDate}
+                onChange={(e) => setHappyCallDate(e.target.value)}
+                className="input-field"
+                style={{ maxWidth: 160 }}
+              />
+            </div>
           </div>
 
           <input
@@ -380,7 +404,7 @@ export default function NonCoveredPatientsPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--color-surface-2)' }}>
-              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '메모'].map((h) => (
+              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '해피콜', '메모'].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '10px 12px' }}>
                   {h}
                 </th>
@@ -390,7 +414,7 @@ export default function NonCoveredPatientsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
+                <td colSpan={9} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
                   기록이 없어요.
                 </td>
               </tr>
@@ -404,6 +428,7 @@ export default function NonCoveredPatientsPage() {
                   <td style={{ padding: '10px 12px' }}>{p.productName}</td>
                   <td style={{ padding: '10px 12px' }}>{formatAmount(p.amount)}</td>
                   <td style={{ padding: '10px 12px' }}>{p.purchaseDate}</td>
+                  <td style={{ padding: '10px 12px' }}>{p.happyCallDate ?? '-'}</td>
                   <td style={{ padding: '10px 12px' }} className="muted-text">
                     {p.memo ?? ''}
                   </td>

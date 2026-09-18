@@ -1,10 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
 
-// 새로고침 버튼(클라이언트)에서 쓰는 라우트. 홈 화면 최초 렌더링은 이 라우트를
-// 거치지 않고 서버 컴포넌트가 getMonthlySummary()를 직접 호출한다.
-export async function GET() {
+const MONTH_RE = /^\d{4}-\d{2}$/;
+
+// 새로고침 버튼과 월 이동 화살표(클라이언트)에서 쓰는 라우트. 홈 화면 최초
+// 렌더링은 이 라우트를 거치지 않고 서버 컴포넌트가 getMonthlySummary()를 직접
+// 호출한다.
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,8 +24,13 @@ export async function GET() {
     return NextResponse.json({ error: '승인된 계정만 볼 수 있습니다.' }, { status: 403 });
   }
 
+  const monthParam = request.nextUrl.searchParams.get('month');
+  if (monthParam && !MONTH_RE.test(monthParam)) {
+    return NextResponse.json({ error: '잘못된 월 형식입니다.' }, { status: 400 });
+  }
+
   try {
-    const summary = await getMonthlySummary();
+    const summary = await getMonthlySummary(monthParam ?? undefined);
     return NextResponse.json(summary);
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';

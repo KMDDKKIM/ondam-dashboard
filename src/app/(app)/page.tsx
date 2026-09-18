@@ -1,6 +1,7 @@
 import { NavCard } from '@/components/NavCard';
 import { QuoteBanner } from '@/components/QuoteBanner';
 import { TodoChecklist } from '@/components/TodoChecklist';
+import { TodayHappyCalls } from '@/components/TodayHappyCalls';
 import { MonthlyStatsPanel } from '@/components/MonthlyStatsPanel';
 import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
@@ -52,6 +53,13 @@ export default async function HomePage() {
       icon: '💊',
       accent: '#ece7fa',
       external: true,
+    },
+    {
+      href: '/paste-import',
+      label: '엑셀 붙여넣기',
+      sublabel: '예약·결산 자동 등록',
+      icon: '📥',
+      accent: '#e0eefa',
     },
     {
       href: '/happy-call-register',
@@ -190,6 +198,7 @@ export default async function HomePage() {
         ))}
       </div>
 
+      <TodayHappyCalls />
       <TodoChecklist />
     </div>
   );

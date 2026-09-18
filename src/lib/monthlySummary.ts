@@ -22,18 +22,27 @@ interface DailyRecordRow {
   special_acupuncture_count: number | null;
 }
 
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthRange(month: string): { monthStart: string; monthEnd: string } {
+  const [y, m] = month.split('-').map(Number);
+  const monthStart = `${month}-01`;
+  const next = new Date(y, m, 1);
+  const monthEnd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+  return { monthStart, monthEnd };
+}
+
 // 예약관리 앱(kh-ondam-reservation)의 daily_records/monthly_goals를 읽는다.
 // 같은 hanyak-ondam Supabase 프로젝트를 공유하지만 그쪽 RLS는 anon/authenticated를
 // 전부 막고 service_role로만 열어두는 구조라(그 저장소의 schema.sql 참고),
-// 여기서도 admin(service_role) 클라이언트로만 접근한다.
-export async function getMonthlySummary(): Promise<MonthlySummary> {
+// 여기서도 admin(service_role) 클라이언트로만 접근한다. 매출(daily_revenue)은 이
+// 앱 자신의 테이블이지만 같은 admin 클라이언트로 같이 읽어도 문제없다.
+export async function getMonthlySummary(month: string = currentMonth()): Promise<MonthlySummary> {
   const admin = createAdminClient();
-
-  const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthStart = `${month}-01`;
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const monthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+  const { monthStart, monthEnd } = monthRange(month);
 
   const { data: records, error: recordsError } = await admin
     .from('daily_records')
@@ -50,6 +59,13 @@ export async function getMonthlySummary(): Promise<MonthlySummary> {
     .maybeSingle();
   if (goalsError) throw goalsError;
 
+  const { data: revenueRows, error: revenueError } = await admin
+    .from('daily_revenue')
+    .select('total_revenue')
+    .gte('date', monthStart)
+    .lt('date', monthEnd);
+  if (revenueError) throw revenueError;
+
   const rows = (records ?? []) as DailyRecordRow[];
   const sum = (key: keyof DailyRecordRow) => rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
 
@@ -57,12 +73,16 @@ export async function getMonthlySummary(): Promise<MonthlySummary> {
   const recordedDays = rows.length;
   const avgDailyVisits = recordedDays > 0 ? Math.round((totalVisits / recordedDays) * 10) / 10 : null;
 
+  const revenueDays = revenueRows ?? [];
+  const totalRevenue =
+    revenueDays.length > 0
+      ? revenueDays.reduce((acc, r) => acc + (Number(r.total_revenue) || 0), 0)
+      : null;
+
   return {
     month,
     avgDailyVisits,
-    // 매출 데이터는 아직 어디에도 기록되지 않아서 낼 수 없다 — null로 두고
-    // 화면에서 "데이터 없음"으로 보여준다.
-    totalRevenue: null,
+    totalRevenue,
     goals: {
       herb: { achieved: sum('nogyong_count') + sum('ilban_count'), goal: goalsRow?.herb_goal ?? null },
       diet: { achieved: sum('diet_count'), goal: goalsRow?.diet_goal ?? null },

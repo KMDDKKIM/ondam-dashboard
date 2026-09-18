@@ -98,6 +98,16 @@ export interface NonCoveredPurchase {
   amount: number | null;
   purchaseDate: string;
   memo: string | null;
+  happyCallDate: string | null;
+  happyCallEntryId: string | null;
   createdBy: string | null;
   createdAt: string;
+}
+
+export interface DailyRevenue {
+  date: string;
+  totalRevenue: number;
+  source: 'daily' | 'monthly';
+  updatedBy: string | null;
+  updatedAt: string;
 }

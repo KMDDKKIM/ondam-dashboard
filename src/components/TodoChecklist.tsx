@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 
-const DEFAULT_ITEMS = ['오늘 예약 엑셀 업로드하기', '마감 멘트 입력하기', '오늘 해피콜 대상 전화하기'];
+const DEFAULT_ITEMS = ['오늘 예약 붙여넣기', '마감 멘트 입력하기', '일일결산 붙여넣기'];
 
 function todayKey(): string {
   const now = new Date();

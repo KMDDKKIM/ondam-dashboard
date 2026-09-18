@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NonCoveredPurchase } from '@/lib/types';
+import { createManualEntry, updateManualEntryCallDate } from './happyCallQueue';
 
 interface NonCoveredPurchaseRow {
   id: string;
@@ -11,6 +12,8 @@ interface NonCoveredPurchaseRow {
   amount: number | null;
   purchase_date: string;
   memo: string | null;
+  happy_call_date: string | null;
+  happy_call_entry_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -26,9 +29,20 @@ function rowToPurchase(row: NonCoveredPurchaseRow): NonCoveredPurchase {
     amount: row.amount != null ? Number(row.amount) : null,
     purchaseDate: row.purchase_date,
     memo: row.memo,
+    happyCallDate: row.happy_call_date,
+    happyCallEntryId: row.happy_call_entry_id,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
+}
+
+// 구매일 기준 기본 해피콜 예정일 — 구매 후 일주일 뒤 사용감을 확인하는 통상적인
+// 주기로 잡았다. 등록 폼에서 그대로 고쳐 쓸 수 있다.
+export function defaultHappyCallDate(purchaseDate: string): string {
+  const [y, m, d] = purchaseDate.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + 7);
+  return date.toISOString().slice(0, 10);
 }
 
 export async function listNonCoveredPurchases(supabase: SupabaseClient): Promise<NonCoveredPurchase[]> {
@@ -50,13 +64,27 @@ export interface NewNonCoveredPurchase {
   amount: number | null;
   purchaseDate: string;
   memo: string | null;
+  happyCallDate: string | null;
   createdBy: string | null;
 }
 
+// 해피콜 예정일이 있으면 happy_call_manual_entries에도 행을 만들어(구매 정보를
+// 메모로 남겨) 해피콜 목록/홈 화면에 그 날짜가 되면 뜨도록 연결하고, 만든 행의
+// id를 non_covered_purchases.happy_call_entry_id에 남겨둔다.
 export async function createNonCoveredPurchase(
   supabase: SupabaseClient,
   input: NewNonCoveredPurchase
 ): Promise<NonCoveredPurchase> {
+  let happyCallEntryId: string | null = null;
+  if (input.happyCallDate) {
+    happyCallEntryId = await createManualEntry(supabase, {
+      patientName: input.patientName,
+      note: `비급여 구매 후속 - ${input.productName}`,
+      callDate: input.happyCallDate,
+      createdBy: input.createdBy,
+    });
+  }
+
   const { data, error } = await supabase
     .from('non_covered_purchases')
     .insert({
@@ -68,12 +96,31 @@ export async function createNonCoveredPurchase(
       amount: input.amount,
       purchase_date: input.purchaseDate,
       memo: input.memo,
+      happy_call_date: input.happyCallDate,
+      happy_call_entry_id: happyCallEntryId,
       created_by: input.createdBy,
     })
     .select()
     .single();
   if (error) throw error;
   return rowToPurchase(data as NonCoveredPurchaseRow);
+}
+
+// 해피콜 예정일만 나중에 고칠 때 — 이미 연결된 happy_call_manual_entries 행도
+// 같이 갱신한다.
+export async function updatePurchaseHappyCallDate(
+  supabase: SupabaseClient,
+  purchase: NonCoveredPurchase,
+  newDate: string
+): Promise<void> {
+  if (purchase.happyCallEntryId) {
+    await updateManualEntryCallDate(supabase, purchase.happyCallEntryId, newDate);
+  }
+  const { error } = await supabase
+    .from('non_covered_purchases')
+    .update({ happy_call_date: newDate })
+    .eq('id', purchase.id);
+  if (error) throw error;
 }
 
 export interface KnownPatient {

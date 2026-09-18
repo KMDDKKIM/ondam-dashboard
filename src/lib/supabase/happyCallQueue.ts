@@ -159,13 +159,27 @@ export async function markDietCallDone(supabase: SupabaseClient, id: string, not
 export async function createManualEntry(
   supabase: SupabaseClient,
   input: { patientName: string; note: string; callDate: string; createdBy: string | null }
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('happy_call_manual_entries')
+    .insert({
+      patient_name: input.patientName,
+      note: input.note || null,
+      call_date: input.callDate,
+      created_by: input.createdBy,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function updateManualEntryCallDate(
+  supabase: SupabaseClient,
+  id: string,
+  callDate: string
 ): Promise<void> {
-  const { error } = await supabase.from('happy_call_manual_entries').insert({
-    patient_name: input.patientName,
-    note: input.note || null,
-    call_date: input.callDate,
-    created_by: input.createdBy,
-  });
+  const { error } = await supabase.from('happy_call_manual_entries').update({ call_date: callDate }).eq('id', id);
   if (error) throw error;
 }
 

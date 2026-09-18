@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DonutProgress } from '@/components/DonutProgress';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
@@ -8,16 +8,29 @@ interface MonthlyStatsPanelProps {
   initial: MonthlySummary;
 }
 
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
   const [summary, setSummary] = useState(initial);
+  const [month, setMonth] = useState(initial.month);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pickingMonth, setPickingMonth] = useState(false);
 
-  async function refresh() {
+  async function load(targetMonth: string) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/monthly-summary');
+      const response = await fetch(`/api/monthly-summary?month=${targetMonth}`);
       const body = await response.json();
       if (!response.ok) {
         setError(body.error ?? '불러오지 못했습니다.');
@@ -31,19 +44,65 @@ export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
     }
   }
 
+  useEffect(() => {
+    if (month !== initial.month) load(month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
+
   const [year, monthNum] = summary.month.split('-');
+  const isCurrentMonth = month >= currentMonth();
 
   return (
     <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
-          <span>📊</span>
-          <span>
-            {year}년 {Number(monthNum)}월 현황
-          </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+          <span style={{ marginRight: 4 }}>📊</span>
+          <button
+            onClick={() => setMonth((m) => shiftMonth(m, -1))}
+            aria-label="이전 달"
+            style={{ border: 'none', background: 'transparent', fontSize: 16, padding: '0 6px', color: 'var(--color-ink)' }}
+          >
+            ◀
+          </button>
+          {pickingMonth ? (
+            <input
+              type="month"
+              value={month}
+              autoFocus
+              onChange={(e) => {
+                if (e.target.value) setMonth(e.target.value);
+                setPickingMonth(false);
+              }}
+              onBlur={() => setPickingMonth(false)}
+              className="input-field"
+              style={{ padding: '4px 8px', width: 150 }}
+            />
+          ) : (
+            <button
+              onClick={() => setPickingMonth(true)}
+              style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 15, color: 'var(--color-ink)' }}
+            >
+              {year}년 {Number(monthNum)}월 현황
+            </button>
+          )}
+          <button
+            onClick={() => setMonth((m) => shiftMonth(m, 1))}
+            disabled={isCurrentMonth}
+            aria-label="다음 달"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontSize: 16,
+              padding: '0 6px',
+              color: isCurrentMonth ? 'var(--color-line)' : 'var(--color-ink)',
+              cursor: isCurrentMonth ? 'default' : 'pointer',
+            }}
+          >
+            ▶
+          </button>
         </div>
         <button
-          onClick={refresh}
+          onClick={() => load(month)}
           disabled={loading}
           style={{
             border: 'none',
