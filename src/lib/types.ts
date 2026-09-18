@@ -115,6 +115,17 @@ export interface DailyRevenue {
   updatedAt: string;
 }
 
+export interface Todo {
+  id: string;
+  text: string;
+  dueDate: string;
+  assigneeStaffId: string | null;
+  done: boolean;
+  doneAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface ConsultSummary {
   id: string;
   patientName: string;

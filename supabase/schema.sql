@@ -384,3 +384,37 @@ create policy "authenticated can insert consult_summaries" on consult_summaries
 drop policy if exists "authenticated can update consult_summaries" on consult_summaries;
 create policy "authenticated can update consult_summaries" on consult_summaries
   for update using (auth.role() = 'authenticated');
+
+-- 오늘 할 일 — localStorage였던 걸 공유 테이블로 옮겼다. due_date가 지났는데
+-- 아직 안 끝났으면(done=false) 계속 "오늘 할 일"에 뜨는 방식으로 자동 이월된다
+-- (따로 날짜를 갱신하지 않아도 됨 — src/components/TodoChecklist.tsx의 조회
+-- 조건 참고). done_at은 완료 표시를 언제 했는지 남겨서, 그 날짜가 지나면
+-- 목록에서 빠지게 한다(완료한 걸 계속 보여주지 않기 위함).
+create table if not exists todos (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  due_date date not null default current_date,
+  assignee_staff_id uuid references staff(id),
+  done boolean not null default false,
+  done_at date,
+  created_by uuid references staff(id),
+  created_at timestamptz not null default now()
+);
+
+alter table todos enable row level security;
+
+drop policy if exists "authenticated can read todos" on todos;
+create policy "authenticated can read todos" on todos
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert todos" on todos;
+create policy "authenticated can insert todos" on todos
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can update todos" on todos;
+create policy "authenticated can update todos" on todos
+  for update using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can delete todos" on todos;
+create policy "authenticated can delete todos" on todos
+  for delete using (auth.role() = 'authenticated');
