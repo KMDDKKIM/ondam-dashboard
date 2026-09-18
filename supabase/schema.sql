@@ -430,3 +430,229 @@ create policy "authenticated can update todos" on todos
 drop policy if exists "authenticated can delete todos" on todos;
 create policy "authenticated can delete todos" on todos
   for delete using (auth.role() = 'authenticated');
+
+-- 사내 채팅: 토픽방 + 채팅방
+create table if not exists chat_rooms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  kind text not null check (kind in ('topic', 'chat')),
+  is_public boolean not null default true,
+  created_by uuid references staff(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists chat_room_members (
+  room_id uuid not null references chat_rooms(id) on delete cascade,
+  staff_id uuid not null references staff(id) on delete cascade,
+  last_read_at timestamptz,
+  primary key (room_id, staff_id)
+);
+
+alter table chat_rooms enable row level security;
+
+-- 공개방은 전체 조회 가능, 비공개방은 멤버이거나 내가 만든 방만 보인다.
+-- created_by 조건이 꼭 필요한 이유: 비공개방을 막 만든 시점에는 아직
+-- chat_room_members에 내 행이 없을 수 있는데(멤버 추가는 방 생성 직후
+-- 별도 insert), 이 조건이 없으면 insert().select()로 방금 만든 방을
+-- 못 돌려받는다.
+drop policy if exists "authenticated can read visible chat_rooms" on chat_rooms;
+create policy "authenticated can read visible chat_rooms" on chat_rooms
+  for select using (
+    is_public = true
+    or created_by = auth.uid()
+    or exists (
+      select 1 from chat_room_members m
+      where m.room_id = chat_rooms.id and m.staff_id = auth.uid()
+    )
+  );
+
+drop policy if exists "authenticated can create chat_rooms" on chat_rooms;
+create policy "authenticated can create chat_rooms" on chat_rooms
+  for insert with check (auth.role() = 'authenticated');
+
+alter table chat_room_members enable row level security;
+
+-- 본인 행만 조회 가능 — 안읽음 계산 RPC와 last_read_at 갱신 둘 다 본인
+-- 행만 있으면 충분하다. 다른 멤버 목록을 보여주는 화면은 이번 범위에 없다.
+drop policy if exists "staff can read own chat_room_members row" on chat_room_members;
+create policy "staff can read own chat_room_members row" on chat_room_members
+  for select using (staff_id = auth.uid());
+
+-- insert는 두 경우만 허용: (1) 본인 행(공개방을 처음 열 때의 lazy join,
+-- 또는 last_read_at 갱신), (2) 그 방을 만든 사람이 비공개방 생성 시점에
+-- 최초 멤버들을 등록하는 경우.
+drop policy if exists "staff can insert own or as room creator" on chat_room_members;
+create policy "staff can insert own or as room creator" on chat_room_members
+  for insert with check (
+    staff_id = auth.uid()
+    or exists (
+      select 1 from chat_rooms r
+      where r.id = chat_room_members.room_id and r.created_by = auth.uid()
+    )
+  );
+
+drop policy if exists "staff can update own last_read_at" on chat_room_members;
+create policy "staff can update own last_read_at" on chat_room_members
+  for update using (staff_id = auth.uid());
+
+create table if not exists chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references chat_rooms(id) on delete cascade,
+  sender_id uuid references staff(id),
+  content text,
+  created_at timestamptz not null default now()
+);
+
+alter table chat_messages enable row level security;
+
+drop policy if exists "members can read chat_messages" on chat_messages;
+create policy "members can read chat_messages" on chat_messages
+  for select using (
+    exists (
+      select 1 from chat_rooms r
+      where r.id = chat_messages.room_id
+        and (
+          r.is_public = true
+          or exists (
+            select 1 from chat_room_members m
+            where m.room_id = r.id and m.staff_id = auth.uid()
+          )
+        )
+    )
+  );
+
+drop policy if exists "members can insert chat_messages" on chat_messages;
+create policy "members can insert chat_messages" on chat_messages
+  for insert with check (
+    sender_id = auth.uid()
+    and exists (
+      select 1 from chat_rooms r
+      where r.id = chat_messages.room_id
+        and (
+          r.is_public = true
+          or exists (
+            select 1 from chat_room_members m
+            where m.room_id = r.id and m.staff_id = auth.uid()
+          )
+        )
+    )
+  );
+
+create table if not exists chat_attachments (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references chat_messages(id) on delete cascade,
+  file_url text not null,
+  file_name text not null,
+  file_type text not null
+);
+
+alter table chat_attachments enable row level security;
+
+drop policy if exists "members can read chat_attachments" on chat_attachments;
+create policy "members can read chat_attachments" on chat_attachments
+  for select using (
+    exists (
+      select 1 from chat_messages msg
+      join chat_rooms r on r.id = msg.room_id
+      where msg.id = chat_attachments.message_id
+        and (
+          r.is_public = true
+          or exists (
+            select 1 from chat_room_members m
+            where m.room_id = r.id and m.staff_id = auth.uid()
+          )
+        )
+    )
+  );
+
+drop policy if exists "members can insert chat_attachments" on chat_attachments;
+create policy "members can insert chat_attachments" on chat_attachments
+  for insert with check (
+    exists (
+      select 1 from chat_messages msg
+      join chat_rooms r on r.id = msg.room_id
+      where msg.id = chat_attachments.message_id
+        and msg.sender_id = auth.uid()
+        and (
+          r.is_public = true
+          or exists (
+            select 1 from chat_room_members m
+            where m.room_id = r.id and m.staff_id = auth.uid()
+          )
+        )
+    )
+  );
+
+-- 방 목록 + 안읽음 개수를 한 번에 가져오는 함수. SECURITY INVOKER(기본값)라
+-- 호출한 사람의 RLS가 그대로 적용된다 — chat_rooms에서 보이는 방만 나오고,
+-- chat_room_members 서브쿼리도 "본인 행만" 정책과 맞물려 자연히 내
+-- last_read_at만 가져온다. 권한 로직을 함수 안에 따로 중복 작성하지 않는다.
+create or replace function list_rooms_with_unread()
+returns table (
+  room_id uuid,
+  name text,
+  kind text,
+  is_public boolean,
+  created_by uuid,
+  created_at timestamptz,
+  last_message_at timestamptz,
+  unread_count bigint
+)
+language sql
+stable
+as $$
+  select
+    r.id as room_id,
+    r.name,
+    r.kind,
+    r.is_public,
+    r.created_by,
+    r.created_at,
+    (select max(m.created_at) from chat_messages m where m.room_id = r.id) as last_message_at,
+    (
+      select count(*)
+      from chat_messages m
+      where m.room_id = r.id
+        and m.created_at > coalesce(
+          (select rm.last_read_at from chat_room_members rm where rm.room_id = r.id and rm.staff_id = auth.uid()),
+          '-infinity'::timestamptz
+        )
+    )::bigint as unread_count
+  from chat_rooms r
+  order by coalesce(
+    (select max(m2.created_at) from chat_messages m2 where m2.room_id = r.id),
+    r.created_at
+  ) desc;
+$$;
+
+grant execute on function list_rooms_with_unread() to authenticated;
+
+-- Realtime 구독이 실제로 이벤트를 받으려면 테이블을 supabase_realtime
+-- publication에 명시적으로 추가해야 한다(기본적으로는 어떤 테이블도 여기
+-- 포함되지 않는다) — 이걸 빼먹으면 subscribeToRoomMessages(Task 4)가 아무
+-- 에러 없이 그냥 조용히 아무 이벤트도 못 받는다. 이미 publication에
+-- 들어있는 상태에서 다시 실행하면 에러가 나므로 존재 여부를 먼저 확인한다.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'chat_messages'
+  ) then
+    alter publication supabase_realtime add table chat_messages;
+  end if;
+end $$;
+
+-- 첨부파일 저장용 버킷. public으로 둬서 구현을 단순하게 유지한다(자세한
+-- 이유는 스펙 §11 참고) — URL 자체가 추측 불가능한 경로라 사실상 비공개지만
+-- 메시지 텍스트처럼 RLS로 완전히 막히지는 않는다.
+insert into storage.buckets (id, name, public)
+values ('chat-attachments', 'chat-attachments', true)
+on conflict (id) do nothing;
+
+drop policy if exists "authenticated can upload chat attachments" on storage.objects;
+create policy "authenticated can upload chat attachments" on storage.objects
+  for insert with check (bucket_id = 'chat-attachments' and auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can view chat attachments" on storage.objects;
+create policy "authenticated can view chat attachments" on storage.objects
+  for select using (bucket_id = 'chat-attachments' and auth.role() = 'authenticated');

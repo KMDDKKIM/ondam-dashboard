@@ -138,3 +138,42 @@ export interface ConsultSummary {
   createdBy: string | null;
   createdAt: string;
 }
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  kind: 'topic' | 'chat';
+  isPublic: boolean;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface ChatRoomWithUnread extends ChatRoom {
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+export interface ChatAttachment {
+  id: string;
+  messageId: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  roomId: string;
+  senderId: string | null;
+  content: string | null;
+  createdAt: string;
+  attachments: ChatAttachment[];
+}
+
+export interface ChatSearchResult {
+  messageId: string;
+  roomId: string;
+  roomName: string;
+  content: string;
+  createdAt: string;
+}
