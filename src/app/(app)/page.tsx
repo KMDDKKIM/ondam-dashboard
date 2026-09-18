@@ -6,11 +6,9 @@ import { MonthlyStatsPanel } from '@/components/MonthlyStatsPanel';
 import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
 
-function reservationHref(): string {
-  const base = 'https://kh-ondam-reservation.vercel.app';
-  const pw = process.env.KH_ONDAM_RESERVATION_PASSWORD;
-  return pw ? `${base}/?pw=${encodeURIComponent(pw)}` : base;
-}
+// 예약관리(kh-ondam-reservation)는 이제 자체 비밀번호 게이트가 없어서 그냥
+// 링크만 걸면 된다.
+const RESERVATION_URL = 'https://kh-ondam-reservation.vercel.app';
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -39,7 +37,7 @@ export default async function HomePage() {
     external?: boolean;
   }[] = [
     {
-      href: reservationHref(),
+      href: RESERVATION_URL,
       label: '예약관리',
       sublabel: '오늘 예약·마감 멘트',
       icon: '📅',
@@ -168,7 +166,7 @@ export default async function HomePage() {
           <p className="muted-text">예약관리·한약 복용법 출력 등 기존 도구와 새 기능을 한 곳에서.</p>
         </div>
         <a
-          href={reservationHref()}
+          href={RESERVATION_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="btn-primary"
