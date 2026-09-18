@@ -90,6 +90,10 @@ export async function POST(request: NextRequest) {
 }
 
 // 붙여넣기 칸 아래에 보여줄 최근 입력 기록 — 언제 예약 명단을 몇 건 넣었는지.
+// daily_records.reservation_count 컬럼은 예전 마감 멘트 시절 값이 그대로 남아
+// 있는 날짜가 있어(그 뒤로 예약 명단을 다시 저장한 적이 없으면) 실제 행 수와
+// 어긋날 수 있다 — 그래서 reservations 테이블을 직접 세어서 보여준다(사이드바
+// "(예약 N명)"과 같은 방식).
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -104,22 +108,35 @@ export async function GET() {
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const { data: records, error: recordsError } = await admin
     .from('daily_records')
-    .select('date, updated_at, reservation_count')
+    .select('id, date, updated_at')
     .is('deleted_at', null)
-    .not('reservation_count', 'is', null)
-    .order('date', { ascending: false })
-    .limit(14);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    .order('updated_at', { ascending: false })
+    .limit(30);
+  if (recordsError) {
+    return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  return NextResponse.json({
-    records: (data ?? []).map((r) => ({
-      date: r.date,
-      reservationCount: r.reservation_count as number,
-      updatedAt: r.updated_at,
-    })),
-  });
+  const ids = (records ?? []).map((r) => r.id);
+  const { data: reservationRows, error: reservationsError } = await admin
+    .from('reservations')
+    .select('daily_record_id')
+    .in('daily_record_id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000']);
+  if (reservationsError) {
+    return NextResponse.json({ error: reservationsError.message }, { status: 500 });
+  }
+
+  const countByRecordId = new Map<string, number>();
+  for (const row of reservationRows ?? []) {
+    countByRecordId.set(row.daily_record_id, (countByRecordId.get(row.daily_record_id) ?? 0) + 1);
+  }
+
+  const withCounts = (records ?? [])
+    .map((r) => ({ date: r.date, reservationCount: countByRecordId.get(r.id) ?? 0, updatedAt: r.updated_at }))
+    .filter((r) => r.reservationCount > 0)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 14);
+
+  return NextResponse.json({ records: withCounts });
 }
