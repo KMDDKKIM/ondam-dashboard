@@ -68,32 +68,45 @@ describe('analyzePasteText - reservation sheet', () => {
   });
 });
 
+const SETTLEMENT_HEADER = ['내원환자수', '신규환자수', '자보환자수', '총진료비', '본인부담', '보험(청구)', '자보(청구)', '산재(청구)', '비급여', '환자부담계', '미수금'].join(
+  '\t'
+);
+
 describe('analyzePasteText - daily settlement', () => {
-  it('sums 수납총액 across patient rows for a single date', () => {
-    const text = ['당일결산 | 2026-09-18', ['차트번호', '성명', '진료구분', '수납총액'].join('\t'), ['006191', '전명옥', '통원', '24000'].join('\t'), ['004695', '우희숙', '통원', '14000'].join('\t')].join(
-      '\n'
-    );
+  it('reads 총진료비 as revenue and the date from 진료날짜', () => {
+    const text = [
+      '일일 결산표',
+      '진료날짜:2026-09-18',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 38000, rowCount: 2 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000 });
   });
 
-  it('falls back to the provided date when no date appears in the paste', () => {
-    const text = [['차트번호', '성명', '수납총액'].join('\t'), ['006191', '전명옥', '24000'].join('\t')].join('\n');
+  it('falls back to the provided date when no 진료날짜 label appears', () => {
+    const text = [SETTLEMENT_HEADER, ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text, '2026-09-20');
-    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 24000, rowCount: 1 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000 });
   });
 });
 
 describe('analyzePasteText - monthly settlement', () => {
-  it('parses one row per date and resolves MM-DD dates against the title anchor', () => {
-    const text = ['월결산표 2026-09', ['일자', '수납총액'].join('\t'), ['2026-09-16', '270400'].join('\t'), ['09-17', '2429440'].join('\t')].join('\n');
+  it('reads 총진료비 as the whole-month revenue and the month from 월:YYYY-MM', () => {
+    const text = [
+      '월말 결산표',
+      '월:2026-09',
+      ['내원환자수', '신규환자수', '자보환자수', '결급환자수', '총진료비', '본인부담', '보험(청구)', '자보(청구)', '산재(청구)', '비급여', '환자부담계', '미수금'].join('\t'),
+      ['486', '31', '8', '27.0', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t'),
+    ].join('\n');
     const result = analyzePasteText(text);
-    expect(result.format).toBe('monthly');
-    if (result.format !== 'monthly') throw new Error('unreachable');
-    expect(result.rows).toEqual([
-      { date: '2026-09-16', totalRevenue: 270400 },
-      { date: '2026-09-17', totalRevenue: 2429440 },
-    ]);
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860 });
+  });
+
+  it('recognizes a "(YYYY-MM)월" title anchor as well', () => {
+    const text = ['(2026-09)월 진료비 내역', SETTLEMENT_HEADER, ['486', '31', '8', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t')].join('\n');
+    const result = analyzePasteText(text);
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860 });
   });
 });
 

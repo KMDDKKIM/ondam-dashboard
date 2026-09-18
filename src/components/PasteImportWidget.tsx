@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { analyzePasteText, type PasteAnalysis } from '@/lib/pasteImport';
-import { upsertDailyRevenue, resetMonthRevenue } from '@/lib/supabase/dailyRevenue';
+import { upsertDailyRevenue, upsertMonthlyOverride } from '@/lib/supabase/dailyRevenue';
 
 function todayString(): string {
   const now = new Date();
@@ -15,10 +15,10 @@ function summarize(analysis: PasteAnalysis): string {
     return analysis.groups.map((g) => `${g.date} 예약 ${g.rows.length}건`).join(' · ') + ' 확인됨';
   }
   if (analysis.format === 'daily') {
-    return `${analysis.date ?? '(날짜 미지정)'} 매출 ${analysis.totalRevenue.toLocaleString()}원 (${analysis.rowCount}건 합계)`;
+    return `${analysis.date ?? '(날짜 미지정)'} 매출 ${analysis.totalRevenue.toLocaleString()}원 확인됨`;
   }
   if (analysis.format === 'monthly') {
-    return `${analysis.rows[0].date.slice(0, 7)} ${analysis.rows.length}일치 확인됨 (기존 기록 리셋)`;
+    return `${analysis.month} 총매출 ${analysis.totalRevenue.toLocaleString()}원 확인됨 (기존 기록 리셋)`;
   }
   return analysis.reason;
 }
@@ -65,13 +65,12 @@ export function PasteImportWidget() {
         setResult(`${analysis.date} 매출 ${analysis.totalRevenue.toLocaleString()}원을 이번달 현황에 반영했어요.`);
         setText('');
       } else if (analysis.format === 'monthly') {
-        const month = analysis.rows[0].date.slice(0, 7);
         const ok = window.confirm(
-          `${month}의 기존 일별 매출 기록을 지우고, 붙여넣은 ${analysis.rows.length}일치 값으로 다시 채웁니다. 계속할까요?`
+          `${analysis.month}의 총매출을 ${analysis.totalRevenue.toLocaleString()}원으로 다시 채웁니다. 계속할까요?`
         );
         if (!ok) return;
-        await resetMonthRevenue(supabase, month, analysis.rows, user?.id ?? null);
-        setResult(`${month} 매출을 월결산 기준 ${analysis.rows.length}일치로 리셋했어요.`);
+        await upsertMonthlyOverride(supabase, analysis.month, analysis.totalRevenue, user?.id ?? null);
+        setResult(`${analysis.month} 매출을 월결산 기준 ${analysis.totalRevenue.toLocaleString()}원으로 리셋했어요.`);
         setText('');
       }
     } catch (err) {

@@ -24,12 +24,15 @@ export interface ReservationDateGroup {
 
 export type PasteAnalysis =
   | { format: 'reservation'; groups: ReservationDateGroup[] }
-  | { format: 'daily'; date: string | null; totalRevenue: number; rowCount: number }
-  | { format: 'monthly'; rows: { date: string; totalRevenue: number }[] }
+  | { format: 'daily'; date: string | null; totalRevenue: number }
+  | { format: 'monthly'; month: string; totalRevenue: number }
   | { format: 'unknown'; reason: string };
 
-const REVENUE_ALIASES = ['수납총액', '수납액', '총수납액', '결제금액'];
-const DATE_COL_ALIASES = ['일자', '날짜'];
+// OK차트 "일일 결산표"/"월말 결산표"가 공유하는 진료비 요약 헤더 — 헤더 바로 다음
+// 줄이 그 날(또는 그 달) 전체 합계 한 행이다. 매출로는 총진료비를 쓴다(보험/자보/
+// 산재 청구분도 나중에 들어오는 실제 매출이라 본인부담+비급여만 있는 환자부담계보다
+// 총매출 개념에 더 가깝다).
+const SETTLEMENT_HEADER = ['내원환자수', '총진료비', '환자부담계', '미수금'];
 const RESERVATION_REQUIRED = [
   '내원',
   '취소',
@@ -56,14 +59,6 @@ function findHeaderIndex(rows: string[][], mustInclude: string[]): number {
   return rows.findIndex((row) => mustInclude.every((name) => row.includes(name)));
 }
 
-function findColumn(header: string[], aliases: string[]): number {
-  for (const alias of aliases) {
-    const idx = header.indexOf(alias);
-    if (idx !== -1) return idx;
-  }
-  return -1;
-}
-
 function parseNumber(cell: string): number {
   const cleaned = cell.replace(/[,원\s]/g, '');
   const n = Number(cleaned);
@@ -71,8 +66,6 @@ function parseNumber(cell: string): number {
 }
 
 const DATE_RE = /\d{4}-\d{2}-\d{2}/;
-const MONTH_ANCHOR_RE = /\d{4}-\d{2}/;
-const MD_RE = /^\d{1,2}-\d{1,2}$/;
 
 function tryParseReservation(rows: string[][]): PasteAnalysis | null {
   const headerIdx = findHeaderIndex(rows, ['환자명', '예약일자']);
@@ -127,55 +120,36 @@ function tryParseReservation(rows: string[][]): PasteAnalysis | null {
   return { format: 'reservation', groups };
 }
 
-function tryParseMonthly(rows: string[][]): PasteAnalysis | null {
-  const dateAlias = DATE_COL_ALIASES.find((alias) => rows.some((r) => r.includes(alias)));
-  if (!dateAlias) return null;
-  const headerIdx = rows.findIndex((r) => r.includes(dateAlias) && REVENUE_ALIASES.some((a) => r.includes(a)));
+// 일일/월말 결산표 둘 다 "내원환자수 ... 총진료비 ... 환자부담계 ... 미수금" 헤더
+// 바로 아래에 합계 한 줄이 온다. 제목 줄(헤더보다 위)의 "진료날짜:YYYY-MM-DD"면
+// 당일결산, "월:YYYY-MM"(또는 "(YYYY-MM)월", "월말")이면 월결산으로 구분한다.
+function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnalysis | null {
+  const headerIdx = findHeaderIndex(rows, SETTLEMENT_HEADER);
   if (headerIdx === -1) return null;
 
   const header = rows[headerIdx];
-  const dateCol = header.indexOf(dateAlias);
-  const revenueCol = findColumn(header, REVENUE_ALIASES);
-  if (revenueCol === -1) return null;
+  const dataRow = rows[headerIdx + 1];
+  const revenueCol = header.indexOf('총진료비');
+  if (!dataRow || revenueCol === -1) return null;
+  const totalRevenue = parseNumber(dataRow[revenueCol] ?? '0');
 
-  const titleAnchor = rows.slice(0, headerIdx).flat().join(' ').match(MONTH_ANCHOR_RE)?.[0] ?? null;
+  const context = rows.slice(0, headerIdx).flat().join(' ');
 
-  const result: { date: string; totalRevenue: number }[] = [];
-  for (const row of rows.slice(headerIdx + 1)) {
-    const raw = (row[dateCol] ?? '').trim();
-    let date: string | null = null;
-    if (DATE_RE.test(raw)) date = raw.match(DATE_RE)![0];
-    else if (MD_RE.test(raw) && titleAnchor) {
-      const day = raw.split('-')[1].padStart(2, '0');
-      date = `${titleAnchor}-${day}`;
-    }
-    if (!date) continue;
-    result.push({ date, totalRevenue: parseNumber(row[revenueCol] ?? '0') });
+  const dailyMatch = context.match(/진료날짜\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/);
+  if (dailyMatch) {
+    return { format: 'daily', date: dailyMatch[1], totalRevenue };
   }
 
-  if (result.length < 2) return null; // 날짜가 하나뿐이면 당일결산으로 취급한다.
-  return { format: 'monthly', rows: result };
-}
-
-function tryParseDaily(rows: string[][], fallbackDate: string | null): PasteAnalysis | null {
-  const headerIdx = rows.findIndex((r) => r.includes('차트번호') && REVENUE_ALIASES.some((a) => r.includes(a)));
-  if (headerIdx === -1) return null;
-
-  const header = rows[headerIdx];
-  const chartCol = header.indexOf('차트번호');
-  const revenueCol = findColumn(header, REVENUE_ALIASES);
-  if (revenueCol === -1) return null;
-
-  let total = 0;
-  let rowCount = 0;
-  for (const row of rows.slice(headerIdx + 1)) {
-    if (!(row[chartCol] ?? '').trim()) continue;
-    total += parseNumber(row[revenueCol] ?? '0');
-    rowCount += 1;
+  const monthlyMatch =
+    context.match(/월\s*[:：]\s*(\d{4}-\d{2})/) ?? context.match(/\((\d{4}-\d{2})\)\s*월/);
+  if (monthlyMatch || context.includes('월말')) {
+    const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
+    if (month) return { format: 'monthly', month, totalRevenue };
   }
 
-  const titleDate = rows.slice(0, headerIdx).flat().join(' ').match(DATE_RE)?.[0] ?? null;
-  return { format: 'daily', date: titleDate ?? fallbackDate, totalRevenue: total, rowCount };
+  // 제목 줄 없이 헤더+합계 행만 붙여넣은 경우 — 당일결산으로 보고 날짜는 직접
+  // 지정하게 한다(붙여넣기 칸의 날짜 입력란).
+  return { format: 'daily', date: fallbackDate, totalRevenue };
 }
 
 export function analyzePasteText(text: string, fallbackDate: string | null = null): PasteAnalysis {
@@ -187,11 +161,8 @@ export function analyzePasteText(text: string, fallbackDate: string | null = nul
   const reservation = tryParseReservation(rows);
   if (reservation) return reservation;
 
-  const monthly = tryParseMonthly(rows);
-  if (monthly) return monthly;
-
-  const daily = tryParseDaily(rows, fallbackDate);
-  if (daily) return daily;
+  const settlement = trySettlement(rows, fallbackDate);
+  if (settlement) return settlement;
 
   return {
     format: 'unknown',

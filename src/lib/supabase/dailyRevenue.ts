@@ -21,35 +21,22 @@ export async function upsertDailyRevenue(
   if (error) throw error;
 }
 
-// 월결산 붙여넣기 — 해당 월의 기존 daily_revenue 행을 전부 지우고, 붙여넣은
-// 표의 날짜별 매출로 다시 채운다("중간 수정 시 리셋").
-export async function resetMonthRevenue(
+// 월결산 붙여넣기 — 그 달 총매출을 통째로 덮어쓴다("중간 수정 시 리셋"). 다시
+// 붙여넣으면 그냥 같은 달 값을 갱신(upsert)하는 것뿐이라 몇 번을 넣어도 안전하다.
+export async function upsertMonthlyOverride(
   supabase: SupabaseClient,
   month: string,
-  rows: { date: string; totalRevenue: number }[],
+  totalRevenue: number,
   updatedBy: string | null
 ): Promise<void> {
-  const monthStart = `${month}-01`;
-  const [y, m] = month.split('-').map(Number);
-  const next = new Date(y, m, 1);
-  const monthEnd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
-
-  const { error: deleteError } = await supabase
-    .from('daily_revenue')
-    .delete()
-    .gte('date', monthStart)
-    .lt('date', monthEnd);
-  if (deleteError) throw deleteError;
-
-  if (rows.length === 0) return;
-
-  const { error: insertError } = await supabase.from('daily_revenue').insert(
-    rows.map((r) => ({
-      date: r.date,
-      total_revenue: r.totalRevenue,
-      source: 'monthly' as const,
+  const { error } = await supabase.from('monthly_revenue_override').upsert(
+    {
+      month,
+      total_revenue: totalRevenue,
       updated_by: updatedBy,
-    }))
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'month' }
   );
-  if (insertError) throw insertError;
+  if (error) throw error;
 }

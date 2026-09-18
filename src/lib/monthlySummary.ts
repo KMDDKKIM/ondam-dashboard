@@ -66,6 +66,16 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     .lt('date', monthEnd);
   if (revenueError) throw revenueError;
 
+  // 월말결산으로 그 달 총매출이 덮어써진 적 있으면(monthly_revenue_override)
+  // 그 값이 항상 우선한다 — 당일결산을 누적한 daily_revenue 합계보다 정확한
+  // 원본 소스이기 때문("중간 수정 시 리셋").
+  const { data: overrideRow, error: overrideError } = await admin
+    .from('monthly_revenue_override')
+    .select('total_revenue')
+    .eq('month', month)
+    .maybeSingle();
+  if (overrideError) throw overrideError;
+
   const rows = (records ?? []) as DailyRecordRow[];
   const sum = (key: keyof DailyRecordRow) => rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
 
@@ -74,10 +84,11 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
   const avgDailyVisits = recordedDays > 0 ? Math.round((totalVisits / recordedDays) * 10) / 10 : null;
 
   const revenueDays = revenueRows ?? [];
-  const totalRevenue =
+  const dailySumRevenue =
     revenueDays.length > 0
       ? revenueDays.reduce((acc, r) => acc + (Number(r.total_revenue) || 0), 0)
       : null;
+  const totalRevenue = overrideRow ? Number(overrideRow.total_revenue) : dailySumRevenue;
 
   return {
     month,
