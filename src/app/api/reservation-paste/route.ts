@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { analyzePasteText } from '@/lib/pasteImport';
+import { analyzePasteText, computeReservationDerivedStats } from '@/lib/pasteImport';
 
 // 예약시트 붙여넣기 → kh-ondam-reservation의 daily_records/reservations에 직접
 // 쓴다. 같은 hanyak-ondam Supabase 프로젝트를 공유하지만 그쪽 RLS는 anon/
@@ -63,6 +63,22 @@ export async function POST(request: NextRequest) {
         }))
       );
       if (insertError) throw insertError;
+
+      const stats = computeReservationDerivedStats(group.rows);
+      const { error: statsError } = await admin
+        .from('daily_records')
+        .update({
+          visit_count: stats.visitCount,
+          reservation_count: stats.reservationCount,
+          excluded_count: stats.excludedCount,
+          excluded_names: stats.excludedNames,
+          chuna_count: stats.chunaCount,
+          chuna_names: stats.chunaNames,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', record.id);
+      if (statsError) throw statsError;
+
       savedDates.push(group.date);
     }
   } catch (err) {

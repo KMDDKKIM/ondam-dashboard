@@ -152,6 +152,33 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
   return { format: 'daily', date: fallbackDate, totalRevenue };
 }
 
+export interface ReservationDerivedStats {
+  visitCount: number;
+  reservationCount: number;
+  excludedCount: number;
+  excludedNames: string[];
+  chunaCount: number;
+  chunaNames: string[];
+}
+
+// kh-ondam-reservation의 reservationStats.ts와 같은 계산 — 예약시트를 붙여넣을
+// 때도 직원 마감 멘트 없이 바로 daily_records의 예약률/부도취소율/추나 통계를
+// 채운다(그 저장소는 이제 이 값을 직접 입력받지 않는다).
+export function computeReservationDerivedStats(rows: ParsedReservationRow[]): ReservationDerivedStats {
+  const excluded = rows.filter((r) => r.visitStatus === '취소');
+  const visited = rows.filter((r) => r.visitStatus === '내원');
+  const chuna = rows.filter((r) => r.treatmentArea.includes('추나') || r.treatment.includes('추나'));
+
+  return {
+    visitCount: visited.length,
+    reservationCount: rows.length,
+    excludedCount: excluded.length,
+    excludedNames: excluded.map((r) => r.patientName).filter(Boolean),
+    chunaCount: chuna.length,
+    chunaNames: chuna.map((r) => r.patientName).filter(Boolean),
+  };
+}
+
 export function analyzePasteText(text: string, fallbackDate: string | null = null): PasteAnalysis {
   const rows = toRows(text);
   if (rows.length === 0) {

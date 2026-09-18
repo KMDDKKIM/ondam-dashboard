@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzePasteText } from './pasteImport';
+import { analyzePasteText, computeReservationDerivedStats } from './pasteImport';
 
 const RESERVATION_HEADER = [
   'No',
@@ -65,6 +65,28 @@ describe('analyzePasteText - reservation sheet', () => {
     const result = analyzePasteText(text);
     if (result.format !== 'reservation') throw new Error('unreachable');
     expect(result.groups[0].rows[0].visitStatus).toBe('취소');
+  });
+});
+
+describe('computeReservationDerivedStats', () => {
+  it('counts visited vs cancelled rows and flags 추나 mentions', () => {
+    const text = [
+      RESERVATION_HEADER,
+      ['1', '', '내원', '', '2026-09-18', '19:00', 'A', '', '', '', '', '통원', '침부항', '', '', ''].join('\t'),
+      ['2', '', '', '취소', '2026-09-18', '18:20', 'B', '', '', '', '', '통원', 'U+비급여 추나', '', '', ''].join('\t'),
+      ['3', '', '내원', '', '2026-09-18', '10:00', 'C', '', '', '', '', '추나', '봉침', '', '', ''].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'reservation') throw new Error('unreachable');
+    const stats = computeReservationDerivedStats(result.groups[0].rows);
+    expect(stats).toEqual({
+      visitCount: 2,
+      reservationCount: 3,
+      excludedCount: 1,
+      excludedNames: ['B'],
+      chunaCount: 2,
+      chunaNames: ['B', 'C'],
+    });
   });
 });
 
