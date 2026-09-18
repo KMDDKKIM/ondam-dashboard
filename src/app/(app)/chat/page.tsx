@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { listRoomsWithUnread, markRoomRead } from '@/lib/supabase/chatRooms';
 import { ChatRoomList } from '@/components/chat/ChatRoomList';
+import { ChatThread } from '@/components/chat/ChatThread';
 import type { ChatRoomWithUnread } from '@/lib/types';
 
 export default function ChatPage() {
@@ -58,9 +59,7 @@ export default function ChatPage() {
         onRoomCreated={handleRoomCreated}
       />
       {selectedRoomId && staffId ? (
-        <div className="card" style={{ flex: 1, padding: 24 }}>
-          <p className="muted-text">메시지 화면은 다음 태스크에서 연결됩니다.</p>
-        </div>
+        <ChatThread roomId={selectedRoomId} staffId={staffId} />
       ) : (
         <div className="card" style={{ flex: 1, padding: 24 }}>
           <p className="muted-text">아직 방이 없습니다. 왼쪽에서 새 방을 만들어보세요.</p>
