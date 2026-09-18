@@ -7,6 +7,10 @@ import type { ChatMessage } from '@/lib/types';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB — 개별 파일 크기 상한(스펙 §11의 미정 항목에 대한 V1 기본값)
 
+function formatMessageTime(isoString: string): string {
+  return new Date(isoString).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
 interface ChatThreadProps {
   roomId: string;
   staffId: string;
@@ -19,13 +23,19 @@ export function ChatThread({ roomId, staffId }: ChatThreadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const supabase = createClient();
 
   async function loadMessages() {
-    const list = await listMessages(supabase, roomId);
-    setMessages(list);
+    try {
+      const list = await listMessages(supabase, roomId);
+      setMessages(list);
+      setLoadError('');
+    } catch {
+      setLoadError('메시지를 불러오지 못했습니다.');
+    }
   }
 
   useEffect(() => {
@@ -101,7 +111,7 @@ export function ChatThread({ roomId, staffId }: ChatThreadProps) {
         {messages.map((message) => (
           <div key={message.id} style={{ padding: '6px 0' }}>
             <div className="muted-text" style={{ fontSize: 11, marginBottom: 2 }}>
-              {senderLabel(message.senderId)} · {message.createdAt.slice(11, 16)}
+              {senderLabel(message.senderId)} · {formatMessageTime(message.createdAt)}
             </div>
             {message.content && <div style={{ fontSize: 14 }}>{message.content}</div>}
             {message.attachments.map((attachment) => (
@@ -125,6 +135,8 @@ export function ChatThread({ roomId, staffId }: ChatThreadProps) {
         ))}
         <div ref={bottomRef} />
       </div>
+
+      {loadError && <p className="error-text">{loadError}</p>}
 
       {error && <p className="error-text">{error}</p>}
 

@@ -40,10 +40,10 @@ export async function listMessages(supabase: SupabaseClient, roomId: string): Pr
     .from('chat_messages')
     .select('*, chat_attachments(*)')
     .eq('room_id', roomId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw error;
-  return (data as unknown as MessageRow[]).map(rowToMessage);
+  return (data as unknown as MessageRow[]).map(rowToMessage).reverse();
 }
 
 export interface NewChatMessage {

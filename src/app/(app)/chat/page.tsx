@@ -12,6 +12,7 @@ export default function ChatPage() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const supabase = createClient();
 
@@ -23,15 +24,20 @@ export default function ChatPage() {
 
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setStaffId(user?.id ?? null);
-      const roomList = await loadRooms();
-      if (roomList.length > 0) {
-        setSelectedRoomId(roomList[0].id);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        setStaffId(user?.id ?? null);
+        const roomList = await loadRooms();
+        if (roomList.length > 0) {
+          setSelectedRoomId(roomList[0].id);
+        }
+      } catch {
+        setError('채팅방 목록을 불러오지 못했습니다.');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -51,20 +57,23 @@ export default function ChatPage() {
   if (loading) return <p>불러오는 중...</p>;
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 120px)' }}>
-      <ChatRoomList
-        rooms={rooms}
-        selectedRoomId={selectedRoomId}
-        onSelectRoom={handleSelectRoom}
-        onRoomCreated={handleRoomCreated}
-      />
-      {selectedRoomId && staffId ? (
-        <ChatThread roomId={selectedRoomId} staffId={staffId} />
-      ) : (
-        <div className="card" style={{ flex: 1, padding: 24 }}>
-          <p className="muted-text">아직 방이 없습니다. 왼쪽에서 새 방을 만들어보세요.</p>
-        </div>
-      )}
-    </div>
+    <>
+      {error && <p className="error-text">{error}</p>}
+      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 120px)' }}>
+        <ChatRoomList
+          rooms={rooms}
+          selectedRoomId={selectedRoomId}
+          onSelectRoom={handleSelectRoom}
+          onRoomCreated={handleRoomCreated}
+        />
+        {selectedRoomId && staffId ? (
+          <ChatThread roomId={selectedRoomId} staffId={staffId} />
+        ) : (
+          <div className="card" style={{ flex: 1, padding: 24 }}>
+            <p className="muted-text">아직 방이 없습니다. 왼쪽에서 새 방을 만들어보세요.</p>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

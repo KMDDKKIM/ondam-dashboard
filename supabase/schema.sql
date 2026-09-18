@@ -457,18 +457,20 @@ alter table chat_rooms enable row level security;
 -- 못 돌려받는다.
 drop policy if exists "authenticated can read visible chat_rooms" on chat_rooms;
 create policy "authenticated can read visible chat_rooms" on chat_rooms
-  for select using (
-    is_public = true
-    or created_by = auth.uid()
-    or exists (
-      select 1 from chat_room_members m
-      where m.room_id = chat_rooms.id and m.staff_id = auth.uid()
+  for select to authenticated using (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and (
+      is_public = true
+      or created_by = auth.uid()
+      or exists (select 1 from chat_room_members m where m.room_id = chat_rooms.id and m.staff_id = auth.uid())
     )
   );
 
 drop policy if exists "authenticated can create chat_rooms" on chat_rooms;
 create policy "authenticated can create chat_rooms" on chat_rooms
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+  );
 
 alter table chat_room_members enable row level security;
 
@@ -476,24 +478,28 @@ alter table chat_room_members enable row level security;
 -- 행만 있으면 충분하다. 다른 멤버 목록을 보여주는 화면은 이번 범위에 없다.
 drop policy if exists "staff can read own chat_room_members row" on chat_room_members;
 create policy "staff can read own chat_room_members row" on chat_room_members
-  for select using (staff_id = auth.uid());
+  for select to authenticated using (staff_id = auth.uid());
 
 -- insert는 두 경우만 허용: (1) 본인 행(공개방을 처음 열 때의 lazy join,
 -- 또는 last_read_at 갱신), (2) 그 방을 만든 사람이 비공개방 생성 시점에
 -- 최초 멤버들을 등록하는 경우.
 drop policy if exists "staff can insert own or as room creator" on chat_room_members;
 create policy "staff can insert own or as room creator" on chat_room_members
-  for insert with check (
-    staff_id = auth.uid()
-    or exists (
-      select 1 from chat_rooms r
-      where r.id = chat_room_members.room_id and r.created_by = auth.uid()
+  for insert to authenticated with check (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and (
+      (staff_id = auth.uid() and exists (
+        select 1 from chat_rooms r where r.id = chat_room_members.room_id and r.is_public = true
+      ))
+      or exists (
+        select 1 from chat_rooms r where r.id = chat_room_members.room_id and r.created_by = auth.uid()
+      )
     )
   );
 
 drop policy if exists "staff can update own last_read_at" on chat_room_members;
 create policy "staff can update own last_read_at" on chat_room_members
-  for update using (staff_id = auth.uid());
+  for update to authenticated using (staff_id = auth.uid());
 
 create table if not exists chat_messages (
   id uuid primary key default gen_random_uuid(),
@@ -507,33 +513,29 @@ alter table chat_messages enable row level security;
 
 drop policy if exists "members can read chat_messages" on chat_messages;
 create policy "members can read chat_messages" on chat_messages
-  for select using (
-    exists (
+  for select to authenticated using (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and exists (
       select 1 from chat_rooms r
       where r.id = chat_messages.room_id
         and (
           r.is_public = true
-          or exists (
-            select 1 from chat_room_members m
-            where m.room_id = r.id and m.staff_id = auth.uid()
-          )
+          or exists (select 1 from chat_room_members m where m.room_id = r.id and m.staff_id = auth.uid())
         )
     )
   );
 
 drop policy if exists "members can insert chat_messages" on chat_messages;
 create policy "members can insert chat_messages" on chat_messages
-  for insert with check (
-    sender_id = auth.uid()
+  for insert to authenticated with check (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and sender_id = auth.uid()
     and exists (
       select 1 from chat_rooms r
       where r.id = chat_messages.room_id
         and (
           r.is_public = true
-          or exists (
-            select 1 from chat_room_members m
-            where m.room_id = r.id and m.staff_id = auth.uid()
-          )
+          or exists (select 1 from chat_room_members m where m.room_id = r.id and m.staff_id = auth.uid())
         )
     )
   );
@@ -550,35 +552,31 @@ alter table chat_attachments enable row level security;
 
 drop policy if exists "members can read chat_attachments" on chat_attachments;
 create policy "members can read chat_attachments" on chat_attachments
-  for select using (
-    exists (
+  for select to authenticated using (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and exists (
       select 1 from chat_messages msg
       join chat_rooms r on r.id = msg.room_id
       where msg.id = chat_attachments.message_id
         and (
           r.is_public = true
-          or exists (
-            select 1 from chat_room_members m
-            where m.room_id = r.id and m.staff_id = auth.uid()
-          )
+          or exists (select 1 from chat_room_members m where m.room_id = r.id and m.staff_id = auth.uid())
         )
     )
   );
 
 drop policy if exists "members can insert chat_attachments" on chat_attachments;
 create policy "members can insert chat_attachments" on chat_attachments
-  for insert with check (
-    exists (
+  for insert to authenticated with check (
+    exists (select 1 from staff s where s.id = auth.uid() and s.status = 'approved')
+    and exists (
       select 1 from chat_messages msg
       join chat_rooms r on r.id = msg.room_id
       where msg.id = chat_attachments.message_id
         and msg.sender_id = auth.uid()
         and (
           r.is_public = true
-          or exists (
-            select 1 from chat_room_members m
-            where m.room_id = r.id and m.staff_id = auth.uid()
-          )
+          or exists (select 1 from chat_room_members m where m.room_id = r.id and m.staff_id = auth.uid())
         )
     )
   );
