@@ -357,3 +357,30 @@ create policy "authenticated can insert monthly_revenue_override" on monthly_rev
 drop policy if exists "authenticated can update monthly_revenue_override" on monthly_revenue_override;
 create policy "authenticated can update monthly_revenue_override" on monthly_revenue_override
   for update using (auth.role() = 'authenticated');
+
+-- 티로 등으로 녹음한 상담 내용을 붙여넣으면 AI가 차팅 형식으로 요약해준다
+-- (src/app/api/consult-summary/route.ts, Anthropic API 필요). transcript는
+-- 원본 그대로, summary는 AI가 만든(또는 그 뒤 손으로 고친) 결과.
+create table if not exists consult_summaries (
+  id uuid primary key default gen_random_uuid(),
+  patient_name text not null,
+  consult_date date not null default current_date,
+  transcript text not null,
+  summary text not null,
+  created_by uuid references staff(id),
+  created_at timestamptz not null default now()
+);
+
+alter table consult_summaries enable row level security;
+
+drop policy if exists "authenticated can read consult_summaries" on consult_summaries;
+create policy "authenticated can read consult_summaries" on consult_summaries
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert consult_summaries" on consult_summaries;
+create policy "authenticated can insert consult_summaries" on consult_summaries
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can update consult_summaries" on consult_summaries;
+create policy "authenticated can update consult_summaries" on consult_summaries
+  for update using (auth.role() = 'authenticated');

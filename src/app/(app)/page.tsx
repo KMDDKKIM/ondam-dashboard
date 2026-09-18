@@ -69,6 +69,13 @@ export default async function HomePage() {
       accent: '#e3edfa',
     },
     {
+      href: '/consult-summary',
+      label: '상담 녹음 차팅',
+      sublabel: '녹음 붙여넣기 → AI 요약',
+      icon: '🩺',
+      accent: '#ece7fa',
+    },
+    {
       href: '/herb-inventory',
       label: '한약재 재고 현황',
       sublabel: '재고 확인·사용·입고',

@@ -114,3 +114,13 @@ export interface DailyRevenue {
   updatedBy: string | null;
   updatedAt: string;
 }
+
+export interface ConsultSummary {
+  id: string;
+  patientName: string;
+  consultDate: string;
+  transcript: string;
+  summary: string;
+  createdBy: string | null;
+  createdAt: string;
+}
