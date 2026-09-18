@@ -6,7 +6,7 @@ interface HappyCallPatientRow {
   patient_name: string;
   doctor_staff_id: string | null;
   patient_type: '건보' | '자보' | '비급여';
-  acupuncture_package_success: '성공' | '실패' | null;
+  acupuncture_package_success: '성공' | '실패' | '비포함' | null;
   first_visit_date: string;
   revisit_1: string | null;
   revisit_2: string | null;
@@ -87,7 +87,7 @@ export type HappyCallPatientPatch = Partial<{
   jaboHerb1: string | null;
   jaboHerb2: string | null;
   jaboHerb3: string | null;
-  acupunctureSuccess: '성공' | '실패' | null;
+  acupunctureSuccess: '성공' | '실패' | '비포함' | null;
   nextVisitNote: string | null;
   callLog: string | null;
   memo: string | null;

@@ -66,7 +66,7 @@ create table if not exists happy_call_patients (
   patient_name text not null,
   doctor_staff_id uuid references staff(id),
   patient_type text not null check (patient_type in ('건보', '자보', '비급여')),
-  acupuncture_package_success text check (acupuncture_package_success in ('성공', '실패')),
+  acupuncture_package_success text check (acupuncture_package_success in ('성공', '실패', '비포함')),
   first_visit_date date not null,
   revisit_1 date,
   revisit_2 date,
@@ -80,6 +80,13 @@ create table if not exists happy_call_patients (
   created_by uuid references staff(id),
   created_at timestamptz not null default now()
 );
+
+-- 이미 만들어진 프로젝트엔 위 create table이 no-op이라 제약을 다시 걸어준다.
+-- '비포함'(약침 패키지를 아예 권하지 않았거나 환자가 안 한 경우)을 성공/실패와
+-- 구분해서 고를 수 있어야 한다.
+alter table happy_call_patients drop constraint if exists happy_call_patients_acupuncture_package_success_check;
+alter table happy_call_patients add constraint happy_call_patients_acupuncture_package_success_check
+  check (acupuncture_package_success in ('성공', '실패', '비포함'));
 
 alter table happy_call_patients enable row level security;
 

@@ -10,6 +10,8 @@ import {
   markDietCallDone,
   markManualEntryDone,
 } from '@/lib/supabase/happyCallQueue';
+import { listHappyCallPatients, updateHappyCallPatient } from '@/lib/supabase/happyCallPatients';
+import { listPendingFirstVisitCalls } from '@/lib/happyCallStats';
 
 function todayISO(): string {
   const d = new Date();
@@ -20,9 +22,15 @@ function todayISO(): string {
 type Row =
   | { kind: 'herb'; id: string; patientName: string; callDate: string; callNumber: 1 | 2 | 3; prescriptionId: string }
   | { kind: 'diet'; id: string; patientName: string; callDate: string }
-  | { kind: 'manual'; id: string; patientName: string; callDate: string; note: string | null };
+  | { kind: 'manual'; id: string; patientName: string; callDate: string; note: string | null }
+  | { kind: 'firstVisit'; id: string; patientName: string; callDate: string };
 
-const kindLabel: Record<Row['kind'], string> = { herb: '한약', diet: '린다이어트', manual: '초진/비급여' };
+const kindLabel: Record<Row['kind'], string> = {
+  herb: '한약',
+  diet: '린다이어트',
+  manual: '비급여',
+  firstVisit: '초진환자',
+};
 
 export function TodayHappyCalls() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -35,10 +43,11 @@ export function TodayHappyCalls() {
     setLoading(true);
     setError('');
     try {
-      const [herb, diet, manual] = await Promise.all([
+      const [herb, diet, manual, firstVisitPatients] = await Promise.all([
         listPendingHerbCalls(supabase, today),
         listPendingDietCalls(supabase, today),
         listPendingManualEntries(supabase, today),
+        listHappyCallPatients(supabase),
       ]);
       const next: Row[] = [
         ...herb.flatMap((p) => {
@@ -53,6 +62,7 @@ export function TodayHappyCalls() {
         }),
         ...diet.map((c) => ({ kind: 'diet' as const, id: c.id, patientName: c.patientName, callDate: c.callDate })),
         ...manual.map((m) => ({ kind: 'manual' as const, id: m.id, patientName: m.patientName, callDate: m.callDate, note: m.note })),
+        ...listPendingFirstVisitCalls(firstVisitPatients, today).map((c) => ({ kind: 'firstVisit' as const, ...c })),
       ].sort((a, b) => a.callDate.localeCompare(b.callDate));
       setRows(next);
     } catch {
@@ -73,7 +83,8 @@ export function TodayHappyCalls() {
     try {
       if (row.kind === 'herb') await markHerbCallDone(supabase, row.prescriptionId, row.callNumber, note);
       else if (row.kind === 'diet') await markDietCallDone(supabase, row.id, note);
-      else await markManualEntryDone(supabase, row.id, note);
+      else if (row.kind === 'manual') await markManualEntryDone(supabase, row.id, note);
+      else await updateHappyCallPatient(supabase, row.id, { callLog: note || '통화 완료' });
       await load();
     } catch {
       setError('처리에 실패했습니다.');

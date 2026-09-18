@@ -9,7 +9,7 @@ export interface HappyCallPatient {
   patientName: string;
   doctorStaffId: string | null;
   patientType: '건보' | '자보' | '비급여';
-  acupunctureSuccess: '성공' | '실패' | null;
+  acupunctureSuccess: '성공' | '실패' | '비포함' | null;
   firstVisitDate: string;
   revisit1: string | null;
   revisit2: string | null;

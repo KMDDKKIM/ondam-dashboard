@@ -77,6 +77,24 @@ export function computeFirstVisitStats(
   };
 }
 
+export interface PendingFirstVisitCall {
+  id: string;
+  patientName: string;
+  callDate: string;
+}
+
+// 초진환자 등록에 call_log가 없으면, 초진일 다음날부터 해피콜 목록/홈 화면에
+// 뜬다(초진일+1일 = "다음날 해피콜" 통화 예정일). 통화내역을 입력하면 사라진다.
+export function listPendingFirstVisitCalls(
+  patients: HappyCallPatient[],
+  today: string
+): PendingFirstVisitCall[] {
+  return patients
+    .filter((p) => !p.callLog)
+    .map((p) => ({ id: p.id, patientName: p.patientName, callDate: addDays(p.firstVisitDate, 1) }))
+    .filter((p) => p.callDate <= today);
+}
+
 export function getWeekRange(dateStr: string): { start: string; end: string } {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));

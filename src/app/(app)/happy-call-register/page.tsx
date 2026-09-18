@@ -74,7 +74,7 @@ export default function HappyCallRegisterPage() {
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value || null } : p)));
   }
 
-  async function handleSuccessUpdate(id: string, value: '성공' | '실패' | '') {
+  async function handleSuccessUpdate(id: string, value: '성공' | '실패' | '비포함' | '') {
     const acupunctureSuccess = value === '' ? null : value;
     await updateHappyCallPatient(supabase, id, { acupunctureSuccess });
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, acupunctureSuccess } : p)));
@@ -147,10 +147,11 @@ export default function HappyCallRegisterPage() {
                 </td>
               ))}
               <td style={cellStyle}>
-                <select defaultValue={p.acupunctureSuccess ?? ''} onChange={(e) => handleSuccessUpdate(p.id, e.target.value as '성공' | '실패' | '')}>
+                <select defaultValue={p.acupunctureSuccess ?? ''} onChange={(e) => handleSuccessUpdate(p.id, e.target.value as '성공' | '실패' | '비포함' | '')}>
                   <option value=""></option>
                   <option value="성공">성공</option>
                   <option value="실패">실패</option>
+                  <option value="비포함">비포함</option>
                 </select>
               </td>
               <td style={cellStyle}>

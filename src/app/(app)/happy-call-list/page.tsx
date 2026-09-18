@@ -16,6 +16,8 @@ import {
   markManualEntryDone,
   type PendingDietCall,
 } from '@/lib/supabase/happyCallQueue';
+import { listHappyCallPatients, updateHappyCallPatient } from '@/lib/supabase/happyCallPatients';
+import { listPendingFirstVisitCalls } from '@/lib/happyCallStats';
 import type { HerbMedicinePrescription, HappyCallManualEntry, DietPackage } from '@/lib/types';
 
 function todayISO(): string {
@@ -27,7 +29,8 @@ function todayISO(): string {
 type WorklistRow =
   | { kind: 'herb'; id: string; patientName: string; callDate: string; callNumber: 1 | 2 | 3; prescriptionId: string }
   | { kind: 'diet'; id: string; patientName: string; callDate: string }
-  | { kind: 'manual'; id: string; patientName: string; callDate: string; note: string | null };
+  | { kind: 'manual'; id: string; patientName: string; callDate: string; note: string | null }
+  | { kind: 'firstVisit'; id: string; patientName: string; callDate: string };
 
 const cellStyle = { border: '1px solid #ddd', padding: 6 };
 const formBoxStyle = { border: '1px solid #ddd', borderRadius: 8, padding: 12 };
@@ -38,6 +41,7 @@ export default function HappyCallListPage() {
   const [dietCalls, setDietCalls] = useState<PendingDietCall[]>([]);
   const [dietPackages, setDietPackages] = useState<DietPackage[]>([]);
   const [manualEntries, setManualEntries] = useState<HappyCallManualEntry[]>([]);
+  const [firstVisitCalls, setFirstVisitCalls] = useState<{ id: string; patientName: string; callDate: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -61,16 +65,18 @@ export default function HappyCallListPage() {
   async function load() {
     setLoading(true);
     try {
-      const [herb, diet, packages, manual] = await Promise.all([
+      const [herb, diet, packages, manual, firstVisitPatients] = await Promise.all([
         listPendingHerbCalls(supabase, today),
         listPendingDietCalls(supabase, today),
         listDietPackages(supabase),
         listPendingManualEntries(supabase, today),
+        listHappyCallPatients(supabase),
       ]);
       setHerbPrescriptions(herb);
       setDietCalls(diet);
       setDietPackages(packages);
       setManualEntries(manual);
+      setFirstVisitCalls(listPendingFirstVisitCalls(firstVisitPatients, today));
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
@@ -171,6 +177,7 @@ export default function HappyCallListPage() {
     }),
     ...dietCalls.map((c) => ({ kind: 'diet' as const, id: c.id, patientName: c.patientName, callDate: c.callDate })),
     ...manualEntries.map((m) => ({ kind: 'manual' as const, id: m.id, patientName: m.patientName, callDate: m.callDate, note: m.note })),
+    ...firstVisitCalls.map((c) => ({ kind: 'firstVisit' as const, id: c.id, patientName: c.patientName, callDate: c.callDate })),
   ].sort((a, b) => a.callDate.localeCompare(b.callDate));
 
   async function handleComplete(row: WorklistRow) {
@@ -181,8 +188,10 @@ export default function HappyCallListPage() {
         await markHerbCallDone(supabase, row.prescriptionId, row.callNumber, note);
       } else if (row.kind === 'diet') {
         await markDietCallDone(supabase, row.id, note);
-      } else {
+      } else if (row.kind === 'manual') {
         await markManualEntryDone(supabase, row.id, note);
+      } else {
+        await updateHappyCallPatient(supabase, row.id, { callLog: note || '통화 완료' });
       }
       await load();
     } catch {
@@ -190,7 +199,7 @@ export default function HappyCallListPage() {
     }
   }
 
-  const kindLabel: Record<WorklistRow['kind'], string> = { herb: '한약', diet: '린다이어트', manual: '초진' };
+  const kindLabel: Record<WorklistRow['kind'], string> = { herb: '한약', diet: '린다이어트', manual: '초진(수동)', firstVisit: '초진환자' };
 
   if (loading) return <p>불러오는 중...</p>;
 
