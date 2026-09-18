@@ -7,9 +7,17 @@ import {
   createNonCoveredPurchase,
   listKnownPatients,
   defaultHappyCallDate,
+  suggestGoalCategory,
   type KnownPatient,
 } from '@/lib/supabase/nonCoveredPurchases';
-import type { NonCoveredPurchase } from '@/lib/types';
+import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
+
+const GOAL_CATEGORY_LABEL: Record<GoalCategory, string> = {
+  herb: '한약',
+  diet: '다이어트',
+  special_herb: '특수한약',
+  chuna: '추나',
+};
 
 function todayString(): string {
   const now = new Date();
@@ -37,6 +45,8 @@ export default function NonCoveredPatientsPage() {
   const [amount, setAmount] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(todayString());
   const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(todayString()));
+  const [goalCategory, setGoalCategory] = useState<GoalCategory | null>(null);
+  const [goalCategoryTouched, setGoalCategoryTouched] = useState(false);
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -98,6 +108,8 @@ export default function NonCoveredPatientsPage() {
     setAmount('');
     setPurchaseDate(todayString());
     setHappyCallDate(defaultHappyCallDate(todayString()));
+    setGoalCategory(null);
+    setGoalCategoryTouched(false);
     setMemo('');
     setAddingCategory(false);
     setNewCategory('');
@@ -121,6 +133,7 @@ export default function NonCoveredPatientsPage() {
         purchaseDate,
         memo: memo.trim() || null,
         happyCallDate: happyCallDate || null,
+        goalCategory,
         createdBy: user?.id ?? null,
       });
       setShowForm(false);
@@ -308,7 +321,11 @@ export default function NonCoveredPatientsPage() {
             <input
               placeholder="상품명"
               value={productName}
-              onChange={(e) => setProductName(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setProductName(value);
+                if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(value));
+              }}
               className="input-field"
               style={{ maxWidth: 200 }}
             />
@@ -320,6 +337,27 @@ export default function NonCoveredPatientsPage() {
               className="input-field"
               style={{ maxWidth: 130 }}
             />
+            <div>
+              <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
+                목표 반영
+              </label>
+              <select
+                value={goalCategory ?? ''}
+                onChange={(e) => {
+                  setGoalCategory((e.target.value || null) as GoalCategory | null);
+                  setGoalCategoryTouched(true);
+                }}
+                className="input-field"
+                style={{ maxWidth: 130 }}
+              >
+                <option value="">없음</option>
+                {(Object.keys(GOAL_CATEGORY_LABEL) as GoalCategory[]).map((key) => (
+                  <option key={key} value={key}>
+                    {GOAL_CATEGORY_LABEL[key]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
                 구매일
@@ -404,7 +442,7 @@ export default function NonCoveredPatientsPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--color-surface-2)' }}>
-              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '해피콜', '메모'].map((h) => (
+              {['환자명', '차트번호', '연락처', '구분', '상품명', '금액', '구매일', '해피콜', '목표', '메모'].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '10px 12px' }}>
                   {h}
                 </th>
@@ -414,7 +452,7 @@ export default function NonCoveredPatientsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
+                <td colSpan={10} style={{ padding: 16, textAlign: 'center' }} className="muted-text">
                   기록이 없어요.
                 </td>
               </tr>
@@ -429,6 +467,9 @@ export default function NonCoveredPatientsPage() {
                   <td style={{ padding: '10px 12px' }}>{formatAmount(p.amount)}</td>
                   <td style={{ padding: '10px 12px' }}>{p.purchaseDate}</td>
                   <td style={{ padding: '10px 12px' }}>{p.happyCallDate ?? '-'}</td>
+                  <td style={{ padding: '10px 12px' }} className="muted-text">
+                    {p.goalCategory ? GOAL_CATEGORY_LABEL[p.goalCategory] : '-'}
+                  </td>
                   <td style={{ padding: '10px 12px' }} className="muted-text">
                     {p.memo ?? ''}
                   </td>

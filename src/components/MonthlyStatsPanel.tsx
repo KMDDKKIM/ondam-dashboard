@@ -6,7 +6,15 @@ import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface MonthlyStatsPanelProps {
   initial: MonthlySummary;
+  isOwner: boolean;
 }
+
+const GOAL_FIELDS = [
+  { key: 'herbGoal', summaryKey: 'herb', label: '한약' },
+  { key: 'dietGoal', summaryKey: 'diet', label: '다이어트' },
+  { key: 'specialHerbGoal', summaryKey: 'specialHerb', label: '특수한약' },
+  { key: 'chunaGoal', summaryKey: 'chuna', label: '추나' },
+] as const;
 
 function currentMonth(): string {
   const now = new Date();
@@ -19,12 +27,16 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
+export function MonthlyStatsPanel({ initial, isOwner }: MonthlyStatsPanelProps) {
   const [summary, setSummary] = useState(initial);
   const [month, setMonth] = useState(initial.month);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pickingMonth, setPickingMonth] = useState(false);
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [goalInputs, setGoalInputs] = useState<Record<string, string>>({});
+  const [savingGoals, setSavingGoals] = useState(false);
+  const [goalError, setGoalError] = useState('');
 
   async function load(targetMonth: string) {
     setLoading(true);
@@ -48,6 +60,43 @@ export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
     if (month !== initial.month) load(month);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
+
+  function openGoalForm() {
+    setGoalInputs({
+      herbGoal: summary.goals.herb.goal != null ? String(summary.goals.herb.goal) : '',
+      dietGoal: summary.goals.diet.goal != null ? String(summary.goals.diet.goal) : '',
+      specialHerbGoal: summary.goals.specialHerb.goal != null ? String(summary.goals.specialHerb.goal) : '',
+      chunaGoal: summary.goals.chuna.goal != null ? String(summary.goals.chuna.goal) : '',
+    });
+    setGoalError('');
+    setShowGoalForm(true);
+  }
+
+  async function saveGoals() {
+    setSavingGoals(true);
+    setGoalError('');
+    try {
+      const response = await fetch('/api/monthly-goal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month,
+          herbGoal: goalInputs.herbGoal || null,
+          dietGoal: goalInputs.dietGoal || null,
+          specialHerbGoal: goalInputs.specialHerbGoal || null,
+          chunaGoal: goalInputs.chunaGoal || null,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? '저장에 실패했습니다.');
+      setShowGoalForm(false);
+      await load(month);
+    } catch (err) {
+      setGoalError(err instanceof Error ? err.message : '저장에 실패했습니다.');
+    } finally {
+      setSavingGoals(false);
+    }
+  }
 
   const [year, monthNum] = summary.month.split('-');
   const isCurrentMonth = month >= currentMonth();
@@ -101,20 +150,57 @@ export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
             ▶
           </button>
         </div>
-        <button
-          onClick={() => load(month)}
-          disabled={loading}
-          style={{
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--color-muted)',
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {loading ? '불러오는 중...' : '↻ 새로고침'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isOwner && (
+            <button
+              onClick={() => (showGoalForm ? setShowGoalForm(false) : openGoalForm())}
+              style={{ border: 'none', background: 'transparent', color: 'var(--color-brand-b)', fontSize: 13, fontWeight: 600 }}
+            >
+              🎯 목표 입력
+            </button>
+          )}
+          <button
+            onClick={() => load(month)}
+            disabled={loading}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-muted)',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {loading ? '불러오는 중...' : '↻ 새로고침'}
+          </button>
+        </div>
       </div>
+
+      {showGoalForm && (
+        <div
+          className="card"
+          style={{ padding: 14, marginBottom: 16, background: 'var(--color-surface-2)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}
+        >
+          {GOAL_FIELDS.map(({ key, label }) => (
+            <div key={key}>
+              <label className="muted-text" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+                {label} 목표
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={goalInputs[key] ?? ''}
+                onChange={(e) => setGoalInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                className="input-field"
+                style={{ width: 90, padding: '6px 8px' }}
+              />
+            </div>
+          ))}
+          <button onClick={saveGoals} disabled={savingGoals} className="btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
+            {savingGoals ? '저장 중...' : '저장'}
+          </button>
+          {goalError && <span className="error-text">{goalError}</span>}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div
@@ -162,9 +248,9 @@ export function MonthlyStatsPanel({ initial }: MonthlyStatsPanelProps) {
           color="var(--color-orange)"
         />
         <DonutProgress
-          label="특수약침"
-          achieved={summary.goals.specialAcupuncture.achieved}
-          goal={summary.goals.specialAcupuncture.goal}
+          label="특수한약"
+          achieved={summary.goals.specialHerb.achieved}
+          goal={summary.goals.specialHerb.goal}
           color="var(--color-purple)"
         />
         <DonutProgress

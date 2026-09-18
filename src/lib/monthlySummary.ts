@@ -8,7 +8,7 @@ export interface MonthlySummary {
   goals: {
     herb: { achieved: number; goal: number | null };
     diet: { achieved: number; goal: number | null };
-    specialAcupuncture: { achieved: number; goal: number | null };
+    specialHerb: { achieved: number; goal: number | null };
     chuna: { achieved: number; goal: number | null };
   };
 }
@@ -19,7 +19,6 @@ interface DailyRecordRow {
   ilban_count: number | null;
   chuna_count: number | null;
   diet_count: number | null;
-  special_acupuncture_count: number | null;
 }
 
 function currentMonth(): string {
@@ -46,18 +45,39 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const { data: records, error: recordsError } = await admin
     .from('daily_records')
-    .select('visit_count, nogyong_count, ilban_count, chuna_count, diet_count, special_acupuncture_count')
+    .select('visit_count, nogyong_count, ilban_count, chuna_count, diet_count')
     .is('deleted_at', null)
     .gte('date', monthStart)
     .lt('date', monthEnd);
   if (recordsError) throw recordsError;
 
+  // special_acupuncture_goal 컬럼 이름은 그대로지만, 이제 "특수한약" 목표값으로
+  // 쓴다(대표원장 전용 "이번달 목표 입력"에서만 이 컬럼을 쓴다 — WeeklyDashboard.tsx
+  // 참고).
   const { data: goalsRow, error: goalsError } = await admin
     .from('monthly_goals')
     .select('herb_goal, diet_goal, special_acupuncture_goal, chuna_goal')
     .eq('month', month)
     .maybeSingle();
   if (goalsError) throw goalsError;
+
+  // 특수한약(공진단/경옥고/녹용관절고/보폐고엔오 등) 실적은 예약관리 쪽에 데이터가
+  // 없다 — 비급여 현황에서 그 항목을 등록할 때 "목표 반영"으로 표시해둔 건수를 센다.
+  // 한약/다이어트/추나는 예약관리 기록에 비급여 현황에서 같은 범주로 표시해둔
+  // 건수를 더한다(예: 비급여로만 판 특수 한약재도 "한약" 목표에 넣고 싶을 때).
+  const { data: purchaseRows, error: purchaseError } = await admin
+    .from('non_covered_purchases')
+    .select('goal_category')
+    .gte('purchase_date', monthStart)
+    .lt('purchase_date', monthEnd)
+    .not('goal_category', 'is', null);
+  if (purchaseError) throw purchaseError;
+
+  const purchaseCounts = { herb: 0, diet: 0, special_herb: 0, chuna: 0 };
+  for (const row of purchaseRows ?? []) {
+    const key = row.goal_category as keyof typeof purchaseCounts;
+    if (key in purchaseCounts) purchaseCounts[key] += 1;
+  }
 
   const { data: revenueRows, error: revenueError } = await admin
     .from('daily_revenue')
@@ -95,13 +115,16 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     avgDailyVisits,
     totalRevenue,
     goals: {
-      herb: { achieved: sum('nogyong_count') + sum('ilban_count'), goal: goalsRow?.herb_goal ?? null },
-      diet: { achieved: sum('diet_count'), goal: goalsRow?.diet_goal ?? null },
-      specialAcupuncture: {
-        achieved: sum('special_acupuncture_count'),
+      herb: {
+        achieved: sum('nogyong_count') + sum('ilban_count') + purchaseCounts.herb,
+        goal: goalsRow?.herb_goal ?? null,
+      },
+      diet: { achieved: sum('diet_count') + purchaseCounts.diet, goal: goalsRow?.diet_goal ?? null },
+      specialHerb: {
+        achieved: purchaseCounts.special_herb,
         goal: goalsRow?.special_acupuncture_goal ?? null,
       },
-      chuna: { achieved: sum('chuna_count'), goal: goalsRow?.chuna_goal ?? null },
+      chuna: { achieved: sum('chuna_count') + purchaseCounts.chuna, goal: goalsRow?.chuna_goal ?? null },
     },
   };
 }

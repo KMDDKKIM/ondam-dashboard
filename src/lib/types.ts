@@ -88,6 +88,8 @@ export interface HerbInventoryLog {
   createdAt: string;
 }
 
+export type GoalCategory = 'herb' | 'diet' | 'special_herb' | 'chuna';
+
 export interface NonCoveredPurchase {
   id: string;
   patientName: string;
@@ -100,6 +102,7 @@ export interface NonCoveredPurchase {
   memo: string | null;
   happyCallDate: string | null;
   happyCallEntryId: string | null;
+  goalCategory: GoalCategory | null;
   createdBy: string | null;
   createdAt: string;
 }

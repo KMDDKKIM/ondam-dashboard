@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { NonCoveredPurchase } from '@/lib/types';
+import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
 import { createManualEntry, updateManualEntryCallDate } from './happyCallQueue';
 
 interface NonCoveredPurchaseRow {
@@ -14,6 +14,7 @@ interface NonCoveredPurchaseRow {
   memo: string | null;
   happy_call_date: string | null;
   happy_call_entry_id: string | null;
+  goal_category: GoalCategory | null;
   created_by: string | null;
   created_at: string;
 }
@@ -31,6 +32,7 @@ function rowToPurchase(row: NonCoveredPurchaseRow): NonCoveredPurchase {
     memo: row.memo,
     happyCallDate: row.happy_call_date,
     happyCallEntryId: row.happy_call_entry_id,
+    goalCategory: row.goal_category,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -43,6 +45,14 @@ export function defaultHappyCallDate(purchaseDate: string): string {
   const date = new Date(Date.UTC(y, m - 1, d));
   date.setUTCDate(date.getUTCDate() + 7);
   return date.toISOString().slice(0, 10);
+}
+
+// 특수한약으로 분류되는 품목 — 상품명을 여기서 골라 입력하면 "목표 반영"을
+// 자동으로 특수한약으로 제안한다(그래도 등록 폼에서 직접 바꿀 수 있다).
+export const SPECIAL_HERB_PRODUCTS = ['공진단', '경옥고', '녹용관절고', '보폐고엔오'];
+
+export function suggestGoalCategory(productName: string): GoalCategory | null {
+  return SPECIAL_HERB_PRODUCTS.some((name) => productName.includes(name)) ? 'special_herb' : null;
 }
 
 export async function listNonCoveredPurchases(supabase: SupabaseClient): Promise<NonCoveredPurchase[]> {
@@ -65,6 +75,7 @@ export interface NewNonCoveredPurchase {
   purchaseDate: string;
   memo: string | null;
   happyCallDate: string | null;
+  goalCategory: GoalCategory | null;
   createdBy: string | null;
 }
 
@@ -98,6 +109,7 @@ export async function createNonCoveredPurchase(
       memo: input.memo,
       happy_call_date: input.happyCallDate,
       happy_call_entry_id: happyCallEntryId,
+      goal_category: input.goalCategory,
       created_by: input.createdBy,
     })
     .select()
