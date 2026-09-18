@@ -87,3 +87,17 @@ export interface HerbInventoryLog {
   createdBy: string | null;
   createdAt: string;
 }
+
+export interface NonCoveredPurchase {
+  id: string;
+  patientName: string;
+  chartNo: string;
+  phone: string | null;
+  category: string;
+  productName: string;
+  amount: number | null;
+  purchaseDate: string;
+  memo: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}

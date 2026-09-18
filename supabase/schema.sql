@@ -248,3 +248,36 @@ create policy "authenticated can insert happy_call_manual_entries" on happy_call
 drop policy if exists "authenticated can update happy_call_manual_entries" on happy_call_manual_entries;
 create policy "authenticated can update happy_call_manual_entries" on happy_call_manual_entries
   for update using (auth.role() = 'authenticated');
+
+-- 비급여 현황: 환자 이름/차트번호/연락처 + 어떤 상품을 샀는지 + 어느 구분(일반 /
+-- 26추석이벤트 / 27설이벤트 ...)인지 한 행에 남긴다. 환자별 별도 테이블을 두지
+-- 않고, 같은 환자가 다시 구매하면 이 테이블에서 이름/차트번호/연락처로 검색해
+-- 자동완성하는 방식으로 "한 번 입력하면 다음엔 검색해서 클릭"을 구현한다
+-- (src/lib/supabase/nonCoveredPurchases.ts의 searchPatients 참고).
+create table if not exists non_covered_purchases (
+  id uuid primary key default gen_random_uuid(),
+  patient_name text not null,
+  chart_no text not null,
+  phone text,
+  category text not null default '일반',
+  product_name text not null,
+  amount numeric,
+  purchase_date date not null default current_date,
+  memo text,
+  created_by uuid references staff(id),
+  created_at timestamptz not null default now()
+);
+
+alter table non_covered_purchases enable row level security;
+
+drop policy if exists "authenticated can read non_covered_purchases" on non_covered_purchases;
+create policy "authenticated can read non_covered_purchases" on non_covered_purchases
+  for select using (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can insert non_covered_purchases" on non_covered_purchases;
+create policy "authenticated can insert non_covered_purchases" on non_covered_purchases
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "authenticated can update non_covered_purchases" on non_covered_purchases;
+create policy "authenticated can update non_covered_purchases" on non_covered_purchases
+  for update using (auth.role() = 'authenticated');

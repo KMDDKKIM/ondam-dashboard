@@ -83,8 +83,8 @@ export default async function HomePage() {
     },
     {
       href: '/non-covered-patients',
-      label: '비급여 환자 목록',
-      sublabel: '준비 중',
+      label: '비급여 현황',
+      sublabel: '구분별 구매·이벤트 실적',
       icon: '💰',
       accent: '#faf1de',
     },
