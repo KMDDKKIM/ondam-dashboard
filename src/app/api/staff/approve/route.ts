@@ -20,15 +20,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '지정할 수 없는 등급입니다.' }, { status: 400 });
   }
 
-  // role = 'staff' 조건: 원장 계정 행은 이 API로 바꾸지 못하게 한다.
+  // role = 'staff' + status = 'pending'으로 좁혀서, 원장 계정 행이나 이미 승인된 계정은
+  // 바꾸지 못하게 한다. 조건에 맞는 행이 없으면 갱신된 행이 0개다.
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data, error } = await admin
     .from('staff')
     .update({ status: 'approved', grade: finalGrade })
     .eq('id', staffId)
-    .eq('role', 'staff');
+    .eq('role', 'staff')
+    .eq('status', 'pending')
+    .select('id');
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data || data.length === 0) {
+    return NextResponse.json({ error: '승인 대기 중인 직원이 아닙니다.' }, { status: 404 });
   }
 
   return NextResponse.json({ ok: true });
