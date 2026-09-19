@@ -7,10 +7,11 @@ import { FavoriteIcons } from '@/components/FavoriteIcons';
 
 interface TopBarProps {
   staffName: string | null;
+  staffGrade: string | null;
   unreadCount: number;
 }
 
-export function TopBar({ staffName, unreadCount }: TopBarProps) {
+export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -98,7 +99,10 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
             </span>
           )}
         </Link>
-        <span className="muted-text">{staffName ?? '로그인됨'}</span>
+        <span className="muted-text">
+          {staffName ?? '로그인됨'}
+          {staffGrade ? ` · ${staffGrade}` : ''}
+        </span>
         <button
           onClick={handleLogout}
           style={{

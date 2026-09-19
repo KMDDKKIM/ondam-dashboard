@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: staff } = await supabase
     .from('staff')
-    .select('name, role')
+    .select('name, role, grade')
     .eq('id', user.id)
     .maybeSingle();
   const staffName = staff?.name ?? user.email ?? null;
@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <TopBar staffName={staffName} unreadCount={unreadCount} />
+      <TopBar staffName={staffName} staffGrade={staff?.grade ?? null} unreadCount={unreadCount} />
       <AppMain>{children}</AppMain>
     </div>
   );
