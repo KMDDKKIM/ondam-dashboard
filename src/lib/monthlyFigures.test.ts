@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { achievementPercent, averageVisitsPerDay, resolveMonthlyFigures } from './monthlyFigures';
+import { achievementPercent, averageVisitsPerDay, resolveMonthlyFigures, revenuePace } from './monthlyFigures';
 
 describe('averageVisitsPerDay', () => {
   it('내원 합계를 진료한 날 수로 나눈다(0명인 날·수 없는 날은 뺀다)', () => {
@@ -63,5 +63,27 @@ describe('achievementPercent', () => {
     expect(achievementPercent(10, null)).toBeNull();
     expect(achievementPercent(10, 0)).toBeNull();
     expect(achievementPercent(null, 10)).toBeNull();
+  });
+});
+
+describe('revenuePace', () => {
+  // 9월은 30일. 9/19 기준이면 어제까지 18일 지났으니 진도는 18/30 = 60%.
+  const today = new Date(2026, 8, 19);
+
+  it('목표 진도보다 늦으면 behind', () => {
+    expect(revenuePace(30_000_000, 60_000_000, '2026-09', today)).toBe('behind');
+  });
+
+  it('진도에 맞거나 앞서면 onTrack, 진도의 95% 이상이면 여유로 본다', () => {
+    expect(revenuePace(36_000_000, 60_000_000, '2026-09', today)).toBe('onTrack');
+    expect(revenuePace(34_200_000, 60_000_000, '2026-09', today)).toBe('onTrack');
+    expect(revenuePace(34_000_000, 60_000_000, '2026-09', today)).toBe('behind');
+  });
+
+  it('이번 달이 아니거나 목표·실적이 없거나 1일이면 null', () => {
+    expect(revenuePace(1, 60_000_000, '2026-08', today)).toBeNull();
+    expect(revenuePace(1, null, '2026-09', today)).toBeNull();
+    expect(revenuePace(null, 60_000_000, '2026-09', today)).toBeNull();
+    expect(revenuePace(0, 60_000_000, '2026-09', new Date(2026, 8, 1))).toBeNull();
   });
 });

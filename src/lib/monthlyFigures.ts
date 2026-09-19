@@ -45,3 +45,29 @@ export function achievementPercent(achieved: number | null, goal: number | null)
   if (achieved == null || goal == null || goal <= 0) return null;
   return Math.round((achieved / goal) * 100);
 }
+
+export type RevenuePace = 'behind' | 'onTrack';
+
+// 총매출이 "이번 달 날짜 진도"에 맞게 쌓이고 있는지 판단한다.
+// - 이번 달에만 의미가 있다(지난달·다음달은 null). 목표가 없어도 null.
+// - 결산은 그날 진료가 끝난 뒤 들어오므로, 오늘 매출은 아직 없다고 보고 어제까지
+//   지난 날(오늘 날짜 - 1)만큼의 목표 진도와 비교한다. 매월 1일은 비교할 날이 없어 null.
+// - "조금 늦다 싶으면" 알려주려고 여유는 5%만 둔다(진도의 95%에 못 미치면 behind).
+export function revenuePace(
+  achieved: number | null,
+  goal: number | null,
+  month: string,
+  today: Date
+): RevenuePace | null {
+  if (achieved == null || goal == null || goal <= 0) return null;
+
+  const todayMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  if (month !== todayMonth) return null;
+
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const daysPassed = today.getDate() - 1;
+  if (daysPassed <= 0) return null;
+
+  const expected = goal * (daysPassed / daysInMonth);
+  return achieved < expected * 0.95 ? 'behind' : 'onTrack';
+}

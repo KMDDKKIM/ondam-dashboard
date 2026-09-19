@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { DonutProgress } from '@/components/DonutProgress';
-import { achievementPercent } from '@/lib/monthlyFigures';
+import { achievementPercent, revenuePace } from '@/lib/monthlyFigures';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface MonthlyStatsPanelProps {
@@ -226,7 +226,14 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
           }}
         >
           {extraTiles}
-          <StatTile label="총매출" compact={compact} achieved={summary.totalRevenue} goal={summary.totalRevenueGoal} unit="원">
+          <StatTile
+            label="총매출"
+            compact={compact}
+            achieved={summary.totalRevenue}
+            goal={summary.totalRevenueGoal}
+            unit="원"
+            pace={revenuePace(summary.totalRevenue, summary.totalRevenueGoal, summary.month, new Date())}
+          >
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
           </StatTile>
           <StatTile
@@ -278,6 +285,7 @@ export function StatTile({
   achieved = null,
   goal = null,
   unit = '',
+  pace = null,
 }: {
   label: string;
   compact?: boolean;
@@ -285,6 +293,7 @@ export function StatTile({
   achieved?: number | null;
   goal?: number | null;
   unit?: string;
+  pace?: 'behind' | 'onTrack' | null;
 }) {
   const percent = achievementPercent(achieved, goal);
   return (
@@ -323,6 +332,18 @@ export function StatTile({
             목표 {goal.toLocaleString()}
             {unit} · {percent != null ? `${percent}%` : '-'}
           </div>
+          {pace && (
+            <div
+              style={{
+                marginTop: 3,
+                fontSize: compact ? 10 : 12,
+                fontWeight: 700,
+                color: pace === 'behind' ? 'var(--color-error)' : 'var(--color-green)',
+              }}
+            >
+              {pace === 'behind' ? '📉 매출향상이 필요해요' : '👍 매출이 안정적이에요'}
+            </div>
+          )}
         </div>
       )}
     </div>
