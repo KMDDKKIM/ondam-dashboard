@@ -6,6 +6,7 @@ import { analyzePasteText } from '@/lib/pasteImport';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
 import { computeDerivedStats } from '@/lib/reservations/reservationStats';
+import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
   getSavedDailyClosing,
@@ -113,7 +114,7 @@ function MonthlySettlementSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.month} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.month} · {h.totalRevenue.toLocaleString()}원{h.avgDailyVisits != null ? ` · 일평균 ${h.avgDailyVisits}명` : ''}
+                {h.month} · {h.totalRevenue.toLocaleString()}원{h.avgDailyVisits != null ? ` · 일평균 ${h.avgDailyVisits}명` : ''} · 저장 {formatSavedAt(h.updatedAt)}
               </li>
             ))}
           </ul>
@@ -129,7 +130,7 @@ function ReservationSection() {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
-  const [history, setHistory] = useState<{ date: string; reservationCount: number }[]>([]);
+  const [history, setHistory] = useState<{ date: string; reservationCount: number; updatedAt: string }[]>([]);
   const supabase = createClient();
 
   async function loadHistory() {
@@ -213,7 +214,7 @@ function ReservationSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.date} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.date} · 예약 {h.reservationCount}건
+                {h.date} · 예약 {h.reservationCount}건 · 저장 {formatSavedAt(h.updatedAt)}
               </li>
             ))}
           </ul>
@@ -407,6 +408,15 @@ function DailySettlementSection() {
   function setField(key: keyof ClosingFields, value: string) {
     setClosing((prev) => ({ ...prev, [key]: value }));
     setCopied(false);
+    setResult('');
+  }
+
+  // 붙여넣은 결산표와 아래 칸을 전부 비운다(화면만 비우고, 이미 저장한 기록은 그대로다).
+  function handleClearAll() {
+    setText('');
+    setClosing(EMPTY_CLOSING);
+    setCopied(false);
+    setError('');
     setResult('');
   }
 
@@ -625,6 +635,20 @@ function DailySettlementSection() {
             >
               멘트 복사
             </button>
+            <button
+              onClick={handleClearAll}
+              style={{
+                padding: '8px 20px',
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 10,
+                border: '1px solid var(--color-line)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-error)',
+              }}
+            >
+              모두 삭제
+            </button>
             {copied && <span style={{ fontSize: 12, color: 'var(--color-teal-deep)' }}>복사했어요. 카톡에 붙여넣기 하세요.</span>}
           </div>
         </div>
@@ -638,7 +662,7 @@ function DailySettlementSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.date} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.date} · {h.totalRevenue.toLocaleString()}원{h.visitCount != null ? ` · 내원 ${h.visitCount}명` : ''}
+                {h.date} · {h.totalRevenue.toLocaleString()}원{h.visitCount != null ? ` · 내원 ${h.visitCount}명` : ''} · 저장 {formatSavedAt(h.updatedAt)}
               </li>
             ))}
           </ul>
