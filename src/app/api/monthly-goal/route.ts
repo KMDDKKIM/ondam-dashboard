@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
       diet_goal: toGoalNumber(body.dietGoal),
       special_acupuncture_goal: toGoalNumber(body.specialHerbGoal),
       chuna_goal: toGoalNumber(body.chunaGoal),
+      revenue_goal: toGoalNumber(body.revenueGoal),
+      avg_visits_goal: toGoalNumber(body.avgVisitsGoal),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'month' }

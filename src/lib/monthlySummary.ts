@@ -6,6 +6,9 @@ export interface MonthlySummary {
   month: string;
   avgDailyVisits: number | null;
   totalRevenue: number | null;
+  // 총매출 / 일평균 환자수 목표(대표원장이 입력). 없으면 null.
+  totalRevenueGoal: number | null;
+  avgDailyVisitsGoal: number | null;
   goals: {
     herb: { achieved: number; goal: number | null };
     diet: { achieved: number; goal: number | null };
@@ -57,7 +60,7 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
   // 참고).
   const { data: goalsRow, error: goalsError } = await admin
     .from('monthly_goals')
-    .select('herb_goal, diet_goal, special_acupuncture_goal, chuna_goal')
+    .select('herb_goal, diet_goal, special_acupuncture_goal, chuna_goal, revenue_goal, avg_visits_goal')
     .eq('month', month)
     .maybeSingle();
   if (goalsError) throw goalsError;
@@ -122,6 +125,8 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     month,
     avgDailyVisits,
     totalRevenue,
+    totalRevenueGoal: goalsRow?.revenue_goal != null ? Number(goalsRow.revenue_goal) : null,
+    avgDailyVisitsGoal: goalsRow?.avg_visits_goal != null ? Number(goalsRow.avg_visits_goal) : null,
     goals: {
       herb: {
         achieved: sum('nogyong_count') + sum('ilban_count') + purchaseCounts.herb,

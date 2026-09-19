@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageVisitsPerDay, resolveMonthlyFigures } from './monthlyFigures';
+import { achievementPercent, averageVisitsPerDay, resolveMonthlyFigures } from './monthlyFigures';
 
 describe('averageVisitsPerDay', () => {
   it('내원 합계를 진료한 날 수로 나눈다(0명인 날·수 없는 날은 뺀다)', () => {
@@ -50,5 +50,18 @@ describe('resolveMonthlyFigures', () => {
   it('결산 데이터가 전혀 없으면 예약 명단 값으로, 그것도 없으면 null', () => {
     expect(resolveMonthlyFigures([], null, 12.3)).toEqual({ totalRevenue: null, avgDailyVisits: 12.3 });
     expect(resolveMonthlyFigures([], null, null)).toEqual({ totalRevenue: null, avgDailyVisits: null });
+  });
+});
+
+describe('achievementPercent', () => {
+  it('달성/목표를 %로 반올림하고 목표 초과는 100을 넘겨 그대로 보여준다', () => {
+    expect(achievementPercent(47338780, 60000000)).toBe(79);
+    expect(achievementPercent(27.4, 25)).toBe(110);
+  });
+
+  it('목표가 없거나 0이거나 실적이 없으면 null', () => {
+    expect(achievementPercent(10, null)).toBeNull();
+    expect(achievementPercent(10, 0)).toBeNull();
+    expect(achievementPercent(null, 10)).toBeNull();
   });
 });

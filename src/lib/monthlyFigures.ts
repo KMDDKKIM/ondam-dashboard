@@ -39,3 +39,9 @@ export function resolveMonthlyFigures(
     avgDailyVisits: override?.avgDailyVisits ?? averageVisitsPerDay(daily) ?? fallbackAvgVisits,
   };
 }
+
+// 달성률(%) — 목표가 없거나 0이면 null. 목표를 넘기면 100을 넘는 값 그대로 돌려준다.
+export function achievementPercent(achieved: number | null, goal: number | null): number | null {
+  if (achieved == null || goal == null || goal <= 0) return null;
+  return Math.round((achieved / goal) * 100);
+}

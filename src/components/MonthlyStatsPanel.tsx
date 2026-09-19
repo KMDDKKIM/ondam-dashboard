@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { DonutProgress } from '@/components/DonutProgress';
+import { achievementPercent } from '@/lib/monthlyFigures';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface MonthlyStatsPanelProps {
@@ -14,10 +15,12 @@ interface MonthlyStatsPanelProps {
 }
 
 const GOAL_FIELDS = [
-  { key: 'herbGoal', summaryKey: 'herb', label: '한약' },
-  { key: 'dietGoal', summaryKey: 'diet', label: '다이어트' },
-  { key: 'specialHerbGoal', summaryKey: 'specialHerb', label: '특수한약' },
-  { key: 'chunaGoal', summaryKey: 'chuna', label: '추나' },
+  { key: 'revenueGoal', summaryKey: 'revenue', label: '총매출(원)', width: 130 },
+  { key: 'avgVisitsGoal', summaryKey: 'avgVisits', label: '일평균 환자수(명)', width: 110 },
+  { key: 'herbGoal', summaryKey: 'herb', label: '한약', width: 90 },
+  { key: 'dietGoal', summaryKey: 'diet', label: '다이어트', width: 90 },
+  { key: 'specialHerbGoal', summaryKey: 'specialHerb', label: '특수한약', width: 90 },
+  { key: 'chunaGoal', summaryKey: 'chuna', label: '추나', width: 90 },
 ] as const;
 
 function currentMonth(): string {
@@ -67,6 +70,8 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
 
   function openGoalForm() {
     setGoalInputs({
+      revenueGoal: summary.totalRevenueGoal != null ? String(summary.totalRevenueGoal) : '',
+      avgVisitsGoal: summary.avgDailyVisitsGoal != null ? String(summary.avgDailyVisitsGoal) : '',
       herbGoal: summary.goals.herb.goal != null ? String(summary.goals.herb.goal) : '',
       dietGoal: summary.goals.diet.goal != null ? String(summary.goals.diet.goal) : '',
       specialHerbGoal: summary.goals.specialHerb.goal != null ? String(summary.goals.specialHerb.goal) : '',
@@ -85,6 +90,8 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           month,
+          revenueGoal: goalInputs.revenueGoal || null,
+          avgVisitsGoal: goalInputs.avgVisitsGoal || null,
           herbGoal: goalInputs.herbGoal || null,
           dietGoal: goalInputs.dietGoal || null,
           specialHerbGoal: goalInputs.specialHerbGoal || null,
@@ -184,7 +191,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
           className="card"
           style={{ padding: 14, marginBottom: 16, background: 'var(--color-surface-2)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}
         >
-          {GOAL_FIELDS.map(({ key, label }) => (
+          {GOAL_FIELDS.map(({ key, label, width }) => (
             <div key={key}>
               <label className="muted-text" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
                 {label} 목표
@@ -195,7 +202,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
                 value={goalInputs[key] ?? ''}
                 onChange={(e) => setGoalInputs((prev) => ({ ...prev, [key]: e.target.value }))}
                 className="input-field"
-                style={{ width: 90, padding: '6px 8px' }}
+                style={{ width, padding: '6px 8px' }}
               />
             </div>
           ))}
@@ -219,10 +226,16 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
           }}
         >
           {extraTiles}
-          <StatTile label="총매출" compact={compact}>
+          <StatTile label="총매출" compact={compact} achieved={summary.totalRevenue} goal={summary.totalRevenueGoal} unit="원">
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
           </StatTile>
-          <StatTile label="일평균 환자수" compact={compact}>
+          <StatTile
+            label="일평균 환자수"
+            compact={compact}
+            achieved={summary.avgDailyVisits}
+            goal={summary.avgDailyVisitsGoal}
+            unit="명"
+          >
             {summary.avgDailyVisits != null ? `${summary.avgDailyVisits}명` : '데이터 없음'}
           </StatTile>
         </div>
@@ -258,7 +271,22 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
   );
 }
 
-export function StatTile({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
+export function StatTile({
+  label,
+  compact,
+  children,
+  achieved = null,
+  goal = null,
+  unit = '',
+}: {
+  label: string;
+  compact?: boolean;
+  children: ReactNode;
+  achieved?: number | null;
+  goal?: number | null;
+  unit?: string;
+}) {
+  const percent = achievementPercent(achieved, goal);
   return (
     <div
       className="card"
@@ -272,6 +300,31 @@ export function StatTile({ label, compact, children }: { label: string; compact?
         {label}
       </div>
       <div style={{ fontWeight: 700, fontSize: compact ? 15 : 18 }}>{children}</div>
+      {goal != null && goal > 0 && (
+        <div style={{ marginTop: compact ? 4 : 8 }}>
+          <div
+            style={{
+              height: 6,
+              borderRadius: 999,
+              background: 'var(--color-line)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(percent ?? 0, 100)}%`,
+                height: '100%',
+                background: (percent ?? 0) >= 100 ? 'var(--color-green)' : 'var(--color-brand-b)',
+                transition: 'width 0.4s ease',
+              }}
+            />
+          </div>
+          <div className="muted-text" style={{ marginTop: 3, fontSize: compact ? 10 : 12 }}>
+            목표 {goal.toLocaleString()}
+            {unit} · {percent != null ? `${percent}%` : '-'}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
