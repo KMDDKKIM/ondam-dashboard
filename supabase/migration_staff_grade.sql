@@ -12,3 +12,8 @@ update staff set grade = '대표원장' where role = 'owner' and grade <> '대�
 alter table staff drop constraint if exists staff_grade_matches_role;
 alter table staff add constraint staff_grade_matches_role
   check ((role = 'owner') = (grade = '대표원장'));
+
+-- 직원이 본인 행에서 바꿀 수 있는 컬럼은 name뿐이다(schema.sql과 동일, 재실행해도 안전).
+-- grade는 이 목록에 넣지 않는다: 넣으면 직원이 스스로 등급을 올릴 수 있다.
+revoke update on staff from authenticated;
+grant update (name) on staff to authenticated;

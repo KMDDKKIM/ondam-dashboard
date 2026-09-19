@@ -4,6 +4,7 @@ import { TopBar } from '@/components/TopBar';
 import { AppMain } from '@/components/AppMain';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
+import { isStaffGrade } from '@/lib/staffGrade';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -21,6 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq('id', user.id)
     .maybeSingle();
   const staffName = staff?.name ?? user.email ?? null;
+  const rawGrade = staff?.grade;
+  const staffGrade = isStaffGrade(rawGrade) ? rawGrade : null;
 
   let unreadCount = 0;
   try {
@@ -32,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <TopBar staffName={staffName} staffGrade={staff?.grade ?? null} unreadCount={unreadCount} />
+      <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
       <AppMain>{children}</AppMain>
     </div>
   );

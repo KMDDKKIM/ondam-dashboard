@@ -17,6 +17,16 @@ describe('GRADES', () => {
     expect([...ASSIGNABLE_GRADES]).toEqual(['부원장', '팀장', '사원']);
     expect(DEFAULT_GRADE).toBe('사원');
   });
+
+  it('지정 가능한 등급은 모두 전체 등급 목록에 들어 있다', () => {
+    for (const grade of ASSIGNABLE_GRADES) {
+      expect((GRADES as readonly string[]).includes(grade)).toBe(true);
+    }
+  });
+
+  it('기본 등급은 지정 가능한 등급이다', () => {
+    expect((ASSIGNABLE_GRADES as readonly string[]).includes(DEFAULT_GRADE)).toBe(true);
+  });
 });
 
 describe('isStaffGrade / isAssignableGrade', () => {

@@ -7,7 +7,11 @@ export async function POST(request: Request) {
   const denied = await requireOwner();
   if (denied) return denied;
 
-  const { staffId, grade } = (await request.json()) as { staffId?: string; grade?: unknown };
+  const body = (await request.json().catch(() => null)) as { staffId?: string; grade?: unknown } | null;
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 });
+  }
+  const { staffId, grade } = body;
   if (!staffId || !isAssignableGrade(grade)) {
     return NextResponse.json({ error: 'staffId와 지정 가능한 등급이 필요합니다.' }, { status: 400 });
   }

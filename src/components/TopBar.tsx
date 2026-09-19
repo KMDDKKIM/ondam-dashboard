@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { FavoriteIcons } from '@/components/FavoriteIcons';
+import type { StaffGrade } from '@/lib/staffGrade';
 
 interface TopBarProps {
   staffName: string | null;
-  staffGrade: string | null;
+  staffGrade: StaffGrade | null;
   unreadCount: number;
 }
 
