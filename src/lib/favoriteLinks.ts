@@ -9,7 +9,7 @@ export interface FavoriteLink {
 }
 
 export const FAVORITE_LINKS: FavoriteLink[] = [
-  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', bg: '#fbe4ef', fg: '#b02a6b' },
+  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', bg: '#daf2ec', fg: '#12917a' },
   { label: '주차', url: 'https://npdc-i.nicepark.co.kr/', emoji: '🅿️', bg: '#e0eefa', fg: '#245d8f' },
   { label: '린다이어트', url: 'https://chart.leandiet.co.kr/patients?status=ongoing', emoji: '🥗', bg: '#ebe3fb', fg: '#6831d7' },
   { label: '혈액검사', url: 'https://prs.precision-bio.com/login', emoji: '🩸', bg: '#fbe4e1', fg: '#b03a2e' },
