@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { NavCard } from '@/components/NavCard';
 import { QuoteBanner } from '@/components/QuoteBanner';
 import { TodoChecklist } from '@/components/TodoChecklist';
@@ -159,13 +158,6 @@ export default async function HomePage() {
           </h1>
           <p className="muted-text">예약관리·한약 복용법 출력을 포함한 모든 도구를 한 곳에서.</p>
         </div>
-        <Link
-          href="/reservations"
-          className="btn-primary"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', whiteSpace: 'nowrap' }}
-        >
-          📅 예약관리 바로가기
-        </Link>
       </div>
 
       <QuoteBanner />
