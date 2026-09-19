@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseBulkHerbEntry } from './herbEntryParser';
+import { parseBulkHerbEntry, parseNewHerbs } from './herbEntryParser';
 
 const KNOWN = ['당귀', '천궁', '생강', '대조', '생지황', '감초'];
 
@@ -57,5 +57,44 @@ describe('parseBulkHerbEntry', () => {
     expect(result.matched).toEqual([]);
     expect(result.unmatchedNames).toEqual([]);
     expect(result.danglingNames).toEqual([]);
+  });
+});
+
+describe('parseNewHerbs', () => {
+  it('숫자가 나오면 앞의 이름들에 그 재고를 준다', () => {
+    const { entries } = parseNewHerbs('당귀 5 천궁 3 생강 대조 1');
+    expect(entries).toEqual([
+      { name: '당귀', stock: 5, missingStock: false },
+      { name: '천궁', stock: 3, missingStock: false },
+      { name: '생강', stock: 1, missingStock: false },
+      { name: '대조', stock: 1, missingStock: false },
+    ]);
+  });
+
+  it('줄바꿈·쉼표·탭으로 구분한 목록도 받는다', () => {
+    const { entries } = parseNewHerbs('당귀\t5\n천궁, 3\n감초 0');
+    expect(entries.map((e) => [e.name, e.stock])).toEqual([
+      ['당귀', 5],
+      ['천궁', 3],
+      ['감초', 0],
+    ]);
+  });
+
+  it('끝까지 숫자가 없는 이름은 재고 0 + missingStock으로 표시한다', () => {
+    const { entries } = parseNewHerbs('당귀 2 천궁 생강');
+    expect(entries.slice(1)).toEqual([
+      { name: '천궁', stock: 0, missingStock: true },
+      { name: '생강', stock: 0, missingStock: true },
+    ]);
+  });
+
+  it('같은 이름이 또 나오면 처음 것만 쓰고 중복으로 알린다', () => {
+    const { entries, duplicateNames } = parseNewHerbs('당귀 5 당귀 9');
+    expect(entries).toEqual([{ name: '당귀', stock: 5, missingStock: false }]);
+    expect(duplicateNames).toEqual(['당귀']);
+  });
+
+  it('빈 입력이면 아무것도 만들지 않는다', () => {
+    expect(parseNewHerbs('  \n ').entries).toEqual([]);
   });
 });

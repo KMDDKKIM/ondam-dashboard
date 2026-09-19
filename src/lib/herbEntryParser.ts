@@ -8,7 +8,7 @@ const NUMBER_PATTERN = /^[0-9]+(\.[0-9]+)?$/;
 
 // "당귀 천궁 3 생강 대조 1" 같은 처방 표기 방식을 그대로 받는다 — 숫자 하나가
 // 나오면, 그 앞에 나온(아직 숫자가 안 붙은) 약재 이름들 전부에 그 개수를
-// 공통으로 적용한다. 예: 당귀·천궁은 3봉지씩, 생강·대조는 1봉지씩.
+// 공통으로 적용한다. 예: 당귀·천궁은 3씩, 생강·대조는 1씩.
 // 숫자 없이 끝나는 이름들(danglingNames)과, 목록에 없는 이름들(unmatchedNames)은
 // 반영하지 않고 따로 돌려줘서 화면에서 주의 표시를 하게 한다.
 export function parseBulkHerbEntry(text: string, knownNames: string[]): ParsedBulkEntry {
@@ -47,4 +47,45 @@ export function parseBulkHerbEntry(text: string, knownNames: string[]): ParsedBu
     unmatchedNames: Array.from(unmatched),
     danglingNames: pending,
   };
+}
+
+export interface ParsedNewHerbs {
+  entries: { name: string; stock: number; missingStock: boolean }[];
+  duplicateNames: string[];
+}
+
+// 새 약재를 여러 개 한 번에 등록할 때 쓰는 입력. 일괄 입고와 같은 표기를 따른다 —
+// "당귀 5 / 천궁 3 / 생강 대조 1"처럼 숫자가 나오면 그 앞에 나온(아직 숫자가 안 붙은)
+// 이름들 모두의 재고가 된다. 줄바꿈·쉼표도 공백처럼 취급해서 엑셀에서 복사한
+// 목록도 그대로 붙여 넣을 수 있다. 끝까지 숫자가 안 붙은 이름은 재고 0으로 등록하고
+// missingStock으로 표시해 화면에서 알려준다. 같은 이름이 또 나오면 처음 것만 쓴다.
+export function parseNewHerbs(text: string): ParsedNewHerbs {
+  const tokens = text.split(/[\s,]+/).filter(Boolean);
+  const entries: ParsedNewHerbs['entries'] = [];
+  const seen = new Set<string>();
+  const duplicateNames: string[] = [];
+  let pending: string[] = [];
+
+  function flush(stock: number, missingStock: boolean) {
+    for (const name of pending) {
+      if (seen.has(name)) {
+        if (!duplicateNames.includes(name)) duplicateNames.push(name);
+        continue;
+      }
+      seen.add(name);
+      entries.push({ name, stock, missingStock });
+    }
+    pending = [];
+  }
+
+  for (const token of tokens) {
+    if (NUMBER_PATTERN.test(token)) {
+      if (pending.length > 0) flush(Number(token), false);
+    } else {
+      pending.push(token);
+    }
+  }
+  flush(0, true);
+
+  return { entries, duplicateNames };
 }

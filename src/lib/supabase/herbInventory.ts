@@ -4,7 +4,6 @@ import type { HerbInventoryItem, HerbInventoryLog } from '@/lib/types';
 interface HerbInventoryRow {
   id: string;
   name: string;
-  unit: string;
   current_stock: number;
   low_stock_threshold: number | null;
   updated_at: string;
@@ -14,7 +13,6 @@ function rowToItem(row: HerbInventoryRow): HerbInventoryItem {
   return {
     id: row.id,
     name: row.name,
-    unit: row.unit,
     currentStock: Number(row.current_stock),
     lowStockThreshold: row.low_stock_threshold != null ? Number(row.low_stock_threshold) : null,
     updatedAt: row.updated_at,
@@ -27,23 +25,28 @@ export async function listHerbInventory(supabase: SupabaseClient): Promise<HerbI
   return (data as HerbInventoryRow[]).map(rowToItem);
 }
 
-export async function createHerbInventoryItem(
+// 여러 약재를 한 번의 insert로 넣는다 — 하나라도 실패하면 전부 들어가지 않는다.
+export async function createHerbInventoryItems(
   supabase: SupabaseClient,
-  input: { name: string; unit: string; currentStock: number; lowStockThreshold: number | null; createdBy: string | null }
-): Promise<HerbInventoryItem> {
-  const { data, error } = await supabase
-    .from('herb_inventory')
-    .insert({
-      name: input.name,
-      unit: input.unit,
-      current_stock: input.currentStock,
-      low_stock_threshold: input.lowStockThreshold,
-      created_by: input.createdBy,
-    })
-    .select()
-    .single();
+  inputs: { name: string; currentStock: number; createdBy: string | null }[]
+): Promise<void> {
+  const { error } = await supabase.from('herb_inventory').insert(
+    inputs.map((i) => ({
+      name: i.name,
+      // 단위는 이제 화면에 안 쓰지만 컬럼이 not null이라 빈 값으로 채운다.
+      unit: '',
+      current_stock: i.currentStock,
+      created_by: i.createdBy,
+    }))
+  );
   if (error) throw error;
-  return rowToItem(data as HerbInventoryRow);
+}
+
+// RLS가 막으면 에러 없이 0행이 지워지므로 실제로 지워졌는지 확인한다.
+export async function deleteHerbInventoryItem(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from('herb_inventory').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제하지 못했습니다.');
 }
 
 // 사용(use)은 재고를 줄이고, 입고(restock)는 늘린다. 두 종류 모두 herb_inventory의

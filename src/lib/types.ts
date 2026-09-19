@@ -72,7 +72,6 @@ export interface HappyCallManualEntry {
 export interface HerbInventoryItem {
   id: string;
   name: string;
-  unit: string;
   currentStock: number;
   lowStockThreshold: number | null;
   updatedAt: string;
