@@ -137,9 +137,9 @@ export default function HappyCallRegisterPage() {
       <h1 style={{ marginBottom: 16 }}>초진환자 해피콜</h1>
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      {/* 이 페이지만 대시보드 본문의 1100px 폭 제한을 벗어나서 화면 가로 전체를
-          쓴다 — 표 칸이 많아서(성함~메모) 최대한 스크롤 없이 보이게 하려는 것. */}
-      <div style={{ width: '100vw', position: 'relative', left: '50%', right: '50%', marginLeft: '-50vw', marginRight: '-50vw', padding: '0 16px' }}>
+      {/* 이 페이지는 AppMain의 WIDE_PATHS에 들어 있어 1100px 폭 제한 없이 화면 가로
+          전체를 쓴다 — 표 칸이 많아서(성함~메모) 최대한 스크롤 없이 보이게 하려는 것. */}
+      <div>
         <HappyCallStatsPanel patients={patients} staffList={staffList} onDateClick={setHighlightDate} />
 
         <div style={{ overflowX: 'auto', marginTop: 20 }}>

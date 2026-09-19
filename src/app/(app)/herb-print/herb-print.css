@@ -1,0 +1,73 @@
+/* 한약 복용법 출력 전용 스타일. 원래 별도 앱이라 Tailwind를 통째로 썼는데, 대시보드
+   전체에 Tailwind의 기본 리셋(preflight)이 걸리면 다른 화면이 깨지므로 리셋 없이
+   테마 + 유틸리티 클래스만 불러온다. layer()로 감싸지 않은 이유: 대시보드의
+   h1/h2 margin 같은 레이어 밖 전역 규칙이 레이어 안 유틸리티(mb-4 등)를 이겨버린다. */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@theme inline {
+  --font-sans: "Pretendard", "Malgun Gothic", sans-serif;
+}
+
+.herb-print-app {
+  page: letter;
+  min-height: 100vh;
+}
+
+.herb-print-app .font-serif-kr {
+  font-family: "Pretendard", "Malgun Gothic", sans-serif;
+}
+
+.herb-print-app .letter-page {
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+}
+
+.herb-print-app .watermark-logo {
+  width: 130mm;
+  height: auto;
+  opacity: 0.05;
+}
+
+.herb-print-app .print-only {
+  display: none;
+}
+
+@media screen {
+  .herb-print-app .preview-scale {
+    width: fit-content;
+    transform: scale(0.62);
+    transform-origin: top left;
+    margin-bottom: calc(-297mm * 0.38);
+  }
+}
+
+@page letter {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+
+  .app-main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .herb-print-app .no-print {
+    display: none !important;
+  }
+
+  .herb-print-app .print-only {
+    display: block;
+  }
+
+  .herb-print-app .letter-page {
+    box-shadow: none !important;
+  }
+}

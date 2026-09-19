@@ -3,39 +3,39 @@ interface DonutProgressProps {
   achieved: number;
   goal: number | null;
   color: string;
+  size?: number;
 }
 
-const SIZE = 84;
-const STROKE = 9;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-export function DonutProgress({ label, achieved, goal, color }: DonutProgressProps) {
+export function DonutProgress({ label, achieved, goal, color, size = 84 }: DonutProgressProps) {
+  const stroke = Math.round(size * 0.107);
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
   const percentage = goal && goal > 0 ? Math.min(achieved / goal, 1) : 0;
-  const offset = CIRCUMFERENCE * (1 - percentage);
+  const offset = circumference * (1 - percentage);
   const percentLabel = goal && goal > 0 ? `${Math.round(percentage * 100)}%` : '-';
+  const compact = size < 84;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-      <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
-        <svg width={SIZE} height={SIZE} style={{ transform: 'rotate(-90deg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: compact ? 4 : 8 }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
           <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={RADIUS}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
             fill="none"
             stroke="var(--color-surface-2)"
-            strokeWidth={STROKE}
+            strokeWidth={stroke}
           />
           <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={RADIUS}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
             fill="none"
             stroke={color}
-            strokeWidth={STROKE}
+            strokeWidth={stroke}
             strokeLinecap="round"
-            strokeDasharray={CIRCUMFERENCE}
+            strokeDasharray={circumference}
             strokeDashoffset={offset}
             style={{ transition: 'stroke-dashoffset 0.4s ease' }}
           />
@@ -48,15 +48,15 @@ export function DonutProgress({ label, achieved, goal, color }: DonutProgressPro
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 700,
-            fontSize: 15,
+            fontSize: compact ? 12 : 15,
           }}
         >
           {percentLabel}
         </div>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
-        <div className="muted-text" style={{ fontSize: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: compact ? 12 : 13 }}>{label}</div>
+        <div className="muted-text" style={{ fontSize: compact ? 11 : 12 }}>
           {achieved}
           {goal != null ? ` / ${goal}` : ''}
         </div>

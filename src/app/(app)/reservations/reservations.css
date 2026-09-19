@@ -1,0 +1,175 @@
+/* 예약관리 화면 전용 스타일. 원래 별도 앱이라 button/input/table 같은 요소 전체에
+   스타일을 걸었는데, 대시보드 안으로 들어오면서 다른 화면을 건드리지 않도록 전부
+   .reservation-app 안으로 가둔다(:where로 감싸 우선순위는 낮게 — 안쪽에서 인라인
+   스타일이나 .input-field 같은 클래스를 쓰면 그쪽이 이긴다). */
+.reservation-app {
+  page: reservation;
+}
+
+.reservation-app .print-only {
+  display: none;
+}
+
+:where(.reservation-app) button {
+  background: linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b));
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+}
+
+:where(.reservation-app) button:hover {
+  opacity: 0.88;
+}
+
+:where(.reservation-app) button:disabled {
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+:where(.reservation-app) table {
+  font-size: 14px;
+}
+
+:where(.reservation-app) th {
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-line);
+}
+
+:where(.reservation-app) td {
+  border-bottom: 1px solid var(--color-line);
+}
+
+:where(.reservation-app) input,
+:where(.reservation-app) textarea {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+:where(.reservation-app) input:focus,
+:where(.reservation-app) textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-b);
+  box-shadow: 0 0 0 3px rgba(44, 143, 214, 0.15);
+}
+
+:where(.reservation-app) h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+@page reservation {
+  size: landscape;
+  margin: 6mm;
+}
+
+@media print {
+  html,
+  body {
+    width: 100%;
+    height: auto;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .app-main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .reservation-app * {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  .reservation-app .no-print {
+    display: none !important;
+  }
+
+  .reservation-app .print-only {
+    display: block !important;
+  }
+
+  .reservation-app .card {
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .reservation-app .day-detail {
+    padding: 0 !important;
+    flex: none !important;
+  }
+
+  /* 화면에서는 사이드바와 본문을 나란히 두려고 flex를 쓰는데, 인쇄에서는 내용
+     높이만큼만 차지하는 평범한 블록 흐름으로 되돌려야 페이지 분량이 어긋나지 않는다. */
+  .reservation-app .main-row {
+    display: block !important;
+  }
+
+  .reservation-app h2 {
+    margin: 0 0 1mm 0;
+    font-size: 9pt;
+  }
+
+  .reservation-app .weekly-dashboard {
+    padding: 0 !important;
+    margin: 0 !important;
+    border-bottom: 0.4pt solid #000 !important;
+  }
+
+  .reservation-app .weekly-dashboard .print-only {
+    padding: 1mm 0 !important;
+    font-size: 8pt !important;
+    font-weight: 600;
+  }
+
+  .reservation-app .weekly-dashboard .print-only > div {
+    gap: 5mm !important;
+    margin-top: 0.5mm !important;
+  }
+
+  /* !important가 붙은 font-size/padding은 의도적이다 — ReservationTable.tsx가
+     화면 가독성을 위해 <table>/<th>/<td>/<input>에 인라인 style로 폭·글씨크기를
+     지정하는데, 인라인 style은 보통의 스타일시트 규칙보다 항상 우선한다. 50명이
+     A4 가로 한 장에 들어가도록 맞춘 인쇄용 축소가 화면 쪽 인라인 값에 조용히
+     덮이지 않게 하려면 여기서 !important로 명시적으로 이겨야 한다. */
+  .reservation-app table.reservation-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 6pt !important;
+    line-height: 1;
+  }
+
+  .reservation-app table.reservation-table th,
+  .reservation-app table.reservation-table td {
+    border: 0.4pt solid #000;
+    padding: 0 2px !important;
+    height: 2.6mm;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .reservation-app table.reservation-table input {
+    height: 2.2mm;
+    border: none;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0;
+    font-size: 6pt !important;
+    line-height: inherit;
+  }
+}

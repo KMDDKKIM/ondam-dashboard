@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { NavCard } from '@/components/NavCard';
 import { QuoteBanner } from '@/components/QuoteBanner';
 import { TodoChecklist } from '@/components/TodoChecklist';
@@ -5,10 +6,6 @@ import { TodayHappyCalls } from '@/components/TodayHappyCalls';
 import { MonthlyStatsPanel } from '@/components/MonthlyStatsPanel';
 import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
-
-// 예약관리(kh-ondam-reservation)는 이제 자체 비밀번호 게이트가 없어서 그냥
-// 링크만 걸면 된다.
-const RESERVATION_URL = 'https://kh-ondam-reservation.vercel.app';
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -34,23 +31,20 @@ export default async function HomePage() {
     sublabel: string;
     icon: string;
     accent: string;
-    external?: boolean;
   }[] = [
     {
-      href: RESERVATION_URL,
+      href: '/reservations',
       label: '예약관리',
       sublabel: '오늘 예약·마감 멘트',
       icon: '📅',
       accent: '#dff3f1',
-      external: true,
     },
     {
-      href: 'https://scratch-2026-09-09-c5228e.vercel.app',
+      href: '/herb-print',
       label: '한약 복용법 출력',
       sublabel: '복용 안내문 인쇄',
       icon: '💊',
       accent: '#ece7fa',
-      external: true,
     },
     {
       href: '/paste-import',
@@ -163,17 +157,15 @@ export default async function HomePage() {
             </span>{' '}
             대시보드
           </h1>
-          <p className="muted-text">예약관리·한약 복용법 출력 등 기존 도구와 새 기능을 한 곳에서.</p>
+          <p className="muted-text">예약관리·한약 복용법 출력을 포함한 모든 도구를 한 곳에서.</p>
         </div>
-        <a
-          href={RESERVATION_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/reservations"
           className="btn-primary"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
-          🔗 예약관리 바로가기
-        </a>
+          📅 예약관리 바로가기
+        </Link>
       </div>
 
       <QuoteBanner />

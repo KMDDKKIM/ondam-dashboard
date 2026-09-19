@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { DonutProgress } from '@/components/DonutProgress';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface MonthlyStatsPanelProps {
   initial: MonthlySummary;
   isOwner: boolean;
+  // 예약관리 화면처럼 좁은 자리에 얹을 때 — 카드/도넛을 작게 줄이고 한 줄에 몰아 넣는다.
+  compact?: boolean;
+  // 총매출/일평균 환자수 옆에 나란히 붙는 추가 카드(예: 예약률, 부도취소율).
+  extraTiles?: ReactNode;
 }
 
 const GOAL_FIELDS = [
@@ -27,7 +31,7 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function MonthlyStatsPanel({ initial, isOwner }: MonthlyStatsPanelProps) {
+export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTiles }: MonthlyStatsPanelProps) {
   const [summary, setSummary] = useState(initial);
   const [month, setMonth] = useState(initial.month);
   const [loading, setLoading] = useState(false);
@@ -102,8 +106,8 @@ export function MonthlyStatsPanel({ initial, isOwner }: MonthlyStatsPanelProps) 
   const isCurrentMonth = month >= currentMonth();
 
   return (
-    <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+    <div className="card" style={{ padding: compact ? 14 : 20, marginBottom: compact ? 0 : 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: compact ? 10 : 16, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
           <span style={{ marginRight: 4 }}>📊</span>
           <button
@@ -202,65 +206,72 @@ export function MonthlyStatsPanel({ initial, isOwner }: MonthlyStatsPanelProps) 
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div
-          className="card"
-          style={{ flex: '1 1 160px', padding: '14px 16px', background: 'var(--color-surface-2)' }}
-        >
-          <div className="muted-text" style={{ marginBottom: 4 }}>
-            총매출
-          </div>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>
-            {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
-          </div>
-        </div>
-        <div
-          className="card"
-          style={{ flex: '1 1 160px', padding: '14px 16px', background: 'var(--color-surface-2)' }}
-        >
-          <div className="muted-text" style={{ marginBottom: 4 }}>
-            일평균 환자수
-          </div>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>
-            {summary.avgDailyVisits != null ? `${summary.avgDailyVisits}명` : '데이터 없음'}
-          </div>
-        </div>
-      </div>
-
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))',
-          gap: 12,
-          justifyItems: 'center',
-        }}
+        style={compact ? { display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' } : undefined}
       >
-        <DonutProgress
-          label="한약"
-          achieved={summary.goals.herb.achieved}
-          goal={summary.goals.herb.goal}
-          color="var(--color-teal)"
-        />
-        <DonutProgress
-          label="다이어트"
-          achieved={summary.goals.diet.achieved}
-          goal={summary.goals.diet.goal}
-          color="var(--color-orange)"
-        />
-        <DonutProgress
-          label="특수한약"
-          achieved={summary.goals.specialHerb.achieved}
-          goal={summary.goals.specialHerb.goal}
-          color="var(--color-purple)"
-        />
-        <DonutProgress
-          label="추나"
-          achieved={summary.goals.chuna.achieved}
-          goal={summary.goals.chuna.goal}
-          color="var(--color-blue)"
-        />
+        <div
+          style={{
+            display: 'flex',
+            gap: compact ? 8 : 16,
+            marginBottom: compact ? 0 : 20,
+            flexWrap: 'wrap',
+            flex: compact ? '1 1 360px' : undefined,
+          }}
+        >
+          {extraTiles}
+          <StatTile label="총매출" compact={compact}>
+            {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
+          </StatTile>
+          <StatTile label="일평균 환자수" compact={compact}>
+            {summary.avgDailyVisits != null ? `${summary.avgDailyVisits}명` : '데이터 없음'}
+          </StatTile>
+        </div>
+
+        <div
+          style={
+            compact
+              ? { display: 'flex', gap: 14, justifyContent: 'center', flex: '0 0 auto' }
+              : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 12, justifyItems: 'center' }
+          }
+        >
+          {(
+            [
+              ['한약', 'herb', 'var(--color-teal)'],
+              ['다이어트', 'diet', 'var(--color-orange)'],
+              ['특수한약', 'specialHerb', 'var(--color-purple)'],
+              ['추나', 'chuna', 'var(--color-blue)'],
+            ] as const
+          ).map(([label, key, color]) => (
+            <DonutProgress
+              key={key}
+              label={label}
+              achieved={summary.goals[key].achieved}
+              goal={summary.goals[key].goal}
+              color={color}
+              size={compact ? 64 : 84}
+            />
+          ))}
+        </div>
       </div>
       {error && <p className="error-text">{error}</p>}
+    </div>
+  );
+}
+
+export function StatTile({ label, compact, children }: { label: string; compact?: boolean; children: ReactNode }) {
+  return (
+    <div
+      className="card"
+      style={{
+        flex: compact ? '1 1 100px' : '1 1 160px',
+        padding: compact ? '8px 12px' : '14px 16px',
+        background: 'var(--color-surface-2)',
+      }}
+    >
+      <div className="muted-text" style={{ marginBottom: compact ? 2 : 4, fontSize: compact ? 11 : undefined }}>
+        {label}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: compact ? 15 : 18 }}>{children}</div>
     </div>
   );
 }

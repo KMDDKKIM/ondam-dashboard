@@ -21,6 +21,7 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
 
   return (
     <header
+      className="no-print"
       style={{
         display: 'flex',
         alignItems: 'center',

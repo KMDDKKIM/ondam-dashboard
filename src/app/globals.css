@@ -126,3 +126,9 @@ a.card:hover {
   color: var(--color-muted);
   font-size: 13px;
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
