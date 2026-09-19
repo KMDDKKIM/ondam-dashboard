@@ -103,13 +103,13 @@ describe('analyzePasteText - daily settlement', () => {
       ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16, newPatientCount: 1 });
   });
 
   it('falls back to the provided date when no 진료날짜 label appears', () => {
     const text = [SETTLEMENT_HEADER, ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text, '2026-09-20');
-    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000, visitCount: 16 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000, visitCount: 16, newPatientCount: 1 });
   });
 });
 

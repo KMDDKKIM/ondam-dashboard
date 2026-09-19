@@ -71,6 +71,17 @@ export async function listNonCoveredPurchases(supabase: SupabaseClient): Promise
   return (data as NonCoveredPurchaseRow[]).map(rowToPurchase);
 }
 
+// 그 날짜에 등록된 구매만 — 일일 마무리 멘트의 "한약/비급여 판매" 칸을 미리 채우는 데 쓴다.
+export async function listPurchasesByDate(supabase: SupabaseClient, date: string): Promise<NonCoveredPurchase[]> {
+  const { data, error } = await supabase
+    .from('non_covered_purchases')
+    .select('*')
+    .eq('purchase_date', date)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as NonCoveredPurchaseRow[]).map(rowToPurchase);
+}
+
 export interface NewNonCoveredPurchase {
   patientName: string;
   chartNo: string;
