@@ -25,7 +25,7 @@ const sectionCardStyle = { padding: 16, marginBottom: 20 } as const;
 const headerStyle = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 8, fontSize: 14 } as const;
 const textareaStyle = { minHeight: 64, fontFamily: 'monospace', fontSize: 12, resize: 'vertical' as const };
 
-// ── 월결산 (가장 우선 표시) ──────────────────────────────────────────────
+// ── 월결산 ──────────────────────────────────────────────────────────
 function MonthlySettlementSection() {
   const [month, setMonth] = useState(currentMonthString());
   const [text, setText] = useState('');
@@ -357,14 +357,14 @@ function DailySettlementSection() {
   );
 }
 
-// 월결산 → 예약 명단 → 일일결산 순서로 각각 따로 붙여넣는다. 월결산이 이번달
-// 현황의 총매출을 가장 우선해서 결정하기 때문에 맨 위에 둔다.
+// 자주 쓰는 순서대로 — 일일결산(매일) → 예약 명단 → 월결산(월말에 한 번). 월결산은
+// 맨 아래에 있어도 이번달 현황의 총매출·일평균 환자수를 가장 우선해서 결정한다.
 export function PasteImportWidget() {
   return (
     <div>
-      <MonthlySettlementSection />
-      <ReservationSection />
       <DailySettlementSection />
+      <ReservationSection />
+      <MonthlySettlementSection />
     </div>
   );
 }
