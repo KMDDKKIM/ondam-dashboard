@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TopBar } from '@/components/TopBar';
 import { AppMain } from '@/components/AppMain';
+import { FavoriteLinks } from '@/components/FavoriteLinks';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
 
@@ -33,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div style={{ minHeight: '100vh' }}>
       <TopBar staffName={staffName} unreadCount={unreadCount} />
+      <FavoriteLinks />
       <AppMain>{children}</AppMain>
     </div>
   );

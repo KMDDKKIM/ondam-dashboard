@@ -198,3 +198,9 @@ export interface SupplyRequest {
   receivedAt: string | null;
   receivedBy: string | null;
 }
+
+export interface NonCoveredProduct {
+  id: string;
+  name: string;
+  sortOrder: number;
+}

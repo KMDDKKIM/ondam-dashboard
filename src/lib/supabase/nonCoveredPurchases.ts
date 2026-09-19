@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
 import { createManualEntry, updateManualEntryCallDate } from './happyCallQueue';
-import { computeHerbCallDates } from '@/lib/happyCallStats';
+import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 
 interface NonCoveredPurchaseRow {
   id: string;
@@ -45,13 +45,10 @@ function rowToPurchase(row: NonCoveredPurchaseRow): NonCoveredPurchase {
   };
 }
 
-// 처방일수가 없을 때(한약이 아닌 비급여 상품) 쓰는 기본 해피콜일 — 구매 후
-// 일주일 뒤 사용감을 확인하는 통상적인 주기.
+// 한약 수령일의 기본값 — 구매일 다음날(등록 폼에서 직접 고칠 수 있다). 1차 해피콜은
+// 여기서 다시 하루 뒤(수령일 다음날)로 잡힌다.
 export function defaultHappyCallDate(purchaseDate: string): string {
-  const [y, m, d] = purchaseDate.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() + 7);
-  return date.toISOString().slice(0, 10);
+  return addDays(purchaseDate, 1);
 }
 
 export const DURATION_PRESETS = [15, 30, 60, 120];
@@ -125,7 +122,8 @@ export async function createNonCoveredPurchase(
     entryId1 = await createManualEntry(supabase, {
       patientName: input.patientName,
       note: `비급여 구매 후속 - ${input.productName}`,
-      callDate: input.happyCallDate,
+      // 처방일수가 없어도 1차 해피콜은 수령일 다음날이다(처방일수가 있을 때와 같은 기준).
+      callDate: addDays(input.happyCallDate, 1),
       createdBy: input.createdBy,
     });
   }

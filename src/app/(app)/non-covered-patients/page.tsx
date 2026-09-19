@@ -13,8 +13,14 @@ import {
   DURATION_PRESETS,
   type KnownPatient,
 } from '@/lib/supabase/nonCoveredPurchases';
-import { computeHerbCallDates } from '@/lib/happyCallStats';
-import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
+import {
+  listNonCoveredProducts,
+  addNonCoveredProduct,
+  renameNonCoveredProduct,
+  deleteNonCoveredProduct,
+} from '@/lib/supabase/nonCoveredProducts';
+import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
+import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 
 const GOAL_CATEGORY_LABEL: Record<GoalCategory, string> = {
   herb: '한약',
@@ -22,6 +28,26 @@ const GOAL_CATEGORY_LABEL: Record<GoalCategory, string> = {
   special_herb: '특수한약',
   chuna: '추나',
 };
+
+const CUSTOM_PRODUCT = '__custom__';
+
+const linkBtn = {
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--color-muted)',
+  fontSize: 12,
+  fontWeight: 600,
+  padding: 0,
+} as const;
+
+const smallBtn = {
+  padding: '4px 10px',
+  fontSize: 12,
+  borderRadius: 8,
+  border: '1px solid var(--color-line)',
+  background: 'var(--color-surface-2)',
+  color: 'var(--color-ink)',
+} as const;
 
 function todayString(): string {
   const now = new Date();
@@ -46,6 +72,12 @@ export default function NonCoveredPatientsPage() {
   const [newCategory, setNewCategory] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
   const [productName, setProductName] = useState('');
+  const [productChoice, setProductChoice] = useState('');
+  const [products, setProducts] = useState<NonCoveredProduct[]>([]);
+  const [showProductManager, setShowProductManager] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
   const [amount, setAmount] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(todayString());
   const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(todayString()));
@@ -78,8 +110,12 @@ export default function NonCoveredPatientsPage() {
     setLoading(true);
     setError('');
     try {
-      const rows = await listNonCoveredPurchases(supabase);
+      const [rows, productRows] = await Promise.all([
+        listNonCoveredPurchases(supabase),
+        listNonCoveredProducts(supabase).catch(() => [] as NonCoveredProduct[]),
+      ]);
       setPurchases(rows);
+      setProducts(productRows);
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
@@ -123,6 +159,7 @@ export default function NonCoveredPatientsPage() {
     setPhone('');
     setCategory(activeTab !== '전체' ? activeTab : '일반');
     setProductName('');
+    setProductChoice('');
     setAmount('');
     setPurchaseDate(todayString());
     setHappyCallDate(defaultHappyCallDate(todayString()));
@@ -132,6 +169,65 @@ export default function NonCoveredPatientsPage() {
     setMemo('');
     setAddingCategory(false);
     setNewCategory('');
+  }
+
+  function handleProductChoice(value: string) {
+    setProductChoice(value);
+    if (value === CUSTOM_PRODUCT || value === '') {
+      setProductName('');
+      if (!goalCategoryTouched) setGoalCategory(null);
+      return;
+    }
+    const picked = products.find((p) => p.id === value);
+    if (!picked) return;
+    setProductName(picked.name);
+    if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(picked.name));
+  }
+
+  async function handleAddProduct() {
+    const value = newProductName.trim();
+    if (!value) return;
+    if (products.some((p) => p.name === value)) {
+      setError('이미 있는 상품명이에요.');
+      return;
+    }
+    try {
+      setError('');
+      await addNonCoveredProduct(supabase, value, products);
+      setNewProductName('');
+      setProducts(await listNonCoveredProducts(supabase));
+    } catch {
+      setError('상품을 추가하지 못했습니다.');
+    }
+  }
+
+  async function handleRenameProduct(id: string) {
+    const value = renameText.trim();
+    if (!value) return;
+    if (products.some((p) => p.id !== id && p.name === value)) {
+      setError('이미 있는 상품명이에요.');
+      return;
+    }
+    try {
+      setError('');
+      await renameNonCoveredProduct(supabase, id, value);
+      setRenamingId(null);
+      setProducts(await listNonCoveredProducts(supabase));
+    } catch {
+      setError('상품 이름을 수정하지 못했습니다.');
+    }
+  }
+
+  async function handleDeleteProduct(p: NonCoveredProduct) {
+    if (!window.confirm(`"${p.name}"을(를) 상품 목록에서 삭제할까요? (이미 등록된 기록은 그대로 남아요)`)) return;
+    try {
+      setError('');
+      await deleteNonCoveredProduct(supabase, p.id);
+      if (productChoice === p.id) handleProductChoice('');
+      setProducts(await listNonCoveredProducts(supabase));
+    } catch {
+      setError('상품을 삭제하지 못했습니다.');
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -156,6 +252,11 @@ export default function NonCoveredPatientsPage() {
         goalCategory,
         createdBy: user?.id ?? null,
       });
+      // 직접 입력한 상품명은 다음부터 목록에서 고를 수 있게 저장한다(실패해도 등록은 유지).
+      const typedName = productName.trim();
+      if (productChoice === CUSTOM_PRODUCT && !products.some((p) => p.name === typedName)) {
+        await addNonCoveredProduct(supabase, typedName, products).catch(() => {});
+      }
       setShowForm(false);
       await load();
     } catch {
@@ -257,12 +358,109 @@ export default function NonCoveredPatientsPage() {
           <h1 style={{ fontSize: 24, marginBottom: 4 }}>비급여 현황</h1>
           <p className="muted-text">비급여 구매를 구분(일반/이벤트)별로 한눈에 보고 기록하세요.</p>
         </div>
+        <button
+          onClick={() => setShowProductManager((v) => !v)}
+          style={{
+            ...smallBtn,
+            padding: '10px 14px',
+            fontSize: 13,
+            fontWeight: 600,
+            marginRight: 8,
+          }}
+        >
+          상품 목록 관리
+        </button>
         <button className="btn-primary" onClick={openForm}>
           + 등록
         </button>
       </div>
 
       {error && <p className="error-text" style={{ marginBottom: 16 }}>{error}</p>}
+
+      <datalist id="non-covered-product-options">
+        {products.map((p) => (
+          <option key={p.id} value={p.name} />
+        ))}
+      </datalist>
+
+      {showProductManager && (
+        <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>상품 목록 관리</div>
+          <p className="muted-text" style={{ marginBottom: 10 }}>
+            등록 화면에서 고를 수 있는 상품명이에요. 이름을 고치거나 지워도 이미 등록된 기록은 그대로 남아요.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            {products.map((p) =>
+              renamingId === p.id ? (
+                <span key={p.id} style={{ display: 'inline-flex', gap: 4 }}>
+                  <input
+                    value={renameText}
+                    onChange={(e) => setRenameText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameProduct(p.id);
+                      if (e.key === 'Escape') setRenamingId(null);
+                    }}
+                    className="input-field"
+                    style={{ width: 150, padding: '4px 8px' }}
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => handleRenameProduct(p.id)} className="btn-primary" style={{ padding: '4px 10px', fontSize: 12 }}>
+                    저장
+                  </button>
+                  <button type="button" onClick={() => setRenamingId(null)} style={smallBtn}>
+                    취소
+                  </button>
+                </span>
+              ) : (
+                <span
+                  key={p.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid var(--color-line)',
+                    background: 'var(--color-surface-2)',
+                    fontSize: 13,
+                  }}
+                >
+                  {p.name}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenamingId(p.id);
+                      setRenameText(p.name);
+                    }}
+                    style={linkBtn}
+                  >
+                    수정
+                  </button>
+                  <button type="button" onClick={() => handleDeleteProduct(p)} style={{ ...linkBtn, color: 'var(--color-error)' }}>
+                    삭제
+                  </button>
+                </span>
+              )
+            )}
+            {products.length === 0 && <span className="muted-text">등록된 상품이 없어요.</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              placeholder="새 상품명"
+              value={newProductName}
+              onChange={(e) => setNewProductName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddProduct();
+              }}
+              className="input-field"
+              style={{ maxWidth: 220 }}
+            />
+            <button type="button" onClick={handleAddProduct} className="btn-primary" style={{ padding: '8px 16px' }}>
+              추가
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card" style={{ padding: 20, marginBottom: 20 }}>
@@ -385,17 +583,34 @@ export default function NonCoveredPatientsPage() {
               {addingCategory ? '확인' : '+ 새 구분'}
             </button>
 
-            <input
-              placeholder="상품명"
-              value={productName}
-              onChange={(e) => {
-                const value = e.target.value;
-                setProductName(value);
-                if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(value));
-              }}
+            <select
+              value={productChoice}
+              onChange={(e) => handleProductChoice(e.target.value)}
               className="input-field"
               style={{ maxWidth: 200 }}
-            />
+            >
+              <option value="">상품 선택</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              <option value={CUSTOM_PRODUCT}>＋ 직접 입력</option>
+            </select>
+            {productChoice === CUSTOM_PRODUCT && (
+              <input
+                placeholder="상품명 직접 입력 (다음부터 목록에서 고를 수 있어요)"
+                value={productName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setProductName(value);
+                  if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(value));
+                }}
+                className="input-field"
+                style={{ maxWidth: 260 }}
+                autoFocus
+              />
+            )}
             <input
               type="number"
               placeholder="금액 (선택)"
@@ -442,7 +657,7 @@ export default function NonCoveredPatientsPage() {
             </div>
             <div>
               <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
-                한약 수령일 (해피콜 기준일, 자동: +7일)
+                한약 수령일 (해피콜 기준일, 기본: 구매일 다음날)
               </label>
               <input
                 type="date"
@@ -484,9 +699,10 @@ export default function NonCoveredPatientsPage() {
                   style={{ maxWidth: 90 }}
                 />
               </div>
-              {durationDays && happyCallDate && (
+              {happyCallDate && (
                 <p className="muted-text" style={{ fontSize: 11, marginTop: 4 }}>
                   {(() => {
+                    if (!durationDays) return `1차 해피콜: ${addDays(happyCallDate, 1)} (수령일 다음날)`;
                     const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, Number(durationDays));
                     return `해피콜: ${callDate1} · ${callDate2} · ${callDate3}`;
                   })()}
@@ -582,7 +798,7 @@ export default function NonCoveredPatientsPage() {
                         <input value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
                       </td>
                       <td style={{ padding: 6 }}>
-                        <input value={editDraft.productName} onChange={(e) => setEditDraft({ ...editDraft, productName: e.target.value })} className="input-field" style={{ minWidth: 110 }} />
+                        <input value={editDraft.productName} onChange={(e) => setEditDraft({ ...editDraft, productName: e.target.value })} className="input-field" style={{ minWidth: 110 }} list="non-covered-product-options" />
                       </td>
                       <td style={{ padding: 6 }}>
                         <input type="number" value={editDraft.amount} onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })} className="input-field" style={{ minWidth: 90 }} />
