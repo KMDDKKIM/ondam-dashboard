@@ -143,7 +143,11 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
 
   const context = rows.slice(0, headerIdx).flat().join(' ');
 
-  const dailyMatch = context.match(/진료날짜\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/);
+  // 날짜 표기는 두 가지가 있다 — "진료날짜:2026-09-19" 줄, 또는 제목 "일 일 결 산 표:2026-09-19"
+  // (OK차트가 글자 사이를 띄워서 내보낸다).
+  const dailyMatch =
+    context.match(/진료\s*날짜\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/) ??
+    context.match(/일\s*일\s*결\s*산\s*표?\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/);
   if (dailyMatch) {
     return { format: 'daily', date: dailyMatch[1], totalRevenue, visitCount, newPatientCount };
   }
@@ -154,6 +158,10 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
     const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
     if (month) return { format: 'monthly', month, totalRevenue, avgDailyVisits };
   }
+
+  // 제목 표기가 위 어느 쪽도 아니어도, 헤더 위에 날짜(YYYY-MM-DD)가 하나 있으면 그 날짜로 본다.
+  const anyDate = context.match(/\d{4}-\d{2}-\d{2}/);
+  if (anyDate) return { format: 'daily', date: anyDate[0], totalRevenue, visitCount, newPatientCount };
 
   // 제목 줄 없이 헤더+합계 행만 붙여넣은 경우 — 당일결산으로 보고 날짜는 직접
   // 지정하게 한다(붙여넣기 칸의 날짜 입력란).

@@ -106,6 +106,33 @@ describe('analyzePasteText - daily settlement', () => {
     expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16, newPatientCount: 1 });
   });
 
+  it('reads the date from the spaced title "일 일 결 산 표:YYYY-MM-DD" (real OK차트 paste)', () => {
+    const text = [
+      '일 일 결 산 표:2026-09-19',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    expect(analyzePasteText(text)).toMatchObject({ format: 'daily', date: '2026-09-19', totalRevenue: 814000, visitCount: 16 });
+  });
+
+  it('uses a lone date above the header even when the title wording differs', () => {
+    const text = [
+      '결산 2026-09-21',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    expect(analyzePasteText(text)).toMatchObject({ format: 'daily', date: '2026-09-21' });
+  });
+
+  it('does not mistake a monthly title for a daily date', () => {
+    const text = [
+      '월말결산:2026-09',
+      SETTLEMENT_HEADER,
+      ['486', '31', '8', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t'),
+    ].join('\n');
+    expect(analyzePasteText(text)).toMatchObject({ format: 'monthly', month: '2026-09' });
+  });
+
   it('falls back to the provided date when no 진료날짜 label appears', () => {
     const text = [SETTLEMENT_HEADER, ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text, '2026-09-20');
