@@ -112,6 +112,7 @@ export interface NonCoveredPurchase {
 export interface DailyRevenue {
   date: string;
   totalRevenue: number;
+  visitCount: number | null;
   source: 'daily' | 'monthly';
   updatedBy: string | null;
   updatedAt: string;

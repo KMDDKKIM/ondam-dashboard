@@ -24,8 +24,8 @@ export interface ReservationDateGroup {
 
 export type PasteAnalysis =
   | { format: 'reservation'; groups: ReservationDateGroup[] }
-  | { format: 'daily'; date: string | null; totalRevenue: number }
-  | { format: 'monthly'; month: string; totalRevenue: number }
+  | { format: 'daily'; date: string | null; totalRevenue: number; visitCount: number | null }
+  | { format: 'monthly'; month: string; totalRevenue: number; avgDailyVisits: number | null }
   | { format: 'unknown'; reason: string };
 
 // OK차트 "일일 결산표"/"월말 결산표"가 공유하는 진료비 요약 헤더 — 헤더 바로 다음
@@ -133,23 +133,29 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
   if (!dataRow || revenueCol === -1) return null;
   const totalRevenue = parseNumber(dataRow[revenueCol] ?? '0');
 
+  // 일일결산은 그날 내원환자수를, 월말결산은 진료일평균환자수를 같이 읽는다(없으면 null).
+  const visitCol = header.indexOf('내원환자수');
+  const avgCol = header.indexOf('진료일평균환자수');
+  const visitCount = visitCol !== -1 && dataRow[visitCol] ? parseNumber(dataRow[visitCol]) : null;
+  const avgDailyVisits = avgCol !== -1 && dataRow[avgCol] ? parseNumber(dataRow[avgCol]) : null;
+
   const context = rows.slice(0, headerIdx).flat().join(' ');
 
   const dailyMatch = context.match(/진료날짜\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/);
   if (dailyMatch) {
-    return { format: 'daily', date: dailyMatch[1], totalRevenue };
+    return { format: 'daily', date: dailyMatch[1], totalRevenue, visitCount };
   }
 
   const monthlyMatch =
     context.match(/월\s*[:：]\s*(\d{4}-\d{2})/) ?? context.match(/\((\d{4}-\d{2})\)\s*월/);
   if (monthlyMatch || context.includes('월말')) {
     const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
-    if (month) return { format: 'monthly', month, totalRevenue };
+    if (month) return { format: 'monthly', month, totalRevenue, avgDailyVisits };
   }
 
   // 제목 줄 없이 헤더+합계 행만 붙여넣은 경우 — 당일결산으로 보고 날짜는 직접
   // 지정하게 한다(붙여넣기 칸의 날짜 입력란).
-  return { format: 'daily', date: fallbackDate, totalRevenue };
+  return { format: 'daily', date: fallbackDate, totalRevenue, visitCount };
 }
 
 export interface ReservationDerivedStats {

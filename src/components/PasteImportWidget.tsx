@@ -55,6 +55,7 @@ function MonthlySettlementSection() {
   }, [analysis]);
 
   const totalRevenue = analysis?.format === 'monthly' ? analysis.totalRevenue : null;
+  const avgDailyVisits = analysis?.format === 'monthly' ? analysis.avgDailyVisits : null;
   const formatError = analysis && analysis.format !== 'monthly';
 
   async function handleSave() {
@@ -68,8 +69,10 @@ function MonthlySettlementSection() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      await upsertMonthlyOverride(supabase, month, totalRevenue, user?.id ?? null);
-      setResult(`${month} 매출을 ${totalRevenue.toLocaleString()}원으로 저장했어요.`);
+      await upsertMonthlyOverride(supabase, month, totalRevenue, avgDailyVisits, user?.id ?? null);
+      setResult(
+        `${month} 매출을 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
+      );
       setText('');
       await loadHistory();
     } catch {
@@ -85,7 +88,7 @@ function MonthlySettlementSection() {
         <span>📆</span>
         <span>월결산 입력</span>
         <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>
-          — 이번달 현황의 총매출을 가장 우선해서 결정해요
+          — 이번달 총매출·일평균 환자수를 일일결산 누적보다 우선해서 결정해요
         </span>
       </div>
 
@@ -107,7 +110,10 @@ function MonthlySettlementSection() {
       {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
       {totalRevenue != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13 }}>{month} 총매출 {totalRevenue.toLocaleString()}원 확인됨</span>
+          <span style={{ fontSize: 13 }}>
+            {month} 총매출 {totalRevenue.toLocaleString()}원
+            {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} 확인됨
+          </span>
           <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
           </button>
@@ -122,7 +128,7 @@ function MonthlySettlementSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.month} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.month} · {h.totalRevenue.toLocaleString()}원
+                {h.month} · {h.totalRevenue.toLocaleString()}원{h.avgDailyVisits != null ? ` · 일평균 ${h.avgDailyVisits}명` : ''}
               </li>
             ))}
           </ul>
@@ -263,6 +269,7 @@ function DailySettlementSection() {
   }, [analysis, dateTouched]);
 
   const totalRevenue = analysis?.format === 'daily' ? analysis.totalRevenue : null;
+  const visitCount = analysis?.format === 'daily' ? analysis.visitCount : null;
   const formatError = analysis && analysis.format !== 'daily';
 
   async function handleSave() {
@@ -274,8 +281,8 @@ function DailySettlementSection() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      await upsertDailyRevenue(supabase, date, totalRevenue, user?.id ?? null);
-      setResult(`${date} 매출 ${totalRevenue.toLocaleString()}원을 저장했어요.`);
+      await upsertDailyRevenue(supabase, date, totalRevenue, visitCount, user?.id ?? null);
+      setResult(`${date} 매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''}을 저장했어요.`);
       setText('');
       setDateTouched(false);
       await loadHistory();
@@ -292,7 +299,7 @@ function DailySettlementSection() {
         <span>💴</span>
         <span>일일결산 입력</span>
         <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>
-          — 매일 진료 끝나고 넣으면 그날 매출이 쌓여요
+          — 매일 진료 끝나고 넣으면 그날 매출·내원환자수가 쌓여요
         </span>
       </div>
 
@@ -323,7 +330,9 @@ function DailySettlementSection() {
       {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '일일 결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
       {totalRevenue != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13 }}>{date} 매출 {totalRevenue.toLocaleString()}원 확인됨</span>
+          <span style={{ fontSize: 13 }}>
+            {date} 매출 {totalRevenue.toLocaleString()}원{visitCount != null ? `, 내원 ${visitCount}명` : ''} 확인됨
+          </span>
           <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
           </button>
@@ -338,7 +347,7 @@ function DailySettlementSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.date} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.date} · {h.totalRevenue.toLocaleString()}원
+                {h.date} · {h.totalRevenue.toLocaleString()}원{h.visitCount != null ? ` · 내원 ${h.visitCount}명` : ''}
               </li>
             ))}
           </ul>

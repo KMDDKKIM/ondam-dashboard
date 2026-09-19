@@ -1,5 +1,6 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveMonthlyFigures } from '@/lib/monthlyFigures';
 
 export interface MonthlySummary {
   month: string;
@@ -81,17 +82,17 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const { data: revenueRows, error: revenueError } = await admin
     .from('daily_revenue')
-    .select('total_revenue')
+    .select('total_revenue, visit_count')
     .gte('date', monthStart)
     .lt('date', monthEnd);
   if (revenueError) throw revenueError;
 
-  // 월말결산으로 그 달 총매출이 덮어써진 적 있으면(monthly_revenue_override)
-  // 그 값이 항상 우선한다 — 당일결산을 누적한 daily_revenue 합계보다 정확한
-  // 원본 소스이기 때문("중간 수정 시 리셋").
+  // 월말결산이 들어온 적 있으면(monthly_revenue_override) 총매출·일평균 환자수 모두
+  // 그 값이 항상 우선한다 — 일일결산을 누적한 값은 환불 등으로 어긋날 수 있어서
+  // 월말결산표가 더 정확한 원본이다("중간 수정 시 리셋").
   const { data: overrideRow, error: overrideError } = await admin
     .from('monthly_revenue_override')
-    .select('total_revenue')
+    .select('total_revenue, avg_daily_visits')
     .eq('month', month)
     .maybeSingle();
   if (overrideError) throw overrideError;
@@ -101,14 +102,21 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const totalVisits = sum('visit_count');
   const recordedDays = rows.length;
-  const avgDailyVisits = recordedDays > 0 ? Math.round((totalVisits / recordedDays) * 10) / 10 : null;
+  const avgFromReservations = recordedDays > 0 ? Math.round((totalVisits / recordedDays) * 10) / 10 : null;
 
-  const revenueDays = revenueRows ?? [];
-  const dailySumRevenue =
-    revenueDays.length > 0
-      ? revenueDays.reduce((acc, r) => acc + (Number(r.total_revenue) || 0), 0)
-      : null;
-  const totalRevenue = overrideRow ? Number(overrideRow.total_revenue) : dailySumRevenue;
+  const { totalRevenue, avgDailyVisits } = resolveMonthlyFigures(
+    (revenueRows ?? []).map((r) => ({
+      totalRevenue: Number(r.total_revenue) || 0,
+      visitCount: r.visit_count != null ? Number(r.visit_count) : null,
+    })),
+    overrideRow
+      ? {
+          totalRevenue: Number(overrideRow.total_revenue),
+          avgDailyVisits: overrideRow.avg_daily_visits != null ? Number(overrideRow.avg_daily_visits) : null,
+        }
+      : null,
+    avgFromReservations
+  );
 
   return {
     month,

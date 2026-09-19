@@ -103,13 +103,13 @@ describe('analyzePasteText - daily settlement', () => {
       ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16 });
   });
 
   it('falls back to the provided date when no 진료날짜 label appears', () => {
     const text = [SETTLEMENT_HEADER, ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text, '2026-09-20');
-    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000, visitCount: 16 });
   });
 });
 
@@ -122,13 +122,24 @@ describe('analyzePasteText - monthly settlement', () => {
       ['486', '31', '8', '27.0', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860 });
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null });
+  });
+
+  it('reads 진료일평균환자수 from a real 월말결산 paste (title "월말결산:YYYY-MM")', () => {
+    const text = [
+      '월말결산:2026-09',
+      ['내원환자수', '신규환자수', '자보환자수', '진료일평균환자수', '총진료비', '본인부담', '환자부담계', '미수금'].join('\t'),
+      ['520', '32', '9', '27.4', '47338780', '7839750', '27567150', '0'].join('\t'),
+      ['일자', '내원환자수', '총진료비', '환자부담계', '미수금'].join('\t'),
+      ['2026-09-01', '16', '1736170', '705400', '0'].join('\t'),
+    ].join('\n');
+    expect(analyzePasteText(text)).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 47338780, avgDailyVisits: 27.4 });
   });
 
   it('recognizes a "(YYYY-MM)월" title anchor as well', () => {
     const text = ['(2026-09)월 진료비 내역', SETTLEMENT_HEADER, ['486', '31', '8', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860 });
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null });
   });
 });
 

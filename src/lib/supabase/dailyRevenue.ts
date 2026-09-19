@@ -7,12 +7,14 @@ export async function upsertDailyRevenue(
   supabase: SupabaseClient,
   date: string,
   totalRevenue: number,
+  visitCount: number | null,
   updatedBy: string | null
 ): Promise<void> {
   const { error } = await supabase.from('daily_revenue').upsert(
     {
       date,
       total_revenue: totalRevenue,
+      visit_count: visitCount,
       source: 'daily',
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
@@ -32,6 +34,7 @@ export async function listRecentDailyRevenue(supabase: SupabaseClient, limit = 1
   return (data ?? []).map((row) => ({
     date: row.date,
     totalRevenue: Number(row.total_revenue),
+    visitCount: row.visit_count != null ? Number(row.visit_count) : null,
     source: row.source,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
@@ -41,19 +44,21 @@ export async function listRecentDailyRevenue(supabase: SupabaseClient, limit = 1
 export interface MonthlyOverrideRow {
   month: string;
   totalRevenue: number;
+  avgDailyVisits: number | null;
   updatedAt: string;
 }
 
 export async function listRecentMonthlyOverrides(supabase: SupabaseClient, limit = 6): Promise<MonthlyOverrideRow[]> {
   const { data, error } = await supabase
     .from('monthly_revenue_override')
-    .select('month, total_revenue, updated_at')
+    .select('month, total_revenue, avg_daily_visits, updated_at')
     .order('month', { ascending: false })
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((row) => ({
     month: row.month,
     totalRevenue: Number(row.total_revenue),
+    avgDailyVisits: row.avg_daily_visits != null ? Number(row.avg_daily_visits) : null,
     updatedAt: row.updated_at,
   }));
 }
@@ -64,12 +69,14 @@ export async function upsertMonthlyOverride(
   supabase: SupabaseClient,
   month: string,
   totalRevenue: number,
+  avgDailyVisits: number | null,
   updatedBy: string | null
 ): Promise<void> {
   const { error } = await supabase.from('monthly_revenue_override').upsert(
     {
       month,
       total_revenue: totalRevenue,
+      avg_daily_visits: avgDailyVisits,
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
     },
