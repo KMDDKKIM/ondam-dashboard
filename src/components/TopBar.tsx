@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { FavoriteIcons } from '@/components/FavoriteIcons';
 
 interface TopBarProps {
   staffName: string | null;
@@ -26,6 +27,8 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
         padding: '12px 24px',
         borderBottom: '1px solid var(--color-line)',
         background: 'var(--color-surface)',
@@ -53,7 +56,8 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
         </span>
         <span style={{ fontWeight: 700, fontSize: 14 }}>경희온담한의원</span>
       </Link>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <FavoriteIcons />
         <Link
           href="/chat"
           style={{

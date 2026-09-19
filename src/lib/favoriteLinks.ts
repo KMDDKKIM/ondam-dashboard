@@ -4,17 +4,19 @@ export interface FavoriteLink {
   label: string;
   url: string;
   emoji: string;
+  // 사이트 자체 아이콘 주소. 없으면 구글 파비콘 서비스에서 가져오고, 그것도 안 뜨면 이모지를 쓴다.
+  icon?: string;
   bg: string;
   fg: string;
 }
 
 export const FAVORITE_LINKS: FavoriteLink[] = [
-  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', bg: '#daf2ec', fg: '#12917a' },
-  { label: '주차', url: 'https://npdc-i.nicepark.co.kr/', emoji: '🅿️', bg: '#e0eefa', fg: '#245d8f' },
-  { label: '린다이어트', url: 'https://chart.leandiet.co.kr/patients?status=ongoing', emoji: '🥗', bg: '#ebe3fb', fg: '#6831d7' },
-  { label: '혈액검사', url: 'https://prs.precision-bio.com/login', emoji: '🩸', bg: '#fbe4e1', fg: '#b03a2e' },
-  { label: '옴니핏', url: 'https://medicms.omnifit.co.kr/', emoji: '🏃', bg: '#fdece0', fg: '#b4560f' },
-  { label: '택배', url: 'https://loisparcelp.cjlogistics.com/index.do', emoji: '📦', bg: '#f3e9dc', fg: '#8a5a2b' },
+  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', icon: 'https://growth-mate.co.kr/favicon.png', bg: '#daf2ec', fg: '#12917a' },
+  { label: '주차', url: 'https://npdc-i.nicepark.co.kr/', emoji: '🅿️', icon: 'https://npdc-i.nicepark.co.kr/images/DC/favicon.ico', bg: '#e0eefa', fg: '#245d8f' },
+  { label: '린다이어트', url: 'https://chart.leandiet.co.kr/patients?status=ongoing', emoji: '🥗', icon: 'https://leandiet.co.kr/favicon.png', bg: '#ebe3fb', fg: '#6831d7' },
+  { label: '혈액검사', url: 'https://prs.precision-bio.com/login', emoji: '🩸', icon: 'https://prs.precision-bio.com/favicon.ico', bg: '#fbe4e1', fg: '#b03a2e' },
+  { label: '옴니핏', url: 'https://medicms.omnifit.co.kr/', emoji: '🏃', icon: 'https://medicms.omnifit.co.kr/favicon.ico', bg: '#fdece0', fg: '#b4560f' },
+  { label: '택배', url: 'https://loisparcelp.cjlogistics.com/index.do', emoji: '📦', icon: 'https://loisparcelp.cjlogistics.com/favicon.ico', bg: '#f3e9dc', fg: '#8a5a2b' },
   { label: '플레이스', url: 'https://new.smartplace.naver.com/bizes/booking/748929', emoji: '📍', bg: '#dff5e6', fg: '#1c7a3e' },
   { label: '카카오톡', url: 'https://business.kakao.com/space/667516/channel/_QixblG/chats', emoji: '💬', bg: '#fdf3c4', fg: '#7a5d00' },
   { label: '네이버톡톡', url: 'https://partner.talk.naver.com/web/accounts/100883601/', emoji: '🗨️', bg: '#d9f3df', fg: '#0f7a35' },
