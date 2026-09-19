@@ -177,3 +177,25 @@ export interface ChatSearchResult {
   content: string;
   createdAt: string;
 }
+
+export interface SupplyItem {
+  id: string;
+  category: string;
+  name: string;
+  orderUrl: string | null;
+}
+
+export interface SupplyRequest {
+  id: string;
+  category: string;
+  itemName: string;
+  quantity: number;
+  orderUrl: string | null;
+  memo: string;
+  requestedBy: string | null;
+  requestedAt: string;
+  orderedAt: string | null;
+  orderedBy: string | null;
+  receivedAt: string | null;
+  receivedBy: string | null;
+}

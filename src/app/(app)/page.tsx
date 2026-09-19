@@ -112,7 +112,7 @@ export default async function HomePage() {
     {
       href: '/supply-requests',
       label: '물품신청',
-      sublabel: '준비 중',
+      sublabel: '신청·주문·도착 확인',
       icon: '📦',
       accent: '#ece7fa',
     },
