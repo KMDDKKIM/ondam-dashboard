@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { achievementPercent, averageVisitsPerDay, resolveMonthlyFigures, revenuePace } from './monthlyFigures';
+import { achievementPercent, averageVisitsPerDay, goalPace, resolveMonthlyFigures, revenuePace, shortfallCount } from './monthlyFigures';
 
 describe('averageVisitsPerDay', () => {
   it('내원 합계를 진료한 날 수로 나눈다(0명인 날·수 없는 날은 뺀다)', () => {
@@ -85,5 +85,21 @@ describe('revenuePace', () => {
     expect(revenuePace(1, null, '2026-09', today)).toBeNull();
     expect(revenuePace(null, 60_000_000, '2026-09', today)).toBeNull();
     expect(revenuePace(0, 60_000_000, '2026-09', new Date(2026, 8, 1))).toBeNull();
+  });
+});
+
+describe('goalPace / shortfallCount', () => {
+  const today = new Date(2026, 8, 19); // 어제까지 18일/30일 = 60%
+
+  it('건수 목표의 진도(expected)와 상태를 돌려준다', () => {
+    expect(goalPace(3, 15, '2026-09', today)).toEqual({ status: 'behind', expected: 9 });
+    expect(goalPace(9, 15, '2026-09', today)?.status).toBe('onTrack');
+    expect(goalPace(3, 15, '2026-08', today)).toBeNull();
+  });
+
+  it('부족한 건수는 올림하고 최소 1건이다', () => {
+    expect(shortfallCount(3, 9)).toBe(6);
+    expect(shortfallCount(3, 3.4)).toBe(1);
+    expect(shortfallCount(8, 8.2)).toBe(1);
   });
 });

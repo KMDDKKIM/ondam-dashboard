@@ -4,9 +4,12 @@ interface DonutProgressProps {
   goal: number | null;
   color: string;
   size?: number;
+  // 이번 달 날짜 진도 대비 상태 — 없으면 아무것도 안 붙인다. behind일 때만 부족한 건수를 적는다.
+  pace?: 'behind' | 'onTrack' | null;
+  shortfall?: number;
 }
 
-export function DonutProgress({ label, achieved, goal, color, size = 84 }: DonutProgressProps) {
+export function DonutProgress({ label, achieved, goal, color, size = 84, pace = null, shortfall = 0 }: DonutProgressProps) {
   const stroke = Math.round(size * 0.107);
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -60,6 +63,18 @@ export function DonutProgress({ label, achieved, goal, color, size = 84 }: Donut
           {achieved}
           {goal != null ? ` / ${goal}` : ''}
         </div>
+        {pace && (
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: compact ? 10 : 11,
+              fontWeight: 700,
+              color: pace === 'behind' ? 'var(--color-error)' : 'var(--color-green)',
+            }}
+          >
+            {pace === 'behind' ? `▼ ${shortfall} 더 필요` : '✓ 순조'}
+          </div>
+        )}
       </div>
     </div>
   );

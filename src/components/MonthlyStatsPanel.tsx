@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { DonutProgress } from '@/components/DonutProgress';
-import { achievementPercent, revenuePace } from '@/lib/monthlyFigures';
+import { achievementPercent, goalPace, revenuePace, shortfallCount } from '@/lib/monthlyFigures';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface MonthlyStatsPanelProps {
@@ -261,16 +261,22 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
               ['특수한약', 'specialHerb', 'var(--color-purple)'],
               ['추나', 'chuna', 'var(--color-blue)'],
             ] as const
-          ).map(([label, key, color]) => (
-            <DonutProgress
-              key={key}
-              label={label}
-              achieved={summary.goals[key].achieved}
-              goal={summary.goals[key].goal}
-              color={color}
-              size={compact ? 64 : 84}
-            />
-          ))}
+          ).map(([label, key, color]) => {
+            const { achieved, goal } = summary.goals[key];
+            const pace = goalPace(achieved, goal, summary.month, new Date());
+            return (
+              <DonutProgress
+                key={key}
+                label={label}
+                achieved={achieved}
+                goal={goal}
+                color={color}
+                size={compact ? 64 : 84}
+                pace={pace?.status ?? null}
+                shortfall={pace ? shortfallCount(achieved, pace.expected) : 0}
+              />
+            );
+          })}
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
