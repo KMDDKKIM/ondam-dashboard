@@ -10,6 +10,20 @@ interface TopBarProps {
   unreadCount: number;
 }
 
+// 창 이름을 고정해서 이미 열려 있으면 새로 만들지 않고 그 창을 앞으로 가져온다.
+function openChatWindow() {
+  const width = 1000;
+  const height = 720;
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
+  const popup = window.open(
+    '/chat',
+    'ondam-chat',
+    `popup=yes,width=${width},height=${height},left=${left},top=${top}`
+  );
+  popup?.focus();
+}
+
 export function TopBar({ staffName, unreadCount }: TopBarProps) {
   const router = useRouter();
 
@@ -58,8 +72,10 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
       </Link>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <FavoriteIcons />
-        <Link
-          href="/chat"
+        <button
+          type="button"
+          onClick={openChatWindow}
+          aria-label="채팅 열기"
           style={{
             position: 'relative',
             display: 'inline-flex',
@@ -70,8 +86,8 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
             borderRadius: 10,
             border: '1px solid var(--color-line)',
             background: 'var(--color-surface-2)',
-            textDecoration: 'none',
             fontSize: 16,
+            padding: 0,
           }}
         >
           💬
@@ -97,7 +113,7 @@ export function TopBar({ staffName, unreadCount }: TopBarProps) {
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
-        </Link>
+        </button>
         <span className="muted-text">{staffName ?? '로그인됨'}</span>
         <button
           onClick={handleLogout}
