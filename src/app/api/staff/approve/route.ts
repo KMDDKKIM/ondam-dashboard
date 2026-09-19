@@ -1,38 +1,32 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireOwner } from '@/lib/supabase/requireOwner';
+import { DEFAULT_GRADE, isAssignableGrade } from '@/lib/staffGrade';
 
 export async function POST(request: Request) {
-  const { staffId } = (await request.json()) as { staffId?: string };
+  // service_role로 아무 staff 행이나 바꿀 수 있는 라우트이므로, 본문을 읽기 전에
+  // 요청자가 실제로 로그인된 대표원장인지부터 검사한다.
+  const denied = await requireOwner();
+  if (denied) return denied;
+
+  const { staffId, grade } = (await request.json()) as { staffId?: string; grade?: unknown };
   if (!staffId) {
     return NextResponse.json({ error: 'staffId가 필요합니다.' }, { status: 400 });
   }
 
-  // 요청자를 일반(anon key, RLS 적용) 클라이언트로 먼저 확인한다 — 이 라우트는
-  // service_role로 아무 staff 행이나 바꿀 수 있으므로, 실제로 로그인된 원장인지를
-  // 여기서 직접 검사해야 한다.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+  // 등급을 안 보내면 기본값(사원). 보냈는데 지정할 수 없는 값(대표원장 포함)이면 거부한다.
+  const finalGrade = grade === undefined ? DEFAULT_GRADE : grade;
+  if (!isAssignableGrade(finalGrade)) {
+    return NextResponse.json({ error: '지정할 수 없는 등급입니다.' }, { status: 400 });
   }
 
-  const { data: requester } = await supabase
-    .from('staff')
-    .select('role, status')
-    .eq('id', user.id)
-    .maybeSingle();
-  if (requester?.role !== 'owner' || requester.status !== 'approved') {
-    return NextResponse.json({ error: '원장만 승인할 수 있습니다.' }, { status: 403 });
-  }
-
+  // role = 'staff' 조건: 원장 계정 행은 이 API로 바꾸지 못하게 한다.
   const admin = createAdminClient();
   const { error } = await admin
     .from('staff')
-    .update({ status: 'approved' })
-    .eq('id', staffId);
+    .update({ status: 'approved', grade: finalGrade })
+    .eq('id', staffId)
+    .eq('role', 'staff');
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
