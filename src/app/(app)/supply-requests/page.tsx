@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   createSupplyRequest,
+  deleteSupplyItem,
   deleteSupplyRequest,
   listSupplyItems,
   listSupplyRequests,
@@ -155,6 +156,20 @@ export default function SupplyRequestsPage() {
     run(() => setSupplyReceived(supabase, r.id, !r.receivedAt, me?.id ?? null));
   }
 
+  function handleDeleteItem() {
+    const picked = categoryItems.find((i) => i.id === itemChoice);
+    if (!picked) return;
+    if (!window.confirm(`"${picked.name}"을(를) 자주 쓰는 품목 목록에서 삭제할까요? (이미 한 신청 내역은 그대로 남아요)`)) return;
+    setFormError('');
+    deleteSupplyItem(supabase, picked.id)
+      .then(() => {
+        setItemChoice(CUSTOM);
+        setOrderUrl('');
+        return load();
+      })
+      .catch(() => setFormError('품목을 삭제하지 못했습니다.'));
+  }
+
   function handleDelete(r: SupplyRequest) {
     if (!window.confirm(`"${r.itemName}" 신청을 삭제할까요?`)) return;
     run(() => deleteSupplyRequest(supabase, r.id));
@@ -200,6 +215,15 @@ export default function SupplyRequestsPage() {
               ))}
               <option value={CUSTOM}>＋ 목록에 없음 (직접 입력)</option>
             </select>
+            {!usingCustom && (
+              <button
+                type="button"
+                onClick={handleDeleteItem}
+                style={{ border: 'none', background: 'transparent', color: 'var(--color-error)', fontSize: 12, fontWeight: 600, padding: '4px 0 0' }}
+              >
+                이 품목을 목록에서 삭제
+              </button>
+            )}
           </div>
           {usingCustom && (
             <div>

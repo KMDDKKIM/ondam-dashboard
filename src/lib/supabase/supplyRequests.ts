@@ -126,3 +126,10 @@ export async function deleteSupplyRequest(supabase: SupabaseClient, id: string):
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('삭제 권한이 없습니다.');
 }
+
+// 자주 쓰는 품목 목록에서만 지운다 — 이미 들어간 신청 내역은 품목명을 그대로 갖고 있어 영향이 없다.
+export async function deleteSupplyItem(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from('supply_items').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제하지 못했습니다.');
+}
