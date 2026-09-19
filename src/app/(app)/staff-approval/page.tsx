@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Staff } from '@/lib/types';
+import { ASSIGNABLE_GRADES, DEFAULT_GRADE, type AssignableGrade, type StaffGrade } from '@/lib/staffGrade';
 
 interface StaffRow extends Staff {
   status: 'pending' | 'approved';
+  grade: StaffGrade;
 }
 
 export default function StaffApprovalPage() {
@@ -15,6 +17,8 @@ export default function StaffApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [pendingGrades, setPendingGrades] = useState<Record<string, AssignableGrade>>({});
+  const [changingId, setChangingId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -38,7 +42,7 @@ export default function StaffApprovalPage() {
 
       const { data, error: listError } = await supabase
         .from('staff')
-        .select('id, name, role, status')
+        .select('id, name, role, status, grade')
         .order('name');
       if (listError) {
         setError(listError.message);
@@ -64,7 +68,7 @@ export default function StaffApprovalPage() {
       const response = await fetch('/api/staff/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staffId }),
+        body: JSON.stringify({ staffId, grade: pendingGrades[staffId] ?? DEFAULT_GRADE }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -74,6 +78,26 @@ export default function StaffApprovalPage() {
       await load();
     } finally {
       setApprovingId(null);
+    }
+  }
+
+  async function handleGradeChange(staffId: string, grade: AssignableGrade) {
+    setChangingId(staffId);
+    setError('');
+    try {
+      const response = await fetch('/api/staff/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId, grade }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(body.error ?? '등급을 바꾸지 못했습니다.');
+        return;
+      }
+      await load();
+    } finally {
+      setChangingId(null);
     }
   }
 
@@ -120,6 +144,21 @@ export default function StaffApprovalPage() {
                   🙋
                 </span>
                 <span style={{ flex: 1, fontWeight: 600 }}>{s.name}</span>
+                <select
+                  className="input-field"
+                  value={pendingGrades[s.id] ?? DEFAULT_GRADE}
+                  onChange={(event) =>
+                    setPendingGrades((prev) => ({ ...prev, [s.id]: event.target.value as AssignableGrade }))
+                  }
+                  style={{ width: 100, padding: '6px 10px' }}
+                  aria-label={`${s.name} 등급`}
+                >
+                  {ASSIGNABLE_GRADES.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
                 <button
                   onClick={() => handleApprove(s.id)}
                   disabled={approvingId === s.id}
@@ -149,7 +188,24 @@ export default function StaffApprovalPage() {
               }}
             >
               <span style={{ fontWeight: 600 }}>{s.name}</span>
-              <span className="muted-text">{s.role === 'owner' ? '원장' : '직원'}</span>
+              {s.role === 'owner' ? (
+                <span className="muted-text">대표원장</span>
+              ) : (
+                <select
+                  className="input-field"
+                  value={s.grade}
+                  disabled={changingId === s.id}
+                  onChange={(event) => handleGradeChange(s.id, event.target.value as AssignableGrade)}
+                  style={{ width: 100, padding: '6px 10px' }}
+                  aria-label={`${s.name} 등급`}
+                >
+                  {ASSIGNABLE_GRADES.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              )}
             </li>
           ))}
         </ul>
