@@ -9,6 +9,8 @@ interface WeeklyDashboardProps {
   records: DailyRecordSummary[];
   summary: MonthlySummary;
   isOwner: boolean;
+  // 이번 주 예약률·부도취소율 — 일일 결산에 입력한 예약 숫자로 계산한 값(서버에서 내려준다).
+  rates: { reservationRate: number | null; noShowRate: number | null };
 }
 
 const GOAL_LABELS = [
@@ -21,7 +23,7 @@ const GOAL_LABELS = [
 // 맨 위 "이번달 현황"은 홈 대시보드와 같은 패널(MonthlyStatsPanel)을 작게 줄여서
 // 그대로 얹는다 — 목표 입력(대표원장 전용)도 여기서 똑같이 된다. 예약률/부도취소율은
 // 이 화면에서만 쓰는 지표라 같은 줄에 카드로 덧붙였다.
-export function WeeklyDashboard({ records, summary, isOwner }: WeeklyDashboardProps) {
+export function WeeklyDashboard({ records, summary, isOwner, rates }: WeeklyDashboardProps) {
   const stats = computeWeeklyStats(records, new Date());
 
   return (
@@ -33,14 +35,14 @@ export function WeeklyDashboard({ records, summary, isOwner }: WeeklyDashboardPr
           compact
           extraTiles={
             <>
-              <StatTile label="예약률" compact>
+              <StatTile label="예약률" compact title="이번 주 예약 정상 이행 ÷ (내원환자수 − 제외환자수)">
                 <span style={{ color: 'var(--color-teal-deep)' }}>
-                  {stats.reservationRate != null ? `${stats.reservationRate}%` : '-'}
+                  {rates.reservationRate != null ? `${rates.reservationRate}%` : '-'}
                 </span>
               </StatTile>
-              <StatTile label="부도취소율" compact>
+              <StatTile label="부도취소율" compact title="이번 주 (예약 노쇼 + 예약 취소) ÷ 예약 환자수">
                 <span style={{ color: 'var(--color-error)' }}>
-                  {stats.noShowRate != null ? `${stats.noShowRate}%` : '-'}
+                  {rates.noShowRate != null ? `${rates.noShowRate}%` : '-'}
                 </span>
               </StatTile>
             </>
@@ -51,8 +53,8 @@ export function WeeklyDashboard({ records, summary, isOwner }: WeeklyDashboardPr
       {/* 인쇄용 — 아침 브리핑 출력지에 그대로 남는 한 줄 요약(화면에는 안 보임). */}
       <div className="print-only" style={{ padding: '6px 12px', fontWeight: 600, fontSize: 12 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
-          <div>예약률: {stats.reservationRate != null ? `${stats.reservationRate}%` : '-'}</div>
-          <div>부도취소율: {stats.noShowRate != null ? `${stats.noShowRate}%` : '-'}</div>
+          <div>예약률: {rates.reservationRate != null ? `${rates.reservationRate}%` : '-'}</div>
+          <div>부도취소율: {rates.noShowRate != null ? `${rates.noShowRate}%` : '-'}</div>
           <div>
             한약: {stats.herbTotal}건 (녹용 {stats.nogyongTotal} / 일반 {stats.ilbanTotal})
           </div>

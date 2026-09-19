@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildClosingMessage, formatNames, summarizePurchases } from './closingMessage';
+import { buildClosingMessage, countMismatch, formatNames, summarizePurchases } from './closingMessage';
 
 const BASE = {
   visitCount: 34,
@@ -69,5 +69,19 @@ describe('summarizePurchases', () => {
       ])
     ).toBe('일반한약15일 2명,일반한약30일 1명,녹용한약 1명');
     expect(summarizePurchases([])).toBe('');
+  });
+});
+
+describe('countMismatch', () => {
+  it('인원과 이름 수가 같거나 둘 다 비어 있으면 null', () => {
+    expect(countMismatch(2, '조현지 변경은')).toBeNull();
+    expect(countMismatch(null, '')).toBeNull();
+    expect(countMismatch(0, '')).toBeNull();
+  });
+
+  it('다르면 두 숫자를 알려준다(인원을 비워 두고 이름만 적은 경우 포함)', () => {
+    expect(countMismatch(7, '조현지 변경은')).toEqual({ count: 7, names: 2 });
+    expect(countMismatch(null, '조현지')).toEqual({ count: 0, names: 1 });
+    expect(countMismatch(2, '')).toEqual({ count: 2, names: 0 });
   });
 });

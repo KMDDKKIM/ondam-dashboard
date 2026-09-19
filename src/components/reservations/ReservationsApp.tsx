@@ -16,7 +16,15 @@ function todayString(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function ReservationsApp({ summary, isOwner }: { summary: MonthlySummary; isOwner: boolean }) {
+export function ReservationsApp({
+  summary,
+  rates,
+  isOwner,
+}: {
+  summary: MonthlySummary;
+  rates: { reservationRate: number | null; noShowRate: number | null };
+  isOwner: boolean;
+}) {
   const [records, setRecords] = useState<DailyRecordSummary[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayString());
   const [addDateError, setAddDateError] = useState('');
@@ -43,7 +51,7 @@ export function ReservationsApp({ summary, isOwner }: { summary: MonthlySummary;
 
   return (
     <div className="reservation-app app-shell">
-      <WeeklyDashboard records={records} summary={summary} isOwner={isOwner} />
+      <WeeklyDashboard records={records} summary={summary} isOwner={isOwner} rates={rates} />
       <div className="main-row card" style={{ display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           records={records}

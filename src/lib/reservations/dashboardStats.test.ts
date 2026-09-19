@@ -56,8 +56,6 @@ describe('computeWeeklyStats', () => {
 
     const stats = computeWeeklyStats(records, new Date('2026-09-10T00:00:00'));
 
-    expect(stats.reservationRate).toBeCloseTo((23 / 30) * 100, 1);
-    expect(stats.noShowRate).toBeCloseTo((3 / 23) * 100, 1);
     expect(stats.nogyongTotal).toBe(1);
     expect(stats.ilbanTotal).toBe(3);
     expect(stats.herbTotal).toBe(4);
@@ -66,19 +64,17 @@ describe('computeWeeklyStats', () => {
     expect(stats.specialAcupunctureTotal).toBe(3);
   });
 
-  it('returns null rates when the denominator is zero, instead of NaN or throwing', () => {
+  it('returns zero totals when there are no records', () => {
     const stats = computeWeeklyStats([], new Date('2026-09-10T00:00:00'));
 
-    expect(stats.reservationRate).toBeNull();
-    expect(stats.noShowRate).toBeNull();
     expect(stats.nogyongTotal).toBe(0);
     expect(stats.ilbanTotal).toBe(0);
   });
 
   it('treats null counts as zero rather than breaking the sum', () => {
-    const records = [makeRecord({ date: '2026-09-08', visitCount: 5, reservationCount: null })];
+    const records = [makeRecord({ date: '2026-09-08', nogyongCount: null, ilbanCount: 2 })];
     const stats = computeWeeklyStats(records, new Date('2026-09-10T00:00:00'));
 
-    expect(stats.reservationRate).toBe(0);
+    expect(stats.herbTotal).toBe(2);
   });
 });

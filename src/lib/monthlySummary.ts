@@ -1,6 +1,8 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveMonthlyFigures } from '@/lib/monthlyFigures';
+import { computeReservationRates } from '@/lib/reservationRates';
+import { getWeekRange } from '@/lib/reservations/dashboardStats';
 
 export interface MonthlySummary {
   month: string;
@@ -10,14 +12,16 @@ export interface MonthlySummary {
   totalRevenueGoal: number | null;
   avgDailyVisitsGoal: number | null;
   goals: {
-    herb: { achieved: number; goal: number | null };
-    diet: { achieved: number; goal: number | null };
-    specialHerb: { achieved: number; goal: number | null };
-    chuna: { achieved: number; goal: number | null };
+    // adjust: 자동 집계가 틀렸을 때 대표원장이 손으로 더하거나 뺀 값(achieved에 이미 반영됨).
+    herb: { achieved: number; goal: number | null; adjust: number };
+    diet: { achieved: number; goal: number | null; adjust: number };
+    specialHerb: { achieved: number; goal: number | null; adjust: number };
+    chuna: { achieved: number; goal: number | null; adjust: number };
   };
 }
 
 interface DailyRecordRow {
+  date: string;
   visit_count: number | null;
   nogyong_count: number | null;
   ilban_count: number | null;
@@ -49,7 +53,7 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const { data: records, error: recordsError } = await admin
     .from('daily_records')
-    .select('visit_count, nogyong_count, ilban_count, chuna_count, diet_count')
+    .select('date, visit_count, nogyong_count, ilban_count, chuna_count, diet_count')
     .is('deleted_at', null)
     .gte('date', monthStart)
     .lt('date', monthEnd);
@@ -60,7 +64,9 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
   // 참고).
   const { data: goalsRow, error: goalsError } = await admin
     .from('monthly_goals')
-    .select('herb_goal, diet_goal, special_acupuncture_goal, chuna_goal, revenue_goal, avg_visits_goal')
+    .select(
+      'herb_goal, diet_goal, special_acupuncture_goal, chuna_goal, revenue_goal, avg_visits_goal, herb_adjust, diet_adjust, special_herb_adjust, chuna_adjust'
+    )
     .eq('month', month)
     .maybeSingle();
   if (goalsError) throw goalsError;
@@ -85,7 +91,7 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const { data: revenueRows, error: revenueError } = await admin
     .from('daily_revenue')
-    .select('total_revenue, visit_count')
+    .select('date, total_revenue, visit_count, chuna_count')
     .gte('date', monthStart)
     .lt('date', monthEnd);
   if (revenueError) throw revenueError;
@@ -102,6 +108,22 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const rows = (records ?? []) as DailyRecordRow[];
   const sum = (key: keyof DailyRecordRow) => rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
+
+  // 추나는 일일 결산에 입력한 추나 횟수를 우선한다. 그 날짜에 입력이 없으면 예전처럼
+  // 예약 명단에서 센 값을 쓴다(날짜별로 하나만 — 두 값을 더하지 않는다).
+  const chunaByDate = new Map<string, number>();
+  for (const r of rows) chunaByDate.set(r.date, Number(r.chuna_count) || 0);
+  for (const d of revenueRows ?? []) {
+    if (d.chuna_count != null) chunaByDate.set(d.date, Number(d.chuna_count));
+  }
+  const chunaTotal = Array.from(chunaByDate.values()).reduce((a, b) => a + b, 0);
+
+  const adjust = {
+    herb: Number(goalsRow?.herb_adjust) || 0,
+    diet: Number(goalsRow?.diet_adjust) || 0,
+    specialHerb: Number(goalsRow?.special_herb_adjust) || 0,
+    chuna: Number(goalsRow?.chuna_adjust) || 0,
+  };
 
   const totalVisits = sum('visit_count');
   const recordedDays = rows.length;
@@ -129,15 +151,55 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     avgDailyVisitsGoal: goalsRow?.avg_visits_goal != null ? Number(goalsRow.avg_visits_goal) : null,
     goals: {
       herb: {
-        achieved: sum('nogyong_count') + sum('ilban_count') + purchaseCounts.herb,
+        achieved: sum('nogyong_count') + sum('ilban_count') + purchaseCounts.herb + adjust.herb,
         goal: goalsRow?.herb_goal ?? null,
+        adjust: adjust.herb,
       },
-      diet: { achieved: sum('diet_count') + purchaseCounts.diet, goal: goalsRow?.diet_goal ?? null },
+      diet: {
+        achieved: sum('diet_count') + purchaseCounts.diet + adjust.diet,
+        goal: goalsRow?.diet_goal ?? null,
+        adjust: adjust.diet,
+      },
       specialHerb: {
-        achieved: purchaseCounts.special_herb,
+        achieved: purchaseCounts.special_herb + adjust.specialHerb,
         goal: goalsRow?.special_acupuncture_goal ?? null,
+        adjust: adjust.specialHerb,
       },
-      chuna: { achieved: sum('chuna_count') + purchaseCounts.chuna, goal: goalsRow?.chuna_goal ?? null },
+      chuna: {
+        achieved: chunaTotal + purchaseCounts.chuna + adjust.chuna,
+        goal: goalsRow?.chuna_goal ?? null,
+        adjust: adjust.chuna,
+      },
     },
   };
+}
+
+// 이번 주(월요일~오늘) 예약률·부도취소율 — 일일 결산에 입력한 예약 숫자로 계산한다.
+export async function getWeeklyRates(today: Date = new Date()): Promise<{
+  reservationRate: number | null;
+  noShowRate: number | null;
+}> {
+  const admin = createAdminClient();
+  const { start } = getWeekRange(today);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const iso = (d: Date) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+
+  const { data, error } = await admin
+    .from('daily_revenue')
+    .select('visit_count, excluded_count, reservation_count, kept_count, noshow_count, cancel_count')
+    .gte('date', iso(start))
+    .lte('date', iso(today));
+  if (error) throw error;
+
+  const n = (v: unknown) => (v != null ? Number(v) : null);
+  return computeReservationRates(
+    (data ?? []).map((r) => ({
+      visitCount: n(r.visit_count),
+      excludedCount: n(r.excluded_count),
+      reservationCount: n(r.reservation_count),
+      keptCount: n(r.kept_count),
+      noshowCount: n(r.noshow_count),
+      cancelCount: n(r.cancel_count),
+    }))
+  );
 }

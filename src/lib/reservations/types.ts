@@ -40,8 +40,6 @@ export interface DailyRecordFull extends DailyRecordSummary {
 }
 
 export interface WeeklyStats {
-  reservationRate: number | null; // percentage, one decimal place
-  noShowRate: number | null; // percentage, one decimal place
   nogyongTotal: number;
   ilbanTotal: number;
   herbTotal: number; // nogyongTotal + ilbanTotal

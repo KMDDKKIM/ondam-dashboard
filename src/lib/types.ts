@@ -204,3 +204,14 @@ export interface NonCoveredProduct {
   name: string;
   sortOrder: number;
 }
+
+// 일일 결산 입력에서 함께 저장하는 숫자. 입력하지 않은 항목은 null.
+export interface DailyClosing {
+  reservationCount: number | null; // 오늘 예약 환자수
+  keptCount: number | null; // 예약 정상 이행
+  noshowCount: number | null; // 예약 노쇼
+  cancelCount: number | null; // 예약 취소
+  nextBookingCount: number | null; // 다음예약 접수한 환자수
+  chunaCount: number | null; // 추나 횟수(인원)
+  excludedCount: number | null; // 제외환자수
+}

@@ -1,6 +1,6 @@
 import { ReservationsApp } from '@/components/reservations/ReservationsApp';
 import { createClient } from '@/lib/supabase/server';
-import { getMonthlySummary } from '@/lib/monthlySummary';
+import { getMonthlySummary, getWeeklyRates } from '@/lib/monthlySummary';
 import './reservations.css';
 
 export default async function ReservationsPage() {
@@ -12,7 +12,7 @@ export default async function ReservationsPage() {
     ? await supabase.from('staff').select('role').eq('id', user.id).maybeSingle()
     : { data: null };
 
-  const summary = await getMonthlySummary();
+  const [summary, rates] = await Promise.all([getMonthlySummary(), getWeeklyRates()]);
 
-  return <ReservationsApp summary={summary} isOwner={staff?.role === 'owner'} />;
+  return <ReservationsApp summary={summary} rates={rates} isOwner={staff?.role === 'owner'} />;
 }

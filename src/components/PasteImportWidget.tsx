@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { analyzePasteText } from '@/lib/pasteImport';
-import { buildClosingMessage, summarizePurchases } from '@/lib/closingMessage';
+import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
 import { computeDerivedStats } from '@/lib/reservations/reservationStats';
 import {
   upsertDailyRevenue,
+  getSavedDailyClosing,
   upsertMonthlyOverride,
   listRecentDailyRevenue,
   listRecentMonthlyOverrides,
@@ -223,13 +224,19 @@ function ReservationSection() {
 }
 
 // ── 일일결산 ──────────────────────────────────────────────────────────
-// 날짜는 붙여넣은 결산표의 "진료날짜"에서 읽어 오므로 따로 고르지 않는다. 저장과 함께
-// 원장에게 보내는 "일일 마무리 멘트"를 만들어 주는 칸도 여기 있다(저장하지 않는 입력).
+// 날짜는 붙여넣은 결산표의 "진료날짜"에서 읽어 오므로 따로 고르지 않는다. 결산표 아래
+// "일일 결산" 칸에 예약·추나·제외환자 숫자를 넣으면 원장님께 보낼 마무리 멘트가 만들어지고,
+// 맨 아래 저장 버튼이 결산표(매출·내원)와 이 숫자들을 함께 저장한다.
 interface ClosingFields {
-  excludedNames: string;
-  reservationCount: string;
+  reservationCount: string; // 오늘 예약 환자수
+  keptCount: string; // 예약 정상 이행
+  noshowCount: string; // 예약 노쇼
+  cancelCount: string; // 예약 취소
+  nextBookingCount: string; // 다음예약 접수한 환자수
   chunaCount: string;
   chunaNames: string;
+  excludedCount: string;
+  excludedNames: string;
   herbSales: string;
   naverReviewCount: string;
   firstVisitCount: string;
@@ -238,10 +245,15 @@ interface ClosingFields {
 }
 
 const EMPTY_CLOSING: ClosingFields = {
-  excludedNames: '',
   reservationCount: '',
+  keptCount: '',
+  noshowCount: '',
+  cancelCount: '',
+  nextBookingCount: '',
   chunaCount: '',
   chunaNames: '',
+  excludedCount: '',
+  excludedNames: '',
   herbSales: '',
   naverReviewCount: '',
   firstVisitCount: '',
@@ -253,6 +265,12 @@ function toNumberOrNull(value: string): number | null {
   if (value.trim() === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function Warning({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, color: 'var(--color-orange)' }}>⚠ {children}</p>
+  );
 }
 
 function DailySettlementSection() {
@@ -287,8 +305,11 @@ function DailySettlementSection() {
   const formatError = analysis && analysis.format !== 'daily';
   const missingDate = analysis?.format === 'daily' && !analysis.date;
 
-  // 새 결산표가 붙여넣어져 날짜가 정해지면, 그 날짜에 이미 저장된 예약 명단(예약 수·취소·추나)과
-  // 비급여 판매, 결산표의 신규환자수로 마무리 멘트 칸을 미리 채운다. 직접 고칠 수 있다.
+  // 새 결산표가 붙여넣어져 날짜가 정해지면 칸을 미리 채운다(모두 직접 고칠 수 있다).
+  //  1) 그 날짜에 이미 저장해 둔 일일 결산 숫자가 있으면 그것을,
+  //  2) 없으면 저장된 예약 명단에서 예약·정상 이행(내원)·취소·추나를 세서,
+  //  3) 한약·비급여 판매는 그 날 비급여 현황 등록분으로, 초진은 결산표의 신규환자수로.
+  // 노쇼와 제외환자는 명단만으로 알 수 없어 직접 입력한다.
   useEffect(() => {
     if (!date) {
       setClosing(EMPTY_CLOSING);
@@ -297,21 +318,50 @@ function DailySettlementSection() {
     let cancelled = false;
     (async () => {
       const next: ClosingFields = { ...EMPTY_CLOSING, firstVisitCount: newPatientCount ? String(newPatientCount) : '' };
+      const str = (v: number | null) => (v != null ? String(v) : '');
+
+      let derived: ReturnType<typeof computeDerivedStats> | null = null;
+      let listRows: { visitStatus: string }[] = [];
       try {
         const response = await fetch(`/api/records/${encodeURIComponent(date)}`);
         const record = response.ok ? await response.json() : null;
-        // 기록에 남아 있는 요약 숫자는 옛 마감 멘트 시절 값일 수 있어서, 저장된 예약 명단
-        // (reservations)을 직접 세어 채운다. 취소한 사람이 제외환자다.
         if (record && Array.isArray(record.reservations) && record.reservations.length > 0) {
-          const derived = computeDerivedStats(record.reservations);
-          next.reservationCount = String(derived.reservationCount);
-          next.excludedNames = derived.excludedNames.join(', ');
-          next.chunaCount = String(derived.chunaCount);
-          next.chunaNames = derived.chunaNames.join(', ');
+          derived = computeDerivedStats(record.reservations);
+          listRows = record.reservations;
         }
       } catch {
         // 예약 명단이 없어도 직접 입력하면 된다.
       }
+      if (derived) {
+        // 이름은 띄어쓰기로 구분해서 채운다(멘트에는 쉼표로 나온다).
+        next.chunaNames = derived.chunaNames.join(' ');
+        next.chunaCount = String(derived.chunaCount);
+      }
+
+      let saved = null;
+      try {
+        saved = await getSavedDailyClosing(supabase, date);
+      } catch {
+        // 저장된 값이 없으면 명단에서 센 값을 쓴다.
+      }
+      if (saved) {
+        next.reservationCount = str(saved.reservationCount);
+        next.keptCount = str(saved.keptCount);
+        next.noshowCount = str(saved.noshowCount);
+        next.cancelCount = str(saved.cancelCount);
+        next.nextBookingCount = str(saved.nextBookingCount);
+        next.chunaCount = str(saved.chunaCount);
+        next.excludedCount = str(saved.excludedCount);
+      } else if (derived) {
+        const kept = listRows.filter((r) => r.visitStatus === '내원').length;
+        const cancelled = listRows.filter((r) => r.visitStatus === '취소').length;
+        next.reservationCount = String(listRows.length);
+        next.keptCount = String(kept);
+        next.cancelCount = String(cancelled);
+        // 노쇼는 명단에 "내원" 표시가 빠진 예약과 구분이 안 돼서 자동으로 세지 않는다 —
+        // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
+      }
+
       try {
         next.herbSales = summarizePurchases(await listPurchasesByDate(supabase, date));
       } catch {
@@ -324,6 +374,8 @@ function DailySettlementSection() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, newPatientCount]);
+
+  const n = (key: keyof ClosingFields) => toNumberOrNull(closing[key]);
 
   const message = useMemo(
     () =>
@@ -342,9 +394,20 @@ function DailySettlementSection() {
     [visitCount, closing]
   );
 
+  const chunaMismatch = countMismatch(n('chunaCount'), closing.chunaNames);
+  const excludedMismatch = countMismatch(n('excludedCount'), closing.excludedNames);
+  const referralMismatch = countMismatch(n('referralCount'), closing.referralNames);
+  const reservationEntered = n('reservationCount') != null;
+  const outcomeSum = (n('keptCount') ?? 0) + (n('noshowCount') ?? 0) + (n('cancelCount') ?? 0);
+  const outcomeMismatch =
+    reservationEntered &&
+    (n('keptCount') != null || n('noshowCount') != null || n('cancelCount') != null) &&
+    outcomeSum !== n('reservationCount');
+
   function setField(key: keyof ClosingFields, value: string) {
     setClosing((prev) => ({ ...prev, [key]: value }));
     setCopied(false);
+    setResult('');
   }
 
   async function handleCopy() {
@@ -352,7 +415,7 @@ function DailySettlementSection() {
       await navigator.clipboard.writeText(message);
       setCopied(true);
     } catch {
-      setError('복사하지 못했어요. 아래 멘트를 직접 선택해서 복사해 주세요.');
+      setError('복사하지 못했어요. 위 멘트를 직접 선택해서 복사해 주세요.');
     }
   }
 
@@ -365,8 +428,22 @@ function DailySettlementSection() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      await upsertDailyRevenue(supabase, date, totalRevenue, visitCount, user?.id ?? null);
-      setResult(`${date} 매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''}을 저장했어요.`);
+      await upsertDailyRevenue(supabase, {
+        date,
+        totalRevenue,
+        visitCount,
+        closing: {
+          reservationCount: n('reservationCount'),
+          keptCount: n('keptCount'),
+          noshowCount: n('noshowCount'),
+          cancelCount: n('cancelCount'),
+          nextBookingCount: n('nextBookingCount'),
+          chunaCount: n('chunaCount') ?? (closing.chunaNames.trim() ? splitNames(closing.chunaNames).length : null),
+          excludedCount: n('excludedCount') ?? (closing.excludedNames.trim() ? splitNames(closing.excludedNames).length : null),
+        },
+        updatedBy: user?.id ?? null,
+      });
+      setResult(`${date} 일일 결산을 저장했어요. (매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''})`);
       await loadHistory();
     } catch {
       setError('저장에 실패했습니다.');
@@ -375,7 +452,18 @@ function DailySettlementSection() {
     }
   }
 
-  const fieldLabel = { display: 'block', marginBottom: 4, fontSize: 12 } as const;
+  const label = { display: 'block', marginBottom: 4, fontSize: 12 } as const;
+  const groupTitle = { fontWeight: 700, fontSize: 12, margin: '12px 0 6px' } as const;
+  const numberInput = (key: keyof ClosingFields, extra?: { placeholder?: string }) => (
+    <input
+      type="number"
+      min={0}
+      value={closing[key]}
+      onChange={(e) => setField(key, e.target.value)}
+      className="input-field"
+      placeholder={extra?.placeholder}
+    />
+  );
 
   return (
     <div className="card" style={sectionCardStyle}>
@@ -383,7 +471,7 @@ function DailySettlementSection() {
         <span>💴</span>
         <span>일일결산 입력</span>
         <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>
-          — 매일 진료 끝나고 넣으면 그날 매출·내원환자수가 쌓이고, 원장님께 보낼 마무리 멘트도 만들어져요
+          — 결산표를 붙여넣고, 아래 숫자를 확인·입력한 뒤 저장하세요
         </span>
       </div>
 
@@ -393,6 +481,7 @@ function DailySettlementSection() {
           setText(e.target.value);
           setResult('');
           setError('');
+          setCopied(false);
         }}
         placeholder="일일 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
         className="input-field"
@@ -407,76 +496,138 @@ function DailySettlementSection() {
       )}
 
       {totalRevenue != null && date && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13 }}>
-              {date} 매출 {totalRevenue.toLocaleString()}원{visitCount != null ? `, 내원 ${visitCount}명` : ''} 확인됨
-            </span>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
+        <div className="card" style={{ marginTop: 12, padding: 14, background: 'var(--color-surface-2)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>
+            📝 일일 결산 <span className="muted-text" style={{ fontWeight: 400 }}>· {date}</span>
+          </div>
+          <p className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>
+            금일환자수 {visitCount ?? 0}명 · 매출 {totalRevenue.toLocaleString()}원 (결산표에서 읽음). 예약 명단·비급여를 저장해 둔 날은
+            아래 칸이 자동으로 채워져요. 이름은 띄어쓰기로 구분하세요.
+          </p>
+
+          <div style={groupTitle}>예약</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            <div>
+              <label className="muted-text" style={label}>오늘 예약 환자수</label>
+              {numberInput('reservationCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>예약 정상 이행</label>
+              {numberInput('keptCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>예약 노쇼</label>
+              {numberInput('noshowCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>예약 취소</label>
+              {numberInput('cancelCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>다음예약 접수 환자수</label>
+              {numberInput('nextBookingCount')}
+            </div>
+          </div>
+          {outcomeMismatch && (
+            <Warning>
+              오늘 예약 {n('reservationCount')}명인데 정상 이행 + 노쇼 + 취소는 {outcomeSum}명이에요. 확인해 주세요.
+            </Warning>
+          )}
+
+          <div style={groupTitle}>추나</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
+            <div>
+              <label className="muted-text" style={label}>추나 인원</label>
+              {numberInput('chunaCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>추나 환자 이름</label>
+              <input value={closing.chunaNames} onChange={(e) => setField('chunaNames', e.target.value)} className="input-field" placeholder="조현지 변경은 조현미" />
+            </div>
+          </div>
+          {chunaMismatch && (
+            <Warning>
+              추나 인원은 {chunaMismatch.count}명인데 이름은 {chunaMismatch.names}명이에요. 확인해 주세요.
+            </Warning>
+          )}
+
+          <div style={groupTitle}>제외환자</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
+            <div>
+              <label className="muted-text" style={label}>제외환자 수</label>
+              {numberInput('excludedCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>제외환자 이름</label>
+              <input value={closing.excludedNames} onChange={(e) => setField('excludedNames', e.target.value)} className="input-field" placeholder="박혜진 박나령" />
+            </div>
+          </div>
+          {excludedMismatch && (
+            <Warning>
+              제외환자 수는 {excludedMismatch.count}명인데 이름은 {excludedMismatch.names}명이에요. 확인해 주세요.
+            </Warning>
+          )}
+
+          <div style={groupTitle}>그 외 (멘트에 들어가요)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <div style={{ gridColumn: 'span 2' }}>
+              <label className="muted-text" style={label}>한약·비급여 판매</label>
+              <input value={closing.herbSales} onChange={(e) => setField('herbSales', e.target.value)} className="input-field" placeholder="일반한약15일 1명,녹용한약 1명" />
+            </div>
+            <div>
+              <label className="muted-text" style={label}>네이버리뷰</label>
+              {numberInput('naverReviewCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>초진</label>
+              {numberInput('firstVisitCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>소개환 인원</label>
+              {numberInput('referralCount')}
+            </div>
+            <div>
+              <label className="muted-text" style={label}>소개환 이름</label>
+              <input value={closing.referralNames} onChange={(e) => setField('referralNames', e.target.value)} className="input-field" />
+            </div>
+          </div>
+          {referralMismatch && (
+            <Warning>
+              소개환 인원은 {referralMismatch.count}명인데 이름은 {referralMismatch.names}명이에요. 확인해 주세요.
+            </Warning>
+          )}
+
+          <div style={groupTitle}>원장님께 보낼 멘트</div>
+          <textarea
+            value={message}
+            readOnly
+            rows={3}
+            className="input-field"
+            style={{ fontSize: 13, resize: 'vertical' }}
+            aria-label="완성된 일일 결산 멘트"
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '8px 20px', fontSize: 13 }}>
               {saving ? '저장 중...' : '저장'}
             </button>
+            <button
+              onClick={handleCopy}
+              style={{
+                padding: '8px 20px',
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 10,
+                border: '1px solid var(--color-line)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-ink)',
+              }}
+            >
+              멘트 복사
+            </button>
+            {copied && <span style={{ fontSize: 12, color: 'var(--color-teal-deep)' }}>복사했어요. 카톡에 붙여넣기 하세요.</span>}
           </div>
-
-          <div className="card" style={{ marginTop: 14, padding: 14, background: 'var(--color-surface-2)' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>📝 일일 마무리 멘트</div>
-            <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
-              예약 명단·비급여를 저장해 둔 날짜는 자동으로 채워져요. 아래 칸을 고치면 멘트가 바로 바뀌어요.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-              <div>
-                <label className="muted-text" style={fieldLabel}>예약 환자 수</label>
-                <input type="number" min={0} value={closing.reservationCount} onChange={(e) => setField('reservationCount', e.target.value)} className="input-field" />
-              </div>
-              <div>
-                <label className="muted-text" style={fieldLabel}>추나 인원 (비우면 이름 수)</label>
-                <input type="number" min={0} value={closing.chunaCount} onChange={(e) => setField('chunaCount', e.target.value)} className="input-field" />
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label className="muted-text" style={fieldLabel}>추나 환자 이름 (쉼표로 구분)</label>
-                <input value={closing.chunaNames} onChange={(e) => setField('chunaNames', e.target.value)} className="input-field" placeholder="조현지, 변경은" />
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label className="muted-text" style={fieldLabel}>제외환자 이름</label>
-                <input value={closing.excludedNames} onChange={(e) => setField('excludedNames', e.target.value)} className="input-field" placeholder="박혜진, 박나령" />
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label className="muted-text" style={fieldLabel}>한약·비급여 판매</label>
-                <input value={closing.herbSales} onChange={(e) => setField('herbSales', e.target.value)} className="input-field" placeholder="일반한약15일 1명,녹용한약 1명" />
-              </div>
-              <div>
-                <label className="muted-text" style={fieldLabel}>네이버리뷰</label>
-                <input type="number" min={0} value={closing.naverReviewCount} onChange={(e) => setField('naverReviewCount', e.target.value)} className="input-field" />
-              </div>
-              <div>
-                <label className="muted-text" style={fieldLabel}>초진</label>
-                <input type="number" min={0} value={closing.firstVisitCount} onChange={(e) => setField('firstVisitCount', e.target.value)} className="input-field" />
-              </div>
-              <div>
-                <label className="muted-text" style={fieldLabel}>소개환 인원 (비우면 이름 수)</label>
-                <input type="number" min={0} value={closing.referralCount} onChange={(e) => setField('referralCount', e.target.value)} className="input-field" />
-              </div>
-              <div>
-                <label className="muted-text" style={fieldLabel}>소개환 이름</label>
-                <input value={closing.referralNames} onChange={(e) => setField('referralNames', e.target.value)} className="input-field" />
-              </div>
-            </div>
-
-            <textarea
-              value={message}
-              readOnly
-              rows={3}
-              className="input-field"
-              style={{ marginTop: 12, fontSize: 13, resize: 'vertical' }}
-              aria-label="완성된 마무리 멘트"
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-              <button onClick={handleCopy} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
-                멘트 복사
-              </button>
-              {copied && <span style={{ fontSize: 12, color: 'var(--color-teal-deep)' }}>복사했어요. 카톡에 붙여넣기 하세요.</span>}
-            </div>
-          </div>
-        </>
+        </div>
       )}
       {error && <p className="error-text" style={{ marginTop: 8 }}>{error}</p>}
       {result && <p style={{ color: 'var(--color-teal-deep)', fontSize: 13, marginTop: 8 }}>{result}</p>}

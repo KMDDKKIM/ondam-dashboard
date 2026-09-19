@@ -67,3 +67,12 @@ export function summarizePurchases(purchases: { productName: string; durationDay
     .map(([key, n]) => `${key} ${n}명`)
     .join(',');
 }
+
+// 인원 칸과 이름 칸의 숫자가 다르면 그 두 숫자를 돌려준다(둘 다 비어 있으면 문제 없음).
+// 인원 칸을 비워 두고 이름만 적은 경우도 어긋난 것으로 본다.
+export function countMismatch(count: number | null, namesText: string): { count: number; names: number } | null {
+  const names = splitNames(namesText).length;
+  if (count == null && names === 0) return null;
+  const c = count ?? 0;
+  return c === names ? null : { count: c, names };
+}

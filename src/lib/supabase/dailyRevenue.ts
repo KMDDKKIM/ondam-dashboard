@@ -1,27 +1,59 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { DailyRevenue } from '@/lib/types';
+import type { DailyClosing, DailyRevenue } from '@/lib/types';
 
 // 당일결산 붙여넣기 — 그 날짜의 매출을 그대로 입력(갱신)한다. source='daily'로
 // 남겨서, 나중에 월결산이 들어오면 이 값들이 리셋 대상이라는 걸 구분할 수 있다.
 export async function upsertDailyRevenue(
   supabase: SupabaseClient,
-  date: string,
-  totalRevenue: number,
-  visitCount: number | null,
-  updatedBy: string | null
+  input: {
+    date: string;
+    totalRevenue: number;
+    visitCount: number | null;
+    closing: DailyClosing;
+    updatedBy: string | null;
+  }
 ): Promise<void> {
   const { error } = await supabase.from('daily_revenue').upsert(
     {
-      date,
-      total_revenue: totalRevenue,
-      visit_count: visitCount,
+      date: input.date,
+      total_revenue: input.totalRevenue,
+      visit_count: input.visitCount,
+      reservation_count: input.closing.reservationCount,
+      kept_count: input.closing.keptCount,
+      noshow_count: input.closing.noshowCount,
+      cancel_count: input.closing.cancelCount,
+      next_booking_count: input.closing.nextBookingCount,
+      chuna_count: input.closing.chunaCount,
+      excluded_count: input.closing.excludedCount,
       source: 'daily',
-      updated_by: updatedBy,
+      updated_by: input.updatedBy,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'date' }
   );
   if (error) throw error;
+}
+
+// 그 날짜에 이미 저장해 둔 일일 결산 숫자 — 같은 날 결산을 다시 열었을 때 그대로 채워 준다.
+// 예약 숫자를 한 번도 입력한 적 없으면(reservation_count 없음) null.
+export async function getSavedDailyClosing(supabase: SupabaseClient, date: string): Promise<DailyClosing | null> {
+  const { data, error } = await supabase
+    .from('daily_revenue')
+    .select('reservation_count, kept_count, noshow_count, cancel_count, next_booking_count, chuna_count, excluded_count')
+    .eq('date', date)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.reservation_count == null) return null;
+  const n = (v: unknown) => (v != null ? Number(v) : null);
+  return {
+    reservationCount: n(data.reservation_count),
+    keptCount: n(data.kept_count),
+    noshowCount: n(data.noshow_count),
+    cancelCount: n(data.cancel_count),
+    nextBookingCount: n(data.next_booking_count),
+    chunaCount: n(data.chuna_count),
+    excludedCount: n(data.excluded_count),
+  };
 }
 
 export async function listRecentDailyRevenue(supabase: SupabaseClient, limit = 14): Promise<DailyRevenue[]> {

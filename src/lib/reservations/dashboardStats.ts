@@ -21,10 +21,6 @@ function sum(values: (number | null)[]): number {
   return values.reduce<number>((acc, v) => acc + (v ?? 0), 0);
 }
 
-function roundToOneDecimal(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
 export function computeWeeklyStats(
   records: DailyRecordSummary[],
   referenceDate: Date
@@ -35,17 +31,10 @@ export function computeWeeklyStats(
     return recordDate >= start && recordDate <= end;
   });
 
-  const reservationTotal = sum(inWeek.map((r) => r.reservationCount));
-  const visitTotal = sum(inWeek.map((r) => r.visitCount));
-  const excludedTotal = sum(inWeek.map((r) => r.excludedCount));
   const nogyongTotal = sum(inWeek.map((r) => r.nogyongCount));
   const ilbanTotal = sum(inWeek.map((r) => r.ilbanCount));
 
   return {
-    reservationRate:
-      visitTotal > 0 ? roundToOneDecimal((reservationTotal / visitTotal) * 100) : null,
-    noShowRate:
-      reservationTotal > 0 ? roundToOneDecimal((excludedTotal / reservationTotal) * 100) : null,
     nogyongTotal,
     ilbanTotal,
     herbTotal: nogyongTotal + ilbanTotal,

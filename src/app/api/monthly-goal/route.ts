@@ -14,6 +14,12 @@ function toGoalNumber(value: unknown): number | null {
 // monthly_goals 테이블에 직접 쓴다(같은 hanyak-ondam 프로젝트를 공유하지만 그
 // 테이블은 RLS가 전부 막혀 있어 admin/service_role로만 접근 가능하다).
 // special_acupuncture_goal 컬럼은 이름은 그대로지만 이제 "특수한약" 목표값이다.
+// 실적 보정값 — 자동 집계에 더하거나 빼는 정수(음수 가능). 잘못된 값은 0으로 본다.
+function toAdjustNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isInteger(n) ? n : 0;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -43,6 +49,10 @@ export async function POST(request: NextRequest) {
       chuna_goal: toGoalNumber(body.chunaGoal),
       revenue_goal: toGoalNumber(body.revenueGoal),
       avg_visits_goal: toGoalNumber(body.avgVisitsGoal),
+      herb_adjust: toAdjustNumber(body.herbAdjust),
+      diet_adjust: toAdjustNumber(body.dietAdjust),
+      special_herb_adjust: toAdjustNumber(body.specialHerbAdjust),
+      chuna_adjust: toAdjustNumber(body.chunaAdjust),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'month' }

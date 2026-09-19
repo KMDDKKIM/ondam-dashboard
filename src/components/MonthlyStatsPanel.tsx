@@ -23,6 +23,13 @@ const GOAL_FIELDS = [
   { key: 'chunaGoal', summaryKey: 'chuna', label: '추나', width: 90 },
 ] as const;
 
+const ADJUST_FIELDS = [
+  { key: 'herbAdjust', label: '한약' },
+  { key: 'dietAdjust', label: '다이어트' },
+  { key: 'specialHerbAdjust', label: '특수한약' },
+  { key: 'chunaAdjust', label: '추나' },
+] as const;
+
 function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -76,6 +83,10 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
       dietGoal: summary.goals.diet.goal != null ? String(summary.goals.diet.goal) : '',
       specialHerbGoal: summary.goals.specialHerb.goal != null ? String(summary.goals.specialHerb.goal) : '',
       chunaGoal: summary.goals.chuna.goal != null ? String(summary.goals.chuna.goal) : '',
+      herbAdjust: String(summary.goals.herb.adjust),
+      dietAdjust: String(summary.goals.diet.adjust),
+      specialHerbAdjust: String(summary.goals.specialHerb.adjust),
+      chunaAdjust: String(summary.goals.chuna.adjust),
     });
     setGoalError('');
     setShowGoalForm(true);
@@ -96,6 +107,10 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
           dietGoal: goalInputs.dietGoal || null,
           specialHerbGoal: goalInputs.specialHerbGoal || null,
           chunaGoal: goalInputs.chunaGoal || null,
+          herbAdjust: goalInputs.herbAdjust || 0,
+          dietAdjust: goalInputs.dietAdjust || 0,
+          specialHerbAdjust: goalInputs.specialHerbAdjust || 0,
+          chunaAdjust: goalInputs.chunaAdjust || 0,
         }),
       });
       const body = await response.json();
@@ -206,6 +221,28 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
               />
             </div>
           ))}
+          <div style={{ flexBasis: '100%', borderTop: '1px solid var(--color-line)', paddingTop: 10 }}>
+            <div className="muted-text" style={{ fontSize: 12, marginBottom: 8 }}>
+              실적 보정 (+/−) — 자동 집계가 틀렸을 때 숫자를 더하거나 빼요. 예: 한약이 2건 많게 잡혔으면 −2
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {ADJUST_FIELDS.map(({ key, label }) => (
+                <div key={key}>
+                  <label className="muted-text" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+                    {label} 보정
+                  </label>
+                  <input
+                    type="number"
+                    step={1}
+                    value={goalInputs[key] ?? '0'}
+                    onChange={(e) => setGoalInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                    className="input-field"
+                    style={{ width: 90, padding: '6px 8px' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
           <button onClick={saveGoals} disabled={savingGoals} className="btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
             {savingGoals ? '저장 중...' : '저장'}
           </button>
@@ -292,6 +329,7 @@ export function StatTile({
   goal = null,
   unit = '',
   pace = null,
+  title,
 }: {
   label: string;
   compact?: boolean;
@@ -300,11 +338,13 @@ export function StatTile({
   goal?: number | null;
   unit?: string;
   pace?: 'behind' | 'onTrack' | null;
+  title?: string;
 }) {
   const percent = achievementPercent(achieved, goal);
   return (
     <div
       className="card"
+      title={title}
       style={{
         flex: compact ? '1 1 100px' : '1 1 160px',
         padding: compact ? '8px 12px' : '14px 16px',
