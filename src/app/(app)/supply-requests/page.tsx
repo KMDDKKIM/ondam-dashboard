@@ -13,6 +13,7 @@ import {
 import {
   STATUS_LABEL,
   SUPPLY_CATEGORIES,
+  SUPPLY_CATEGORY_HINT,
   formatDate,
   matchesFilter,
   safeUrl,
@@ -51,7 +52,6 @@ export default function SupplyRequestsPage() {
   const [itemChoice, setItemChoice] = useState(CUSTOM);
   const [customName, setCustomName] = useState('');
   const [saveAsItem, setSaveAsItem] = useState(true);
-  const [quantity, setQuantity] = useState('1');
   const [orderUrl, setOrderUrl] = useState('');
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -109,9 +109,7 @@ export default function SupplyRequestsPage() {
     setFormError('');
     const picked = categoryItems.find((i) => i.id === itemChoice);
     const itemName = (usingCustom ? customName : picked?.name ?? '').trim();
-    const qty = Number(quantity);
     if (!itemName) return setFormError('품목을 고르거나 입력해 주세요.');
-    if (!Number.isInteger(qty) || qty < 1) return setFormError('수량은 1 이상의 숫자로 입력해 주세요.');
     if (orderUrl.trim() && !safeUrl(orderUrl)) return setFormError('주문 링크가 올바르지 않아요.');
 
     setSubmitting(true);
@@ -119,14 +117,12 @@ export default function SupplyRequestsPage() {
       await createSupplyRequest(supabase, {
         category,
         itemName,
-        quantity: qty,
         orderUrl: safeUrl(orderUrl) ?? '',
         memo: memo.trim(),
         requestedBy: me?.id ?? null,
         saveAsItem: usingCustom && saveAsItem,
       });
       setCustomName('');
-      setQuantity('1');
       setMemo('');
       setOrderUrl('');
       setItemChoice(CUSTOM);
@@ -183,7 +179,7 @@ export default function SupplyRequestsPage() {
             <select className="input-field" value={category} onChange={(e) => handleCategoryChange(e.target.value)}>
               {SUPPLY_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {SUPPLY_CATEGORY_HINT[c] ? `${c} (${SUPPLY_CATEGORY_HINT[c]})` : c}
                 </option>
               ))}
             </select>
@@ -220,18 +216,6 @@ export default function SupplyRequestsPage() {
           )}
           <div>
             <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
-              수량
-            </label>
-            <input
-              className="input-field"
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
               주문 링크 (선택, 간식 등)
             </label>
             <input
@@ -243,13 +227,13 @@ export default function SupplyRequestsPage() {
           </div>
           <div>
             <label className="muted-text" style={{ display: 'block', marginBottom: 4 }}>
-              메모 (선택)
+              메모 (수량 등, 선택)
             </label>
             <input
               className="input-field"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              placeholder="급하면 적어주세요"
+              placeholder="예: 3박스, 급해요"
             />
           </div>
         </div>
@@ -306,7 +290,7 @@ export default function SupplyRequestsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                {['신청일', '분류', '품목', '수량', '신청자', '메모', '주문 링크', '진행 상태', ''].map((h) => (
+                {['신청일', '분류', '품목', '신청자', '메모', '주문 링크', '진행 상태', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
@@ -324,7 +308,6 @@ export default function SupplyRequestsPage() {
                     <td style={{ ...cell, whiteSpace: 'nowrap' }}>{formatDate(r.requestedAt)}</td>
                     <td style={{ ...cell, whiteSpace: 'nowrap' }}>{r.category}</td>
                     <td style={{ ...cell, fontWeight: 600 }}>{r.itemName}</td>
-                    <td style={{ ...cell, whiteSpace: 'nowrap' }}>{r.quantity}개</td>
                     <td style={{ ...cell, whiteSpace: 'nowrap' }}>{staffName(r.requestedBy) || '-'}</td>
                     <td style={{ ...cell, color: 'var(--color-muted)' }}>{r.memo || '-'}</td>
                     <td style={cell}>

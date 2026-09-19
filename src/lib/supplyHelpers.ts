@@ -1,13 +1,19 @@
 import type { SupplyRequest } from '@/lib/types';
 
 export const SUPPLY_CATEGORIES = [
-  '진료 소모품',
-  '침·약침·치료재료',
-  '사무용품',
+  '한약재·의약품',
+  '조제·탕전용품',
+  '치료 소모품',
+  '사무·원무',
   '청소·위생',
   '간식·음료',
   '기타',
 ] as const;
+
+// 분류 이름만으로 뜻이 애매한 것에 붙이는 보조 설명(선택 목록에만 표시).
+export const SUPPLY_CATEGORY_HINT: Record<string, string> = {
+  '사무·원무': '용지, 문구류 등',
+};
 
 export type SupplyStatus = 'requested' | 'ordered' | 'received';
 

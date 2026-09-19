@@ -5,7 +5,6 @@ interface RequestRow {
   id: string;
   category: string;
   item_name: string;
-  quantity: number;
   order_url: string | null;
   memo: string;
   requested_by: string | null;
@@ -28,7 +27,6 @@ function rowToRequest(r: RequestRow): SupplyRequest {
     id: r.id,
     category: r.category,
     itemName: r.item_name,
-    quantity: r.quantity,
     orderUrl: r.order_url,
     memo: r.memo,
     requestedBy: r.requested_by,
@@ -62,7 +60,6 @@ export async function listSupplyItems(supabase: SupabaseClient): Promise<SupplyI
 export interface NewSupplyRequest {
   category: string;
   itemName: string;
-  quantity: number;
   orderUrl: string;
   memo: string;
   requestedBy: string | null;
@@ -74,7 +71,6 @@ export async function createSupplyRequest(supabase: SupabaseClient, input: NewSu
   const { error } = await supabase.from('supply_requests').insert({
     category: input.category,
     item_name: input.itemName,
-    quantity: input.quantity,
     order_url: orderUrl,
     memo: input.memo,
     requested_by: input.requestedBy,

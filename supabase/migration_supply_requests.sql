@@ -32,7 +32,6 @@ create table if not exists supply_requests (
   id uuid primary key default gen_random_uuid(),
   category text not null,
   item_name text not null,
-  quantity integer not null check (quantity > 0),
   order_url text,
   memo text not null default '',
   requested_by uuid references staff(id),
@@ -86,3 +85,6 @@ drop trigger if exists supply_requests_guard on supply_requests;
 create trigger supply_requests_guard
   before update on supply_requests
   for each row execute function public.supply_requests_guard();
+
+-- 수량 칸은 없애고 필요하면 메모에 적는다(이미 만든 테이블에서는 컬럼을 지운다).
+alter table supply_requests drop column if exists quantity;

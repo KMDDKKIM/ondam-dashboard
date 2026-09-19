@@ -189,7 +189,6 @@ export interface SupplyRequest {
   id: string;
   category: string;
   itemName: string;
-  quantity: number;
   orderUrl: string | null;
   memo: string;
   requestedBy: string | null;
