@@ -542,7 +542,7 @@ function DailySettlementSection() {
             </div>
             <div>
               <label className="muted-text" style={label}>추나 환자 이름</label>
-              <input value={closing.chunaNames} onChange={(e) => setField('chunaNames', e.target.value)} className="input-field" placeholder="조현지 변경은 조현미" />
+              <input value={closing.chunaNames} onChange={(e) => setField('chunaNames', e.target.value)} className="input-field" placeholder="홍길동 성춘향 이몽룡" />
             </div>
           </div>
           {chunaMismatch && (
@@ -559,7 +559,7 @@ function DailySettlementSection() {
             </div>
             <div>
               <label className="muted-text" style={label}>제외환자 이름</label>
-              <input value={closing.excludedNames} onChange={(e) => setField('excludedNames', e.target.value)} className="input-field" placeholder="박혜진 박나령" />
+              <input value={closing.excludedNames} onChange={(e) => setField('excludedNames', e.target.value)} className="input-field" placeholder="강백호 서태웅" />
             </div>
           </div>
           {excludedMismatch && (

@@ -24,8 +24,8 @@ describe('analyzePasteText - reservation sheet', () => {
   it('parses a single-day reservation sheet grouped by date', () => {
     const text = [
       RESERVATION_HEADER,
-      ['1', '', '내원', '', '2026-09-18', '19:00', '전명옥', '006191', '010-9201-5405', '', '김동규', '통원', '침부항', '', '', '2026-09-15'].join('\t'),
-      ['2', '', '', '', '2026-09-18', '18:20', '우희숙', '004695', '010-5173-1609', '', '박소은', '통원', 'U+비급여 추나', '', '', '2026-09-15'].join('\t'),
+      ['1', '', '내원', '', '2026-09-18', '19:00', '온달', '000002', '010-0000-0001', '', '김동규', '통원', '침부항', '', '', '2026-09-15'].join('\t'),
+      ['2', '', '', '', '2026-09-18', '18:20', '콩쥐', '000001', '010-0000-0000', '', '박소은', '통원', 'U+비급여 추나', '', '', '2026-09-15'].join('\t'),
     ].join('\n');
 
     const result = analyzePasteText(text);
@@ -35,8 +35,8 @@ describe('analyzePasteText - reservation sheet', () => {
     expect(result.groups[0].date).toBe('2026-09-18');
     expect(result.groups[0].rows).toHaveLength(2);
     expect(result.groups[0].rows[0]).toMatchObject({
-      patientName: '전명옥',
-      chartNo: '006191',
+      patientName: '온달',
+      chartNo: '000002',
       doctorName: '김동규',
       timeLabel: '19:00',
       treatmentArea: '통원',
@@ -47,8 +47,8 @@ describe('analyzePasteText - reservation sheet', () => {
   it('groups rows by distinct dates when the paste spans multiple days', () => {
     const text = [
       RESERVATION_HEADER,
-      ['1', '', '내원', '', '2026-09-18', '19:00', '전명옥', '006191', '', '', '김동규', '통원', '침부항', '', '', ''].join('\t'),
-      ['2', '', '', '', '2026-09-19', '10:00', '우희숙', '004695', '', '', '박소은', '통원', '침', '', '', ''].join('\t'),
+      ['1', '', '내원', '', '2026-09-18', '19:00', '온달', '000002', '', '', '김동규', '통원', '침부항', '', '', ''].join('\t'),
+      ['2', '', '', '', '2026-09-19', '10:00', '콩쥐', '000001', '', '', '박소은', '통원', '침', '', '', ''].join('\t'),
     ].join('\n');
 
     const result = analyzePasteText(text);
@@ -60,7 +60,7 @@ describe('analyzePasteText - reservation sheet', () => {
   it('prefers 취소 over 내원 for visitStatus', () => {
     const text = [
       RESERVATION_HEADER,
-      ['1', '', '내원', '취소', '2026-09-18', '10:30', '문명환', '', '', '', '김동규', '초진', '', '', '', ''].join('\t'),
+      ['1', '', '내원', '취소', '2026-09-18', '10:30', '평강', '', '', '', '김동규', '초진', '', '', '', ''].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
     if (result.format !== 'reservation') throw new Error('unreachable');

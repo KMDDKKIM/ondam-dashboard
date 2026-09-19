@@ -1,6 +1,6 @@
 // 데스크가 원장에게 매일 보내는 마무리 멘트를 입력값으로 만들어 준다.
-// 예) 금일환자수 : 34명(제외환자:박혜진님) / 예약 환자 수 21명 / 추나 7명 (조현지님,변경은님) /
-//     일반한약15일 1명,녹용한약 1명 / 네이버리뷰 1명 / 초진 2명,소개환 1명(임수진님) / 고생하셨습니다
+// 예) 금일환자수 : 34명(제외환자:강백호님) / 예약 환자 수 21명 / 추나 7명 (홍길동님,성춘향님) /
+//     일반한약15일 1명,녹용한약 1명 / 네이버리뷰 1명 / 초진 2명,소개환 1명(변학도님) / 고생하셨습니다
 
 export interface ClosingMessageInput {
   visitCount: number | null; // 금일환자수(결산표 내원환자수)
@@ -22,7 +22,7 @@ export function splitNames(text: string): string[] {
     .filter(Boolean);
 }
 
-// 이름 뒤에 "님"이 없으면 붙여서 "조현지님,변경은님" 형태로 만든다.
+// 이름 뒤에 "님"이 없으면 붙여서 "홍길동님,성춘향님" 형태로 만든다.
 export function formatNames(text: string): string {
   return splitNames(text)
     .map((n) => (n.endsWith('님') ? n : `${n}님`))
