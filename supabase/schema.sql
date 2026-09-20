@@ -31,13 +31,32 @@ alter table staff add constraint staff_grade_matches_role
 
 alter table staff enable row level security;
 
--- Every logged-in user can see the staff list (used to render names in the UI).
--- This is safe: anon (not-logged-in) requests are rejected by auth.role() != 'authenticated',
--- and there is no public anon-key-only access path in this app (unlike dest-auto, this
--- app has real Supabase Auth sessions, so RLS scoped to `authenticated` is the correct,
--- standard pattern — not a shortcut).
+-- Helper: is the caller an approved staff member? Every data policy below uses it
+-- instead of the loose `auth.role() = 'authenticated'`: a signed-up but pending
+-- account is still an 'authenticated' Supabase user and could otherwise read
+-- patient data with the public anon key. SECURITY DEFINER so it can read staff
+-- regardless of the staff RLS policy (no recursion: the function bypasses RLS).
+create or replace function public.is_approved_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+  select exists (
+    select 1 from public.staff where id = auth.uid() and status = 'approved'
+  )
+$;
+
+revoke all on function public.is_approved_staff() from public, anon;
+grant execute on function public.is_approved_staff() to authenticated;
+
+-- Approved staff can see the staff list (used to render names in the UI). A pending
+-- account can still read its OWN row -- the pending-approval gate in
+-- src/lib/supabase/middleware.ts needs it -- but not anyone else's.
+drop policy if exists "authenticated can read staff" on staff;
 create policy "authenticated can read staff" on staff
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (auth.uid() = id or public.is_approved_staff());
 
 -- Users can only edit their own row (e.g. changing their own display name later).
 -- Row creation is NOT exposed here — the owner account(s) were seeded once via the
@@ -107,15 +126,15 @@ alter table happy_call_patients enable row level security;
 
 drop policy if exists "authenticated can read happy_call_patients" on happy_call_patients;
 create policy "authenticated can read happy_call_patients" on happy_call_patients
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert happy_call_patients" on happy_call_patients;
 create policy "authenticated can insert happy_call_patients" on happy_call_patients
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update happy_call_patients" on happy_call_patients;
 create policy "authenticated can update happy_call_patients" on happy_call_patients
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- Happy call: 한약 처방 (해피콜 목록 자동 생성용)
 create table if not exists herb_medicine_prescriptions (
@@ -140,15 +159,15 @@ alter table herb_medicine_prescriptions enable row level security;
 
 drop policy if exists "authenticated can read herb_medicine_prescriptions" on herb_medicine_prescriptions;
 create policy "authenticated can read herb_medicine_prescriptions" on herb_medicine_prescriptions
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert herb_medicine_prescriptions" on herb_medicine_prescriptions;
 create policy "authenticated can insert herb_medicine_prescriptions" on herb_medicine_prescriptions
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update herb_medicine_prescriptions" on herb_medicine_prescriptions;
 create policy "authenticated can update herb_medicine_prescriptions" on herb_medicine_prescriptions
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- Happy call: 린다이어트 패키지 (해피콜 목록 자동 생성용)
 create table if not exists diet_packages (
@@ -163,15 +182,15 @@ alter table diet_packages enable row level security;
 
 drop policy if exists "authenticated can read diet_packages" on diet_packages;
 create policy "authenticated can read diet_packages" on diet_packages
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert diet_packages" on diet_packages;
 create policy "authenticated can insert diet_packages" on diet_packages
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update diet_packages" on diet_packages;
 create policy "authenticated can update diet_packages" on diet_packages
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 create table if not exists diet_package_calls (
   id uuid primary key default gen_random_uuid(),
@@ -186,15 +205,15 @@ alter table diet_package_calls enable row level security;
 
 drop policy if exists "authenticated can read diet_package_calls" on diet_package_calls;
 create policy "authenticated can read diet_package_calls" on diet_package_calls
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert diet_package_calls" on diet_package_calls;
 create policy "authenticated can insert diet_package_calls" on diet_package_calls
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update diet_package_calls" on diet_package_calls;
 create policy "authenticated can update diet_package_calls" on diet_package_calls
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- Happy call: 해피콜 목록 — 초진 수동 추가분
 create table if not exists happy_call_manual_entries (
@@ -212,7 +231,7 @@ alter table happy_call_manual_entries enable row level security;
 
 drop policy if exists "authenticated can read happy_call_manual_entries" on happy_call_manual_entries;
 create policy "authenticated can read happy_call_manual_entries" on happy_call_manual_entries
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 -- 한약재 재고 현황: 현재 재고를 한눈에 보고, 다 써서 새 봉지를 뜯을 때 사용량을
 -- 입력하면 차감되고, 새로 주문이 오면 입고량을 더한다. low_stock_threshold를
@@ -232,15 +251,15 @@ alter table herb_inventory enable row level security;
 
 drop policy if exists "authenticated can read herb_inventory" on herb_inventory;
 create policy "authenticated can read herb_inventory" on herb_inventory
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert herb_inventory" on herb_inventory;
 create policy "authenticated can insert herb_inventory" on herb_inventory
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update herb_inventory" on herb_inventory;
 create policy "authenticated can update herb_inventory" on herb_inventory
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- 사용/입고 이력 — 현재고 숫자만으로는 "언제 얼마나 썼는지"가 안 남아서 따로 둔다.
 create table if not exists herb_inventory_logs (
@@ -257,19 +276,19 @@ alter table herb_inventory_logs enable row level security;
 
 drop policy if exists "authenticated can read herb_inventory_logs" on herb_inventory_logs;
 create policy "authenticated can read herb_inventory_logs" on herb_inventory_logs
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert herb_inventory_logs" on herb_inventory_logs;
 create policy "authenticated can insert herb_inventory_logs" on herb_inventory_logs
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert happy_call_manual_entries" on happy_call_manual_entries;
 create policy "authenticated can insert happy_call_manual_entries" on happy_call_manual_entries
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update happy_call_manual_entries" on happy_call_manual_entries;
 create policy "authenticated can update happy_call_manual_entries" on happy_call_manual_entries
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- 비급여 현황: 환자 이름/차트번호/연락처 + 어떤 상품을 샀는지 + 어느 구분(일반 /
 -- 26추석이벤트 / 27설이벤트 ...)인지 한 행에 남긴다. 환자별 별도 테이블을 두지
@@ -294,19 +313,19 @@ alter table non_covered_purchases enable row level security;
 
 drop policy if exists "authenticated can read non_covered_purchases" on non_covered_purchases;
 create policy "authenticated can read non_covered_purchases" on non_covered_purchases
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert non_covered_purchases" on non_covered_purchases;
 create policy "authenticated can insert non_covered_purchases" on non_covered_purchases
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update non_covered_purchases" on non_covered_purchases;
 create policy "authenticated can update non_covered_purchases" on non_covered_purchases
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can delete non_covered_purchases" on non_covered_purchases;
 create policy "authenticated can delete non_covered_purchases" on non_covered_purchases
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 -- 비급여 구매 후 해피콜 예정일. 등록 시 자동으로 채워지지만(구매일+7일) 필요하면
 -- 고쳐 쓸 수 있고, 값이 있으면 happy_call_manual_entries에도 행을 만들어(또는
@@ -344,19 +363,19 @@ alter table daily_revenue enable row level security;
 
 drop policy if exists "authenticated can read daily_revenue" on daily_revenue;
 create policy "authenticated can read daily_revenue" on daily_revenue
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert daily_revenue" on daily_revenue;
 create policy "authenticated can insert daily_revenue" on daily_revenue
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update daily_revenue" on daily_revenue;
 create policy "authenticated can update daily_revenue" on daily_revenue
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can delete daily_revenue" on daily_revenue;
 create policy "authenticated can delete daily_revenue" on daily_revenue
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 -- 월말결산표 붙여넣기로 그 달 총매출을 통째로 덮어쓰는 값. daily_revenue를
 -- 날짜별로 지우고 다시 채우는 대신 별도 테이블로 둔 이유: 월말결산표에는 날짜별
@@ -375,15 +394,15 @@ alter table monthly_revenue_override enable row level security;
 
 drop policy if exists "authenticated can read monthly_revenue_override" on monthly_revenue_override;
 create policy "authenticated can read monthly_revenue_override" on monthly_revenue_override
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert monthly_revenue_override" on monthly_revenue_override;
 create policy "authenticated can insert monthly_revenue_override" on monthly_revenue_override
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update monthly_revenue_override" on monthly_revenue_override;
 create policy "authenticated can update monthly_revenue_override" on monthly_revenue_override
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- 티로 등으로 녹음한 상담 내용을 붙여넣으면 AI가 차팅 형식으로 요약해준다
 -- (src/app/api/consult-summary/route.ts, Anthropic API 필요). transcript는
@@ -402,15 +421,15 @@ alter table consult_summaries enable row level security;
 
 drop policy if exists "authenticated can read consult_summaries" on consult_summaries;
 create policy "authenticated can read consult_summaries" on consult_summaries
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert consult_summaries" on consult_summaries;
 create policy "authenticated can insert consult_summaries" on consult_summaries
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update consult_summaries" on consult_summaries;
 create policy "authenticated can update consult_summaries" on consult_summaries
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- 오늘 할 일 — localStorage였던 걸 공유 테이블로 옮겼다. due_date가 지났는데
 -- 아직 안 끝났으면(done=false) 계속 "오늘 할 일"에 뜨는 방식으로 자동 이월된다
@@ -432,19 +451,19 @@ alter table todos enable row level security;
 
 drop policy if exists "authenticated can read todos" on todos;
 create policy "authenticated can read todos" on todos
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert todos" on todos;
 create policy "authenticated can insert todos" on todos
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update todos" on todos;
 create policy "authenticated can update todos" on todos
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can delete todos" on todos;
 create policy "authenticated can delete todos" on todos
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 -- 사내 채팅: 토픽방 + 채팅방
 create table if not exists chat_rooms (
@@ -664,11 +683,13 @@ on conflict (id) do nothing;
 
 drop policy if exists "authenticated can upload chat attachments" on storage.objects;
 create policy "authenticated can upload chat attachments" on storage.objects
-  for insert with check (bucket_id = 'chat-attachments' and auth.role() = 'authenticated');
+  for insert to authenticated
+  with check (bucket_id = 'chat-attachments' and public.is_approved_staff());
 
 drop policy if exists "authenticated can view chat attachments" on storage.objects;
 create policy "authenticated can view chat attachments" on storage.objects
-  for select using (bucket_id = 'chat-attachments' and auth.role() = 'authenticated');
+  for select to authenticated
+  using (bucket_id = 'chat-attachments' and public.is_approved_staff());
 
 -- 물품신청
 -- 물품신청: 자주 쓰는 품목(supply_items) + 신청 내역(supply_requests).
@@ -687,19 +708,19 @@ alter table supply_items enable row level security;
 
 drop policy if exists "authenticated can read supply_items" on supply_items;
 create policy "authenticated can read supply_items" on supply_items
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert supply_items" on supply_items;
 create policy "authenticated can insert supply_items" on supply_items
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update supply_items" on supply_items;
 create policy "authenticated can update supply_items" on supply_items
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can delete supply_items" on supply_items;
 create policy "authenticated can delete supply_items" on supply_items
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 create table if not exists supply_requests (
   id uuid primary key default gen_random_uuid(),
@@ -719,17 +740,17 @@ alter table supply_requests enable row level security;
 
 drop policy if exists "authenticated can read supply_requests" on supply_requests;
 create policy "authenticated can read supply_requests" on supply_requests
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert supply_requests" on supply_requests;
 create policy "authenticated can insert supply_requests" on supply_requests
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 -- 도착 체크는 직원 누구나 하므로 update 자체는 로그인 사용자에게 열고,
 -- 주문완료 체크(ordered_at/ordered_by)는 아래 트리거가 원장만 바꿀 수 있게 막는다.
 drop policy if exists "authenticated can update supply_requests" on supply_requests;
 create policy "authenticated can update supply_requests" on supply_requests
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 -- 삭제: 원장은 전부, 직원은 자기가 신청했고 아직 주문 전인 것만.
 drop policy if exists "owner or own pending can delete supply_requests" on supply_requests;
@@ -768,7 +789,7 @@ alter table supply_requests drop column if exists quantity;
 -- herb_inventory_logs의 on delete cascade로 같이 지워진다.
 drop policy if exists "authenticated can delete herb_inventory" on herb_inventory;
 create policy "authenticated can delete herb_inventory" on herb_inventory
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 -- 결산표 내원환자수/일평균 환자수
 -- 일일결산에서 그날 내원환자수를, 월말결산에서 진료일평균환자수를 같이 저장한다.
@@ -797,19 +818,19 @@ alter table non_covered_products enable row level security;
 
 drop policy if exists "authenticated can read non_covered_products" on non_covered_products;
 create policy "authenticated can read non_covered_products" on non_covered_products
-  for select using (auth.role() = 'authenticated');
+  for select to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can insert non_covered_products" on non_covered_products;
 create policy "authenticated can insert non_covered_products" on non_covered_products
-  for insert with check (auth.role() = 'authenticated');
+  for insert to authenticated with check (public.is_approved_staff());
 
 drop policy if exists "authenticated can update non_covered_products" on non_covered_products;
 create policy "authenticated can update non_covered_products" on non_covered_products
-  for update using (auth.role() = 'authenticated');
+  for update to authenticated using (public.is_approved_staff());
 
 drop policy if exists "authenticated can delete non_covered_products" on non_covered_products;
 create policy "authenticated can delete non_covered_products" on non_covered_products
-  for delete using (auth.role() = 'authenticated');
+  for delete to authenticated using (public.is_approved_staff());
 
 insert into non_covered_products (name, sort_order) values
   ('일반한약', 1),

@@ -23,7 +23,7 @@ export function NewRoomForm({ onClose, onCreated }: NewRoomFormProps) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('staff').select('id, name, role');
+      const { data } = await supabase.from('staff').select('id, name, role').eq('status', 'approved');
       setStaffList((data ?? []) as Staff[]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

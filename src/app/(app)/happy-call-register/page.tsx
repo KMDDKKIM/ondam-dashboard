@@ -53,7 +53,7 @@ export default function HappyCallRegisterPage() {
     try {
       const [patientRows, staffResult] = await Promise.all([
         listHappyCallPatients(supabase),
-        supabase.from('staff').select('id, name, role'),
+        supabase.from('staff').select('id, name, role').eq('status', 'approved'),
       ]);
       setPatients(patientRows);
       setStaffList((staffResult.data ?? []) as Staff[]);

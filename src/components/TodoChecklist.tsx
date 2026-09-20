@@ -32,7 +32,7 @@ export function TodoChecklist() {
     try {
       const [todoRows, staffResult] = await Promise.all([
         listTodos(supabase),
-        supabase.from('staff').select('id, name, role'),
+        supabase.from('staff').select('id, name, role').eq('status', 'approved'),
       ]);
       setTodos(todoRows);
       setStaffList((staffResult.data ?? []) as Staff[]);
