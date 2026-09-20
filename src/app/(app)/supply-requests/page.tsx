@@ -73,8 +73,11 @@ export default function SupplyRequestsPage() {
   // 같은 이름의 진행 중 신청이 있을 때 "그래도 신청" 확인을 기다리는 상태.
   const [duplicates, setDuplicates] = useState<SupplyRequest[]>([]);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+
   async function load() {
     setError('');
+    setLoadFailed(false);
     try {
       const [reqs, itemRows, staffResult, userResult] = await Promise.all([
         listSupplyRequests(supabase),
@@ -89,6 +92,7 @@ export default function SupplyRequestsPage() {
       const userId = userResult.data.user?.id;
       if (userId) setMe({ id: userId, isOwner: staff.find((s) => s.id === userId)?.role === 'owner' });
     } catch {
+      setLoadFailed(true);
       setError('불러오지 못했습니다. (물품신청 테이블이 아직 만들어지지 않았을 수 있어요)');
     } finally {
       setLoading(false);
@@ -143,6 +147,12 @@ export default function SupplyRequestsPage() {
   }
 
   async function submitRequest(itemName: string) {
+    setFormError('');
+    // "그래도 신청" 경로에서도 주문 링크를 다시 확인한다(경고를 띄운 뒤 바뀌었을 수 있음).
+    if (orderUrl.trim() && !safeUrl(orderUrl)) {
+      setDuplicates([]);
+      return setFormError('주문 링크가 올바르지 않아요.');
+    }
     setDuplicates([]);
     setSubmitting(true);
     try {
@@ -365,9 +375,11 @@ export default function SupplyRequestsPage() {
         )}
       </form>
 
-      <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600 }}>
-        주문 대기 {openCounts.waitingOrder}건 · 도착 대기 {openCounts.waitingArrival}건
-      </p>
+      {!loading && !loadFailed && (
+        <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600 }}>
+          주문 대기 {openCounts.waitingOrder}건 · 도착 대기 {openCounts.waitingArrival}건
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {FILTERS.map(({ key, label }) => (

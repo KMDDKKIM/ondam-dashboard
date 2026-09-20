@@ -38,14 +38,38 @@ function rowToRequest(r: RequestRow): SupplyRequest {
   };
 }
 
+const PAGE_SIZE = 1000; // Supabase 기본 최대 행 수
+const RECENT_RECEIVED_LIMIT = 200;
+
+// 아직 도착 안 한(진행 중) 신청은 개수 제한 없이 전부 가져오고(1000건씩 이어서),
+// 도착완료는 최근 것만 가져온다 — 오래된 진행 중 건이 목록/중복 검사에서 사라지지 않게.
 export async function listSupplyRequests(supabase: SupabaseClient): Promise<SupplyRequest[]> {
-  const { data, error } = await supabase
+  const open: RequestRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('supply_requests')
+      .select('*')
+      .is('received_at', null)
+      .order('requested_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const rows = data as RequestRow[];
+    open.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+  }
+
+  const { data: receivedData, error: receivedError } = await supabase
     .from('supply_requests')
     .select('*')
+    .not('received_at', 'is', null)
     .order('requested_at', { ascending: false })
-    .limit(500);
-  if (error) throw error;
-  return (data as RequestRow[]).map(rowToRequest);
+    .limit(RECENT_RECEIVED_LIMIT);
+  if (receivedError) throw receivedError;
+
+  return [...open, ...(receivedData as RequestRow[])]
+    .map(rowToRequest)
+    .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
 }
 
 export async function listSupplyItems(supabase: SupabaseClient): Promise<SupplyItem[]> {
