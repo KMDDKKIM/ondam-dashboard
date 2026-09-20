@@ -3,6 +3,8 @@ import {
   addMonthsKst,
   classifyVisit,
   dedupeVisitCandidates,
+  hasPossibleHomonym,
+  isPossibleHomonym,
   isSamePatient,
   previousVisitDatesFor,
   type ReservationLike,
@@ -68,6 +70,20 @@ describe('isSamePatient', () => {
     expect(isSamePatient({ name: '김', chartNo: '1' }, { name: '이', chartNo: '1' })).toBe(true);
     expect(isSamePatient({ name: '김', chartNo: '1' }, { name: '김', chartNo: '2' })).toBe(false);
   });
+  it('matches by chart number regardless of name typos', () => {
+    expect(isSamePatient({ name: '김철수', chartNo: '77' }, { name: '김철슈', chartNo: '77' })).toBe(true);
+  });
+  it('does NOT match same name when a phone is missing', () => {
+    expect(isSamePatient({ name: '김', phones: ['010-1111-2222'] }, { name: '김', phones: [] })).toBe(false);
+    expect(isSamePatient({ name: '김' }, { name: '김' })).toBe(false);
+    expect(isSamePatient({ name: '김', chartNo: '1', phones: [] }, { name: '김', phones: ['010'] })).toBe(false);
+  });
+  it('flags same name + missing phone as a possible homonym only', () => {
+    expect(isPossibleHomonym({ name: '김', phones: ['010-1'] }, { name: '김', phones: [] })).toBe(true);
+    expect(isPossibleHomonym({ name: '김', phones: ['010-1'] }, { name: '김', phones: ['010-1'] })).toBe(false);
+    expect(isPossibleHomonym({ name: '김', chartNo: '1' }, { name: '김', chartNo: '2' })).toBe(false);
+    expect(isPossibleHomonym({ name: '김', phones: ['010-1'] }, { name: '박', phones: [] })).toBe(false);
+  });
   it('falls back to name + phone', () => {
     expect(isSamePatient({ name: '김', phones: ['010-1111-2222'] }, { name: '김', phones: ['01011112222'] })).toBe(true);
     expect(isSamePatient({ name: '김', phones: ['010-1111-2222'] }, { name: '김', phones: ['010-3333-4444'] })).toBe(false);
@@ -107,5 +123,42 @@ describe('dedupeVisitCandidates / previousVisitDatesFor', () => {
       { date: '2026-09-20', patientName: '김', chartNo: '10', phone: '', mobile: '' },
     ];
     expect(previousVisitDatesFor(cand, prior, '2026-09-20')).toEqual(['2026-03-01', '2026-05-01']);
+  });
+});
+
+describe('same-name history without a phone never hides a candidate', () => {
+  const cand = { patientName: '김', chartNo: '', phone: '010-1111-2222', doctorName: '', timeLabel: '' };
+  const oldNoPhone = { date: '2026-08-30', patientName: '김', chartNo: '', phone: '', mobile: '' };
+
+  it('is not counted as a prior visit but is flagged (stays 초진(추정), never 재진)', () => {
+    const dates = previousVisitDatesFor(cand, [oldNoPhone], '2026-09-20');
+    expect(dates).toEqual([]);
+    expect(classifyVisit(dates, '2026-09-20')).toBe('초진(추정)');
+    expect(hasPossibleHomonym(cand, [oldNoPhone], '2026-09-20')).toBe(true);
+  });
+
+  it('same name + same phone is a real prior visit (재진 / 재초진), no flag', () => {
+    const recent = { date: '2026-08-30', patientName: '김', chartNo: '', phone: '', mobile: '010-1111-2222' };
+    const old = { date: '2026-04-01', patientName: '김', chartNo: '', phone: '01011112222', mobile: '' };
+    expect(classifyVisit(previousVisitDatesFor(cand, [recent], '2026-09-20'), '2026-09-20')).toBe('재진');
+    expect(classifyVisit(previousVisitDatesFor(cand, [old], '2026-09-20'), '2026-09-20')).toBe('재초진');
+    expect(hasPossibleHomonym(cand, [recent], '2026-09-20')).toBe(false);
+  });
+
+  it('same chart number matches even with a name typo', () => {
+    const c = { ...cand, chartNo: '55', patientName: '김철수' };
+    const prior = [{ date: '2026-08-30', patientName: '김철슈', chartNo: '55', phone: '', mobile: '' }];
+    expect(previousVisitDatesFor(c, prior, '2026-09-20')).toEqual(['2026-08-30']);
+  });
+
+  it('a registered same-name patient without phone does not hide the candidate', () => {
+    const registered = { name: '김', chartNo: null, phones: [null] };
+    expect(isSamePatient({ name: '김', chartNo: '', phones: ['010-1111-2222'] }, registered)).toBe(false);
+  });
+
+  it('drops cancelled and no-show reservations from the candidate list', () => {
+    const r = (visitStatus: string) => ({ patientName: '박', chartNo: '9', phone: '', mobile: '', visitStatus, doctorName: '', timeLabel: '' });
+    expect(dedupeVisitCandidates([r('취소'), r('노쇼')])).toEqual([]);
+    expect(dedupeVisitCandidates([r('')])).toHaveLength(1);
   });
 });

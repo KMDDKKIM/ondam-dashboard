@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   classifyVisit,
   isSamePatient,
@@ -51,19 +51,25 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   const [typePick, setTypePick] = useState<Record<string, PatientType>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const today = todayKst();
+  const requestId = useRef(0);
 
+  // 날짜를 빠르게 바꿀 때 늦게 도착한 이전 날짜의 응답이 화면을 덮어쓰지 않도록 마지막 요청만 반영한다.
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     setError('');
     try {
       const response = await fetch(`/api/first-visit-candidates?date=${encodeURIComponent(date)}`);
       if (!response.ok) throw new Error('failed');
-      setData((await response.json()) as FirstVisitCandidatesResult);
+      const json = (await response.json()) as FirstVisitCandidatesResult;
+      if (id !== requestId.current) return;
+      setData(json);
     } catch {
+      if (id !== requestId.current) return;
       setData(null);
       setError('예약 명단에서 후보를 불러오지 못했어요.');
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [date]);
 
@@ -82,12 +88,14 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
     });
   }, [data, date, registered]);
 
-  const firstVisitRows = rows.filter((r) => r.suggestion !== '재진');
-  const pending = firstVisitRows.filter((r) => !r.isRegistered);
-  const revisitRows = rows.filter((r) => r.suggestion === '재진');
+  // 초진/재초진으로 추정된 사람 + "동명이인 가능"이라 재진으로 단정할 수 없는 사람은 목록에 남긴다.
+  const estimatedRows = rows.filter((r) => r.suggestion !== '재진');
+  const listRows = rows.filter((r) => r.suggestion !== '재진' || r.candidate.possibleHomonym);
+  const pending = listRows.filter((r) => !r.isRegistered);
+  const revisitRows = rows.filter((r) => r.suggestion === '재진' && !r.candidate.possibleHomonym);
 
   // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
-  const expected = data?.closingFirstVisitCount ?? firstVisitRows.length;
+  const expected = data?.closingFirstVisitCount ?? estimatedRows.length;
   const expectedSource = data?.closingFirstVisitCount != null ? '마감 결산 기준' : '예약 명단 기준 추정';
   const registeredCount = registered.length;
   const missing = Math.max(expected - registeredCount, 0);
@@ -175,6 +183,13 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
                       <td style={cell}>{row.candidate.timeLabel || '-'}</td>
                       <td style={cell}>
                         {row.suggestion}
+                        {row.candidate.possibleHomonym && (
+                          <span
+                            style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 999, background: '#fff3cd', color: '#7a5b00', fontSize: 11, fontWeight: 700 }}
+                          >
+                            동명이인 가능 · 확인 필요
+                          </span>
+                        )}
                         {row.candidate.previousVisitDates.length > 0 && (
                           <span className="muted-text" style={{ fontSize: 11 }}>
                             {' '}
@@ -227,9 +242,9 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
             </table>
           )}
 
-          {firstVisitRows.length > pending.length && (
+          {listRows.length > pending.length && (
             <p className="muted-text" style={{ fontSize: 12, margin: '8px 0 0' }}>
-              이미 등록된 후보 {firstVisitRows.length - pending.length}명은 위 목록에서 뺐어요.
+              이미 등록된 후보 {listRows.length - pending.length}명은 위 목록에서 뺐어요.
             </p>
           )}
 

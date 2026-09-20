@@ -6,6 +6,7 @@ import {
   computeWeeklyTrend,
   countUnreconciledRevisits,
   getWeekRange,
+  isUnreconciledRevisit,
   isTripleVisit,
   lastCompletedWeekRange,
 } from './happyCallStats';
@@ -184,6 +185,11 @@ describe('isTripleVisit (3 visits within 21 days after the first visit)', () => 
 });
 
 describe('countUnreconciledRevisits', () => {
+  it('isUnreconciledRevisit uses the same 21-day rule', () => {
+    expect(isUnreconciledRevisit(makePatient({ firstVisitDate: '2026-08-30' }), '2026-09-20')).toBe(true);
+    expect(isUnreconciledRevisit(makePatient({ firstVisitDate: '2026-08-31' }), '2026-09-20')).toBe(false);
+  });
+
   it('counts only matured patients with no revisit date at all', () => {
     const patients = [
       makePatient({ id: 'a', firstVisitDate: '2026-08-20' }), // matured, empty

@@ -48,14 +48,14 @@ export function isTripleVisit(p: HappyCallPatient): boolean {
 
 // 성숙(21일 경과)한 환자인데 재내원 날짜가 하나도 안 적혀 있는 환자 — 이탈로 잡히기 전에
 // 실제로는 왔는데 입력이 안 된 것일 수 있어 대조를 요청한다.
+export function isUnreconciledRevisit(p: HappyCallPatient, referenceDate: string): boolean {
+  return (
+    daysBetween(p.firstVisitDate, referenceDate) >= MATURITY_DAYS && !p.revisit1 && !p.revisit2 && !p.revisit3
+  );
+}
+
 export function countUnreconciledRevisits(patients: HappyCallPatient[], referenceDate: string): number {
-  return patients.filter(
-    (p) =>
-      daysBetween(p.firstVisitDate, referenceDate) >= MATURITY_DAYS &&
-      !p.revisit1 &&
-      !p.revisit2 &&
-      !p.revisit3
-  ).length;
+  return patients.filter((p) => isUnreconciledRevisit(p, referenceDate)).length;
 }
 
 /** 오늘(KST) 이전에 끝난 가장 최근 월~일 주. 오늘이 일요일이어도 아직 안 끝난 이번 주가 아니라 지난주다. */

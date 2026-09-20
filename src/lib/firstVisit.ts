@@ -53,20 +53,34 @@ function phoneSet(person: PersonKey): Set<string> {
   return set;
 }
 
+function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
+  return Boolean((a.chartNo ?? '').trim() && (b.chartNo ?? '').trim());
+}
+
 /**
- * 같은 사람인가. 둘 다 차트번호가 있으면 차트번호만 본다. 아니면 이름이 같고, 전화번호가
- * 하나라도 겹치거나(번호가 한쪽이라도 비어 있으면 이름만으로) 판단한다.
+ * 같은 사람인가(엄격). 둘 다 차트번호가 있으면 차트번호만 본다(이름 오타와 무관).
+ * 아니면 이름과 전화번호가 둘 다 있고 서로 같을 때만(전화번호 하나라도 겹침) 같은 사람으로 본다.
+ * 번호가 한쪽이라도 없으면 같은 사람으로 보지 않는다 — 동명이인 때문에 진짜 초진이 가려지면 안 되므로.
  */
 export function isSamePatient(a: PersonKey, b: PersonKey): boolean {
-  const chartA = (a.chartNo ?? '').trim();
-  const chartB = (b.chartNo ?? '').trim();
-  if (chartA && chartB) return chartA === chartB;
+  if (bothHaveChart(a, b)) return (a.chartNo ?? '').trim() === (b.chartNo ?? '').trim();
   if (!a.name.trim() || a.name.trim() !== b.name.trim()) return false;
   const phonesA = phoneSet(a);
   const phonesB = phoneSet(b);
-  if (phonesA.size === 0 || phonesB.size === 0) return true;
+  if (phonesA.size === 0 || phonesB.size === 0) return false;
   for (const p of phonesA) if (phonesB.has(p)) return true;
   return false;
+}
+
+/**
+ * 이름은 같은데 차트번호도 전화번호도 확인할 수 없어(한쪽 번호가 비어 있음) 같은 사람인지 모르는 경우.
+ * 이전 내원으로 세지는 않지만, 후보 목록에 "동명이인 가능"으로 남겨 직원이 확인하게 한다.
+ */
+export function isPossibleHomonym(a: PersonKey, b: PersonKey): boolean {
+  if (bothHaveChart(a, b)) return false;
+  if (!a.name.trim() || a.name.trim() !== b.name.trim()) return false;
+  if (isSamePatient(a, b)) return false;
+  return phoneSet(a).size === 0 || phoneSet(b).size === 0;
 }
 
 export interface ReservationLike {
@@ -99,7 +113,8 @@ export function dedupeVisitCandidates(rows: ReservationLike[]): VisitCandidate[]
   const result: VisitCandidate[] = [];
   const keys: PersonKey[] = [];
   for (const row of rows) {
-    if (row.visitStatus === '취소' || !row.patientName.trim()) continue;
+    // 취소·노쇼 예약은 오는 사람이 아니다.
+    if (row.visitStatus === '취소' || row.visitStatus.includes('노쇼') || !row.patientName.trim()) continue;
     const key = reservationKey(row);
     if (keys.some((k) => isSamePatient(k, key))) continue;
     keys.push(key);
@@ -118,6 +133,8 @@ export function dedupeVisitCandidates(rows: ReservationLike[]): VisitCandidate[]
 export interface FirstVisitCandidateDto extends VisitCandidate {
   /** 이 환자의 이전 내원일(예약 명단에서 "내원"으로 표시된 날, 오래된 순, 중복 없음) */
   previousVisitDates: string[];
+  /** 이름이 같은 이전 기록이 있지만 번호를 확인할 수 없어 같은 사람인지 모름(이전 내원으로 세지 않음) */
+  possibleHomonym: boolean;
 }
 
 export interface FirstVisitCandidatesResult {
@@ -135,6 +152,12 @@ export interface PriorVisitRow {
   chartNo: string;
   phone: string;
   mobile: string;
+}
+
+/** 이름이 같지만 확인할 수 없는 이전 기록이 있는가(beforeDate 이전만). */
+export function hasPossibleHomonym(candidate: VisitCandidate, prior: PriorVisitRow[], beforeDate: string): boolean {
+  const key: PersonKey = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
+  return prior.some((row) => row.date < beforeDate && isPossibleHomonym(key, reservationKey(row)));
 }
 
 /** 후보 한 명의 이전 내원일(중복 제거, 오래된 순). beforeDate 당일 이후는 뺀다. */

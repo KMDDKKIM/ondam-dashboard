@@ -12,7 +12,7 @@ import {
 import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
-import { addDays, countUnreconciledRevisits } from '@/lib/happyCallStats';
+import { addDays, countUnreconciledRevisits, isUnreconciledRevisit } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 
 const MATURITY_DAYS = 21;
@@ -54,13 +54,7 @@ export default function HappyCallRegisterPage() {
   const today = todayKst();
   const unreconciledCount = useMemo(() => countUnreconciledRevisits(patients, today), [patients, today]);
   const visiblePatients = useMemo(
-    () =>
-      onlyUnreconciled
-        ? patients.filter(
-            (p) =>
-              p.firstVisitDate <= addDays(today, -MATURITY_DAYS) && !p.revisit1 && !p.revisit2 && !p.revisit3
-          )
-        : patients,
+    () => (onlyUnreconciled ? patients.filter((p) => isUnreconciledRevisit(p, today)) : patients),
     [patients, onlyUnreconciled, today]
   );
 

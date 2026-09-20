@@ -2,6 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   dedupeVisitCandidates,
+  hasPossibleHomonym,
   previousVisitDatesFor,
   type FirstVisitCandidatesResult,
   type PriorVisitRow,
@@ -91,6 +92,10 @@ export async function getFirstVisitCandidates(date: string): Promise<FirstVisitC
     date,
     hasRecord: true,
     closingFirstVisitCount: record.firstVisitCount,
-    candidates: candidates.map((c) => ({ ...c, previousVisitDates: previousVisitDatesFor(c, prior, date) })),
+    candidates: candidates.map((c) => ({
+      ...c,
+      previousVisitDates: previousVisitDatesFor(c, prior, date),
+      possibleHomonym: hasPossibleHomonym(c, prior, date),
+    })),
   };
 }
