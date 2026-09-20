@@ -3,18 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReservationTable } from './ReservationTable';
 import { ensureDailyRecord, getDailyRecordByDate, replaceReservations } from '@/lib/reservations/dailyRecords';
-import { groupByDoctor, visitMarkerFor } from '@/lib/reservations/printSheet';
+import { groupByDoctor, shouldStartPrint, visitMarkerFor, type PrintRequest } from '@/lib/reservations/printSheet';
 import type { FirstVisitCandidateDto, FirstVisitCandidatesResult } from '@/lib/firstVisit';
 import type { Reservation } from '@/lib/reservations/types';
 
 interface DayDetailProps {
   date: string;
   onSaved: () => void | Promise<void>;
-  /** 값이 바뀔 때마다(0 초과) 이 날짜의 인쇄를 자동으로 한 번 시작한다("내일 예약 시트 인쇄"). */
-  printToken?: number;
+  /** "내일 예약 시트 인쇄" 요청. 이 날짜 것일 때만 불러오기 후 한 번 인쇄하고, onPrintHandled 로 요청을 소진시킨다. */
+  printRequest?: PrintRequest | null;
+  onPrintHandled?: () => void;
 }
 
-export function DayDetail({ date, onSaved, printToken = 0 }: DayDetailProps) {
+export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }: DayDetailProps) {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [dailyRecordId, setDailyRecordId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,7 @@ export function DayDetail({ date, onSaved, printToken = 0 }: DayDetailProps) {
   const [candidates, setCandidates] = useState<FirstVisitCandidateDto[] | null>(null);
   const [printing, setPrinting] = useState(false);
   const [pendingPrint, setPendingPrint] = useState(false);
-  const handledToken = useRef(0);
+  const handledRequestId = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,16 +103,17 @@ export function DayDetail({ date, onSaved, printToken = 0 }: DayDetailProps) {
     window.print();
   }, [pendingPrint]);
 
-  // "내일 예약 시트 인쇄" — 불러오기가 끝나면 한 번만 자동으로 인쇄한다.
+  // "내일 예약 시트 인쇄" — 그 날짜의 불러오기가 끝나면 한 번만 자동으로 인쇄하고 요청을 소진시킨다.
   useEffect(() => {
-    if (printToken <= 0 || loading || handledToken.current === printToken) return;
-    handledToken.current = printToken;
+    if (!shouldStartPrint(printRequest, date, loading, handledRequestId.current)) return;
+    handledRequestId.current = printRequest!.id;
+    onPrintHandled?.();
     if (reservations.filter((r) => r.visitStatus !== '취소').length === 0) {
       setStatusMessage({ type: 'error', text: `${date} 예약 명단이 아직 없어요. 예약 명단을 먼저 입력해 주세요.` });
       return;
     }
     void startPrint();
-  }, [printToken, loading, reservations, date, startPrint]);
+  }, [printRequest, loading, reservations, date, startPrint, onPrintHandled]);
 
   const sheets = useMemo(() => groupByDoctor(reservations), [reservations]);
 

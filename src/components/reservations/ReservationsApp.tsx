@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { DayDetail } from './DayDetail';
 import { WeeklyDashboard } from './WeeklyDashboard';
 import { MissingClosingBanner } from '@/components/MissingClosingBanner';
 import { ensureDailyRecord, listDailyRecords } from '@/lib/reservations/dailyRecords';
 import { addDaysKst, todayKst } from '@/lib/kst';
+import type { PrintRequest } from '@/lib/reservations/printSheet';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 
@@ -24,7 +25,8 @@ export function ReservationsApp({
   const [records, setRecords] = useState<DailyRecordSummary[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayKst());
   const [addDateError, setAddDateError] = useState('');
-  const [printToken, setPrintToken] = useState(0);
+  const [printRequest, setPrintRequest] = useState<PrintRequest | null>(null);
+  const printSeq = useRef(0); // 요청마다 새 id — 같은 날짜를 다시 눌러도 새 요청으로 처리된다
 
   const refresh = useCallback(async () => {
     setRecords(await listDailyRecords());
@@ -48,9 +50,12 @@ export function ReservationsApp({
 
   // 내일(한국 날짜) 예약 시트를 열고, 불러오기가 끝나면 바로 인쇄한다.
   function handlePrintTomorrow() {
-    setSelectedDate(addDaysKst(todayKst(), 1));
-    setPrintToken((n) => n + 1);
+    const tomorrow = addDaysKst(todayKst(), 1);
+    setSelectedDate(tomorrow);
+    setPrintRequest({ date: tomorrow, id: ++printSeq.current });
   }
+
+  const handlePrintHandled = useCallback(() => setPrintRequest(null), []);
 
   return (
     <div className="reservation-app app-shell">
@@ -68,7 +73,9 @@ export function ReservationsApp({
           onAddDate={handleAddDate}
           addDateError={addDateError}
         />
-        <DayDetail key={selectedDate} date={selectedDate} onSaved={refresh} printToken={printToken} />
+        <DayDetail key={selectedDate} date={selectedDate} onSaved={refresh} printRequest={printRequest}
+          onPrintHandled={handlePrintHandled}
+        />
       </div>
     </div>
   );

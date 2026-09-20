@@ -350,20 +350,50 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
   //  2) 없으면 저장된 예약 명단에서 예약·정상 이행(내원)·취소·추나를 세서,
   //  3) 한약·비급여 판매는 그 날 비급여 현황 등록분으로, 초진은 결산표의 신규환자수로.
   // 노쇼와 제외환자는 명단만으로 알 수 없어 직접 입력한다.
-  // 예약 명단이 새로 저장되면(reservationSync.version) 그 날짜가 지금 결산 날짜일 때만 칸을 다시 채운다 —
-  // 다른 날짜 명단을 넣은 것 때문에 지금 손으로 고친 값이 지워지지 않게.
+  // 예약 명단이 새로 저장되면(reservationSync.version) 그 날짜가 지금 결산 날짜일 때만, 그리고 명단에서
+  // 나오는 칸(예약·정상 이행·취소·추나)만 다시 채운다 — 손으로 넣은 노쇼·제외환자·판매·초진 등은
+  // 그대로 둔다. 이미 저장해 둔 결산이 있으면 그 값이 우선이라 아무것도 바꾸지 않는다.
   const handledSyncVersion = useRef(reservationSync.version);
   useEffect(() => {
     if (!date) {
       setClosing(EMPTY_CLOSING);
       return;
     }
+    let syncOnly = false;
     if (handledSyncVersion.current !== reservationSync.version) {
       handledSyncVersion.current = reservationSync.version;
       if (!reservationSync.dates.includes(date)) return;
+      syncOnly = true;
     }
     let cancelled = false;
     (async () => {
+      if (syncOnly) {
+        let rows: { visitStatus: string }[] = [];
+        try {
+          const response = await fetch(`/api/records/${encodeURIComponent(date)}`);
+          const record = response.ok ? await response.json() : null;
+          if (record && Array.isArray(record.reservations)) rows = record.reservations;
+        } catch {
+          return;
+        }
+        if (rows.length === 0) return;
+        try {
+          if (await getSavedDailyClosing(supabase, date)) return;
+        } catch {
+          // 저장된 값을 확인하지 못해도 명단에서 센 값으로 채운다.
+        }
+        const stats = computeDerivedStats(rows as Parameters<typeof computeDerivedStats>[0]);
+        if (cancelled) return;
+        setClosing((prev) => ({
+          ...prev,
+          reservationCount: String(rows.length),
+          keptCount: String(rows.filter((r) => r.visitStatus === '내원').length),
+          cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
+          chunaCount: String(stats.chunaCount),
+          chunaNames: stats.chunaNames.join(' '),
+        }));
+        return;
+      }
       const next: ClosingFields = { ...EMPTY_CLOSING, firstVisitCount: newPatientCount ? String(newPatientCount) : '' };
       const str = (v: number | null) => (v != null ? String(v) : '');
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupByDoctor, visitMarkerFor, UNASSIGNED_DOCTOR } from './printSheet';
+import { groupByDoctor, shouldStartPrint, visitMarkerFor, UNASSIGNED_DOCTOR } from './printSheet';
 import type { Reservation } from './types';
 import type { FirstVisitCandidateDto } from '../firstVisit';
 
@@ -67,8 +67,27 @@ describe('visitMarkerFor', () => {
     expect(visitMarkerFor(res({}), [cand({ previousVisitDates: ['2026-09-10'] })], date)).toBeNull();
   });
 
+  it('marks 초진? when the row has neither chart number nor phone (cannot be checked)', () => {
+    expect(visitMarkerFor(res({ chartNo: '', mobile: '', phone: '' }), [cand({})], date)).toBe('초진?');
+  });
+
   it('shows nothing when candidates are unavailable or the row is not a candidate', () => {
     expect(visitMarkerFor(res({}), null, date)).toBeNull();
     expect(visitMarkerFor(res({ chartNo: '999' }), [cand({})], date)).toBeNull();
+  });
+});
+
+describe('shouldStartPrint', () => {
+  const request = { date: '2026-09-21', id: 1 };
+
+  it('starts only for the requested date, once loaded and not yet handled', () => {
+    expect(shouldStartPrint(request, '2026-09-21', false, 0)).toBe(true);
+    expect(shouldStartPrint(request, '2026-09-21', true, 0)).toBe(false);
+    expect(shouldStartPrint(request, '2026-09-22', false, 0)).toBe(false);
+    expect(shouldStartPrint(request, '2026-09-21', false, 1)).toBe(false);
+  });
+
+  it('does nothing without a request (later date changes do not reopen the print dialog)', () => {
+    expect(shouldStartPrint(null, '2026-09-22', false, 0)).toBe(false);
   });
 });

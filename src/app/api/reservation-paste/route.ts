@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { apiErrorResponse } from '@/lib/apiError';
 import { analyzePasteText } from '@/lib/pasteImport';
 import { countReservationsByDates, replaceReservationsForDate } from '@/lib/reservations/dailyRecords.server';
 
@@ -41,8 +42,8 @@ export async function POST(request: NextRequest) {
       savedDates.push(group.date);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-    return NextResponse.json({ error: message, savedDates }, { status: 500 });
+    // 실제 오류는 서버 로그에만 남긴다(DB 오류 문구를 화면에 그대로 내보내지 않는다).
+    return apiErrorResponse(err, { extra: { savedDates }, hideDetails: true });
   }
 
   return NextResponse.json({ ok: true, savedDates });
@@ -76,8 +77,7 @@ export async function GET(request: NextRequest) {
     try {
       return NextResponse.json({ counts: await countReservationsByDates(dates) });
     } catch (err) {
-      const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-      return NextResponse.json({ error: message }, { status: 500 });
+      return apiErrorResponse(err, { hideDetails: true });
     }
   }
 

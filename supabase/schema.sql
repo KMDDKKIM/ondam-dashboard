@@ -1017,7 +1017,7 @@ create or replace function public.replace_reservations(p_date date, p_rows jsonb
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_id uuid;

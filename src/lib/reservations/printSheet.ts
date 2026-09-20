@@ -2,6 +2,7 @@
 import {
   classifyVisit,
   isSamePatient,
+  normalizePhone,
   reservationKey,
   type FirstVisitCandidateDto,
   type PersonKey,
@@ -49,6 +50,8 @@ export function visitMarkerFor(
   date: string
 ): VisitMarker {
   if (!candidates) return null;
+  // 차트번호도 전화번호도 없으면 이전 기록과 대조할 방법이 없다 — 초진으로 단정하지 않고 "초진?"으로 알린다.
+  if (!row.chartNo.trim() && !normalizePhone(row.mobile) && !normalizePhone(row.phone)) return '초진?';
   const key = reservationKey(row);
   const candidate = candidates.find((c) => {
     const candidateKey: PersonKey = { name: c.patientName, chartNo: c.chartNo, phones: [c.phone] };
@@ -59,4 +62,20 @@ export function visitMarkerFor(
   if (kind === '재초진') return '재초진';
   if (kind === '초진(추정)') return candidate.possibleHomonym ? '초진?' : '초진';
   return null;
+}
+
+/** "내일 예약 시트 인쇄" 요청 — 대상 날짜에 묶여 있고, 한 번 처리하면(id 기록) 다시 열리지 않는다. */
+export interface PrintRequest {
+  date: string;
+  id: number;
+}
+
+/** 이 날짜 화면이 지금 인쇄를 시작해야 하는가: 요청이 이 날짜 것이고, 불러오기가 끝났고, 아직 처리하지 않은 요청일 때만. */
+export function shouldStartPrint(
+  request: PrintRequest | null,
+  date: string,
+  loading: boolean,
+  handledId: number
+): boolean {
+  return request !== null && request.date === date && !loading && request.id !== handledId;
 }
