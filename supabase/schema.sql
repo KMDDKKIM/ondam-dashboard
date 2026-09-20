@@ -79,7 +79,7 @@ grant execute on function public.email_for_staff_name(text) to anon, authenticat
 create table if not exists happy_call_patients (
   id uuid primary key default gen_random_uuid(),
   patient_name text not null,
-  doctor_staff_id uuid references staff(id),
+  doctor_staff_id uuid references staff(id) on delete set null,
   patient_type text not null check (patient_type in ('건보', '자보', '비급여')),
   acupuncture_package_success text check (acupuncture_package_success in ('성공', '실패', '비포함')),
   first_visit_date date not null,
@@ -92,7 +92,7 @@ create table if not exists happy_call_patients (
   next_visit_note text,
   call_log text,
   memo text,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -132,7 +132,7 @@ create table if not exists herb_medicine_prescriptions (
   call_1_note text,
   call_2_note text,
   call_3_note text,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -155,7 +155,7 @@ create table if not exists diet_packages (
   id uuid primary key default gen_random_uuid(),
   patient_name text not null,
   detox_start_date date not null,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -204,7 +204,7 @@ create table if not exists happy_call_manual_entries (
   call_date date not null,
   done boolean not null default false,
   done_note text,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -223,7 +223,7 @@ create table if not exists herb_inventory (
   unit text not null default 'g',
   current_stock numeric not null default 0,
   low_stock_threshold numeric,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -249,7 +249,7 @@ create table if not exists herb_inventory_logs (
   change_type text not null check (change_type in ('use', 'restock')),
   amount numeric not null check (amount > 0),
   note text,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -286,7 +286,7 @@ create table if not exists non_covered_purchases (
   amount numeric,
   purchase_date date not null default current_date,
   memo text,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -336,7 +336,7 @@ create table if not exists daily_revenue (
   date date primary key,
   total_revenue numeric not null,
   source text not null check (source in ('daily', 'monthly')),
-  updated_by uuid references staff(id),
+  updated_by uuid references staff(id) on delete set null,
   updated_at timestamptz not null default now()
 );
 
@@ -367,7 +367,7 @@ create policy "authenticated can delete daily_revenue" on daily_revenue
 create table if not exists monthly_revenue_override (
   month text primary key, -- 'YYYY-MM'
   total_revenue numeric not null,
-  updated_by uuid references staff(id),
+  updated_by uuid references staff(id) on delete set null,
   updated_at timestamptz not null default now()
 );
 
@@ -394,7 +394,7 @@ create table if not exists consult_summaries (
   consult_date date not null default current_date,
   transcript text not null,
   summary text not null,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -421,10 +421,10 @@ create table if not exists todos (
   id uuid primary key default gen_random_uuid(),
   text text not null,
   due_date date not null default current_date,
-  assignee_staff_id uuid references staff(id),
+  assignee_staff_id uuid references staff(id) on delete set null,
   done boolean not null default false,
   done_at date,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -452,7 +452,7 @@ create table if not exists chat_rooms (
   name text not null,
   kind text not null check (kind in ('topic', 'chat')),
   is_public boolean not null default true,
-  created_by uuid references staff(id),
+  created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -519,7 +519,7 @@ create policy "staff can update own last_read_at" on chat_room_members
 create table if not exists chat_messages (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references chat_rooms(id) on delete cascade,
-  sender_id uuid references staff(id),
+  sender_id uuid references staff(id) on delete set null,
   content text,
   created_at timestamptz not null default now()
 );
@@ -707,12 +707,12 @@ create table if not exists supply_requests (
   item_name text not null,
   order_url text,
   memo text not null default '',
-  requested_by uuid references staff(id),
+  requested_by uuid references staff(id) on delete set null,
   requested_at timestamptz not null default now(),
   ordered_at timestamptz,
-  ordered_by uuid references staff(id),
+  ordered_by uuid references staff(id) on delete set null,
   received_at timestamptz,
-  received_by uuid references staff(id)
+  received_by uuid references staff(id) on delete set null
 );
 
 alter table supply_requests enable row level security;
@@ -840,3 +840,66 @@ alter table monthly_goals add column if not exists herb_adjust integer not null 
 alter table monthly_goals add column if not exists diet_adjust integer not null default 0;
 alter table monthly_goals add column if not exists special_herb_adjust integer not null default 0;
 alter table monthly_goals add column if not exists chuna_adjust integer not null default 0;
+
+-- 직원 삭제(퇴사/가입 거절) 지원.
+-- staff 행을 지워도 그 직원이 남긴 기록(환자·처방·결산·상담요약·채팅·신청 등)은
+-- 그대로 두고 "누가 했는지"만 비운다. staff(id)를 가리키는 외래키를 모두
+-- on delete set null 로 다시 만든다. (chat_room_members.staff_id 는 on delete
+-- cascade 그대로 — 채팅방 참여 정보만 같이 지워진다.)
+--
+-- 재실행해도 안전하다: 해당 컬럼의 staff 참조 외래키를 이름과 상관없이 찾아
+-- 지운 뒤 <table>_<column>_fkey 이름으로 다시 만든다. 아직 없는 테이블은 건너뛴다.
+do $$
+declare
+  targets text[][] := array[
+    ['happy_call_patients', 'doctor_staff_id'],
+    ['happy_call_patients', 'created_by'],
+    ['herb_medicine_prescriptions', 'created_by'],
+    ['diet_packages', 'created_by'],
+    ['happy_call_manual_entries', 'created_by'],
+    ['herb_inventory', 'created_by'],
+    ['herb_inventory_logs', 'created_by'],
+    ['non_covered_purchases', 'created_by'],
+    ['daily_revenue', 'updated_by'],
+    ['monthly_revenue_override', 'updated_by'],
+    ['consult_summaries', 'created_by'],
+    ['todos', 'assignee_staff_id'],
+    ['todos', 'created_by'],
+    ['chat_rooms', 'created_by'],
+    ['chat_messages', 'sender_id'],
+    ['supply_requests', 'requested_by'],
+    ['supply_requests', 'ordered_by'],
+    ['supply_requests', 'received_by']
+  ];
+  t text;
+  c text;
+  i int;
+  con record;
+begin
+  for i in 1 .. array_length(targets, 1) loop
+    t := targets[i][1];
+    c := targets[i][2];
+    if to_regclass('public.' || t) is null then
+      continue;
+    end if;
+
+    -- 이 컬럼에서 staff를 가리키는 기존 외래키(이름이 뭐든)를 모두 제거
+    for con in
+      select k.conname
+      from pg_constraint k
+      join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any (k.conkey)
+      where k.contype = 'f'
+        and k.conrelid = ('public.' || t)::regclass
+        and k.confrelid = 'public.staff'::regclass
+        and a.attname = c
+    loop
+      execute format('alter table public.%I drop constraint %I', t, con.conname);
+    end loop;
+
+    execute format(
+      'alter table public.%I add constraint %I foreign key (%I) references public.staff(id) on delete set null',
+      t, t || '_' || c || '_fkey', c
+    );
+  end loop;
+end
+$$;

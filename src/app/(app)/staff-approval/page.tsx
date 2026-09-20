@@ -10,6 +10,16 @@ interface StaffRow extends Staff {
   grade: StaffGrade;
 }
 
+const removeButtonStyle = {
+  padding: '6px 14px',
+  fontSize: 13,
+  borderRadius: 8,
+  border: '1px solid var(--color-error)',
+  background: 'transparent',
+  color: 'var(--color-error)',
+  cursor: 'pointer',
+} as const;
+
 export default function StaffApprovalPage() {
   const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const [pending, setPending] = useState<StaffRow[]>([]);
@@ -19,6 +29,7 @@ export default function StaffApprovalPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [pendingGrades, setPendingGrades] = useState<Record<string, AssignableGrade>>({});
   const [changingId, setChangingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -101,6 +112,35 @@ export default function StaffApprovalPage() {
     }
   }
 
+  async function handleRemove(staff: StaffRow, label: string) {
+    if (
+      !window.confirm(
+        `"${staff.name}" 님을 ${label}할까요?\n계정이 삭제되어 로그인할 수 없게 됩니다. 이 직원이 남긴 기록은 그대로 남지만 작성자 이름은 비워져요.`
+      )
+    ) {
+      return;
+    }
+    setRemovingId(staff.id);
+    setError('');
+    try {
+      const response = await fetch('/api/staff/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: staff.id }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(body.error ?? '삭제에 실패했습니다.');
+        return;
+      }
+      await load();
+    } catch {
+      setError('삭제에 실패했습니다. 네트워크 상태를 확인해주세요.');
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   if (loading) return <p className="muted-text">불러오는 중...</p>;
   if (!isOwner) return <p className="muted-text">원장만 볼 수 있는 화면이에요.</p>;
 
@@ -167,6 +207,13 @@ export default function StaffApprovalPage() {
                 >
                   승인
                 </button>
+                <button
+                  onClick={() => handleRemove(s, '가입 신청을 거절')}
+                  disabled={removingId === s.id || approvingId === s.id}
+                  style={removeButtonStyle}
+                >
+                  신청 거절
+                </button>
               </li>
             ))}
           </ul>
@@ -191,20 +238,29 @@ export default function StaffApprovalPage() {
               {s.role === 'owner' ? (
                 <span className="muted-text">대표원장</span>
               ) : (
-                <select
-                  className="input-field"
-                  value={s.grade}
-                  disabled={changingId === s.id}
-                  onChange={(event) => handleGradeChange(s.id, event.target.value as AssignableGrade)}
-                  style={{ width: 100, padding: '6px 10px' }}
-                  aria-label={`${s.name} 등급`}
-                >
-                  {ASSIGNABLE_GRADES.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    className="input-field"
+                    value={s.grade}
+                    disabled={changingId === s.id}
+                    onChange={(event) => handleGradeChange(s.id, event.target.value as AssignableGrade)}
+                    style={{ width: 100, padding: '6px 10px' }}
+                    aria-label={`${s.name} 등급`}
+                  >
+                    {ASSIGNABLE_GRADES.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => handleRemove(s, '삭제')}
+                    disabled={removingId === s.id}
+                    style={{ ...removeButtonStyle, marginLeft: 'auto' }}
+                  >
+                    삭제
+                  </button>
+                </>
               )}
             </li>
           ))}

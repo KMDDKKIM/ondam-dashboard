@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { validateSignupInput } from '@/lib/signupValidation';
 
 export async function POST(request: Request) {
-  const { name, password } = (await request.json()) as {
-    name?: string;
-    password?: string;
-  };
-
-  const trimmedName = name?.trim() ?? '';
-  if (!trimmedName) {
-    return NextResponse.json({ error: '이름을 입력해주세요.' }, { status: 400 });
+  const body = await request.json().catch(() => null);
+  const validation = validateSignupInput(body);
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
   }
-  if (!password || password.length < 8) {
-    return NextResponse.json(
-      { error: '비밀번호는 8자 이상이어야 합니다.' },
-      { status: 400 }
-    );
-  }
+  const { name: trimmedName, password } = validation.value;
 
   const admin = createAdminClient();
 

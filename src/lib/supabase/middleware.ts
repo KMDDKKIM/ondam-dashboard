@@ -28,7 +28,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const publicPaths = ['/login', '/signup'];
+  // /api/signup은 아직 계정이 없는 사람이 부르는 가입 신청 API라 세션 없이 열어둔다.
+  // 다른 API는 여기 넣지 않는다(기본은 로그인 필요).
+  const publicPaths = ['/login', '/signup', '/api/signup'];
 
   if (!user) {
     if (!publicPaths.includes(pathname)) {

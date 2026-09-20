@@ -72,6 +72,7 @@ export default function SignupPage() {
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="이름"
+            maxLength={20}
             className="input-field"
           />
           <input
