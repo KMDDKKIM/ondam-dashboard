@@ -11,14 +11,21 @@ import {
   setSupplyOrdered,
   setSupplyReceived,
 } from '@/lib/supabase/supplyRequests';
+import { todayKst } from '@/lib/kst';
 import {
   STATUS_LABEL,
   SUPPLY_CATEGORIES,
   SUPPLY_CATEGORY_HINT,
+  agingBadge,
+  countOpen,
+  findOpenDuplicates,
   formatDate,
   matchesFilter,
+  normalizeItemName,
   safeUrl,
+  sortOpenOldestFirst,
   supplyStatus,
+  type AgingLevel,
   type SupplyFilter,
 } from '@/lib/supplyHelpers';
 import type { Staff, SupplyItem, SupplyRequest } from '@/lib/types';
@@ -32,6 +39,12 @@ const FILTERS: { key: SupplyFilter; label: string }[] = [
   { key: 'received', label: '도착완료' },
   { key: 'all', label: '전체' },
 ];
+
+const AGING_COLOR: Record<AgingLevel, { bg: string; fg: string }> = {
+  none: { bg: 'var(--color-surface)', fg: 'var(--color-muted)' },
+  yellow: { bg: '#fdf0c8', fg: '#7a5a00' },
+  red: { bg: '#fbe0dd', fg: '#b3261e' },
+};
 
 const STATUS_COLOR = {
   requested: { bg: '#faf1de', fg: '#8a6a1f' },
@@ -57,6 +70,8 @@ export default function SupplyRequestsPage() {
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  // 같은 이름의 진행 중 신청이 있을 때 "그래도 신청" 확인을 기다리는 상태.
+  const [duplicates, setDuplicates] = useState<SupplyRequest[]>([]);
 
   async function load() {
     setError('');
@@ -105,14 +120,30 @@ export default function SupplyRequestsPage() {
     setOrderUrl(picked?.orderUrl ?? '');
   }
 
-  async function handleSubmit(e: FormEvent) {
+  const pickedItem = categoryItems.find((i) => i.id === itemChoice);
+  const currentItemName = (usingCustom ? customName : pickedItem?.name ?? '').trim();
+  const currentKey = normalizeItemName(currentItemName);
+
+  // 품목이 바뀌면 이전 중복 경고는 더 이상 유효하지 않다.
+  useEffect(() => {
+    setDuplicates([]);
+  }, [currentKey]);
+
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
-    const picked = categoryItems.find((i) => i.id === itemChoice);
-    const itemName = (usingCustom ? customName : picked?.name ?? '').trim();
-    if (!itemName) return setFormError('품목을 고르거나 입력해 주세요.');
+    if (!currentItemName) return setFormError('품목을 고르거나 입력해 주세요.');
     if (orderUrl.trim() && !safeUrl(orderUrl)) return setFormError('주문 링크가 올바르지 않아요.');
+    const found = findOpenDuplicates(currentItemName, requests);
+    if (found.length > 0) {
+      setDuplicates(sortOpenOldestFirst(found));
+      return;
+    }
+    submitRequest(currentItemName);
+  }
 
+  async function submitRequest(itemName: string) {
+    setDuplicates([]);
     setSubmitting(true);
     try {
       await createSupplyRequest(supabase, {
@@ -175,8 +206,11 @@ export default function SupplyRequestsPage() {
     run(() => deleteSupplyRequest(supabase, r.id));
   }
 
-  const visible = requests.filter((r) => matchesFilter(r, filter));
+  const today = todayKst();
+  const filtered = requests.filter((r) => matchesFilter(r, filter));
+  const visible = filter === 'open' ? sortOpenOldestFirst(filtered) : filtered;
   const counts = (key: SupplyFilter) => requests.filter((r) => matchesFilter(r, key)).length;
+  const openCounts = countOpen(requests);
 
   return (
     <div>
@@ -282,7 +316,58 @@ export default function SupplyRequestsPage() {
             </span>
           )}
         </div>
+        {duplicates.length > 0 && (
+          <div
+            role="alert"
+            style={{
+              marginTop: 14,
+              padding: 12,
+              borderRadius: 8,
+              border: '1px solid #e8c766',
+              background: '#fdf6df',
+              fontSize: 13,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>이미 신청된 물품이에요. 그래도 신청할까요?</div>
+            <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
+              {duplicates.map((d) => (
+                <li key={d.id}>
+                  {d.itemName} · {staffName(d.requestedBy) || '-'} · {formatDate(d.requestedAt)} 신청 · {STATUS_LABEL[supplyStatus(d)]}
+                  {d.memo ? ` · ${d.memo}` : ''}
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={submitting}
+                onClick={() => submitRequest(currentItemName)}
+                style={{ padding: '6px 14px', fontSize: 13 }}
+              >
+                그래도 신청
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicates([])}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 13,
+                  borderRadius: 8,
+                  border: '1px solid var(--color-line)',
+                  background: 'var(--color-surface)',
+                }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
       </form>
+
+      <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600 }}>
+        주문 대기 {openCounts.waitingOrder}건 · 도착 대기 {openCounts.waitingArrival}건
+      </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {FILTERS.map(({ key, label }) => (
@@ -324,6 +409,7 @@ export default function SupplyRequestsPage() {
             <tbody>
               {visible.map((r) => {
                 const status = supplyStatus(r);
+                const aging = agingBadge(status, r.requestedAt, r.orderedAt, today);
                 const link = safeUrl(r.orderUrl);
                 const canDelete = me?.isOwner || (me?.id === r.requestedBy && !r.orderedAt);
                 const cell = { padding: '10px 12px', borderBottom: '1px solid var(--color-line)', verticalAlign: 'top' } as const;
@@ -358,6 +444,23 @@ export default function SupplyRequestsPage() {
                       >
                         {STATUS_LABEL[status]}
                       </span>
+                      {aging && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            marginLeft: 6,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: AGING_COLOR[aging.level].bg,
+                            color: AGING_COLOR[aging.level].fg,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {aging.label}
+                        </span>
+                      )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
                         <div>
                           {r.orderedAt ? (
@@ -372,9 +475,22 @@ export default function SupplyRequestsPage() {
                               주문완료 체크
                             </button>
                           ) : (
-                            <span className="muted-text" style={{ fontSize: 12 }}>
-                              원장님 주문 대기 중
-                            </span>
+                            <button
+                              type="button"
+                              disabled
+                              title="대표원장이 주문 체크해요"
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: 12,
+                                borderRadius: 8,
+                                border: '1px solid var(--color-line)',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-muted)',
+                                cursor: 'not-allowed',
+                              }}
+                            >
+                              대표원장이 주문 체크해요
+                            </button>
                           )}
                         </div>
                         {r.orderedAt && (
