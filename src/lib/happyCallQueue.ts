@@ -41,6 +41,12 @@ export interface CallProgress {
   attempts: number;
   result: CallResult | null;
   closed: boolean;
+  /**
+   * 첫 부재중으로 예정일이 옮겨지기 전의 원래 예정일. 첫 부재중 되돌리기 때 이 날짜로 복원한다
+   * (연체 표시와 한약의 원래 call_date_N 을 지키기 위해). 종료 후에도 남겨 두어 두 단계 되돌리기가
+   * 가능하다; 시도가 0으로 돌아가면 비운다.
+   */
+  originalDue: string | null;
 }
 
 export function isClosedResult(result: CallResult | null): boolean {
@@ -58,45 +64,59 @@ export function tomorrowKst(today: string): string {
  * - no_answer: 이번이 2번째 시도면 unreachable 로 종료, 아니면 예정일을 내일로 미루고 열어 둔다.
  */
 export function applyCallAction(
-  current: { dueDate: string; attempts: number },
+  current: { dueDate: string; attempts: number; originalDue?: string | null },
   action: CallAction,
   today: string
 ): CallProgress {
   const attempts = current.attempts + 1;
   if (action === 'no_answer') {
     if (attempts >= MAX_ATTEMPTS) {
-      return { dueDate: current.dueDate, attempts, result: 'unreachable', closed: true };
+      return { dueDate: current.dueDate, attempts, result: 'unreachable', closed: true, originalDue: current.originalDue ?? null };
     }
-    return { dueDate: tomorrowKst(today), attempts, result: 'no_answer', closed: false };
+    return {
+      dueDate: tomorrowKst(today),
+      attempts,
+      result: 'no_answer',
+      closed: false,
+      // 이미 값이 있으면(미루기 뒤 재시도 등) 가장 처음 예정일을 지킨다.
+      originalDue: current.originalDue ?? current.dueDate,
+    };
   }
-  return { dueDate: current.dueDate, attempts, result: action, closed: true };
+  return { dueDate: current.dueDate, attempts, result: action, closed: true, originalDue: current.originalDue ?? null };
 }
 
 /** 내일로 미루기: 시도 횟수는 그대로, 예정일만 내일로. */
-export function postponeCall(current: { dueDate: string; attempts: number; result: CallResult | null }, today: string): CallProgress {
+export function postponeCall(
+  current: { dueDate: string; attempts: number; result: CallResult | null; originalDue?: string | null },
+  today: string
+): CallProgress {
   return {
     dueDate: tomorrowKst(today),
     attempts: current.attempts,
     result: current.result,
     closed: false,
+    originalDue: current.originalDue ?? null,
   };
 }
 
 /**
  * 되돌리기: 마지막 결과 기록을 취소해 한 단계 전 상태로.
- * 열려 있던 "부재중"(예정일이 내일로 옮겨진 상태)을 되돌리면 오늘 콜로 돌아온다.
- * 종료된 콜을 되돌리면 예정일은 그대로 두고(종료 시 바뀌지 않는다) 다시 열린다.
+ * 열려 있던 첫 "부재중"(예정일이 내일로 옮겨진 상태)을 되돌리면 원래 예정일로 복원한다
+ * (원래 예정일을 모르는 옛 데이터면 오늘). 종료된 콜을 되돌리면 예정일은 그대로 두고
+ * (종료 시 바뀌지 않는다) 다시 열린다.
  */
 export function undoCallAction(
-  current: { dueDate: string; attempts: number; result: CallResult | null },
+  current: { dueDate: string; attempts: number; result: CallResult | null; originalDue?: string | null },
   today: string
 ): CallProgress {
   const attempts = Math.max(0, current.attempts - 1);
+  const restoresFirstAttempt = current.result === 'no_answer' && attempts === 0;
   return {
-    dueDate: current.result === 'no_answer' ? today : current.dueDate,
+    dueDate: restoresFirstAttempt ? (current.originalDue ?? today) : current.dueDate,
     attempts,
     result: attempts > 0 ? 'no_answer' : null,
     closed: false,
+    originalDue: attempts > 0 ? (current.originalDue ?? null) : null,
   };
 }
 
@@ -117,14 +137,15 @@ export function firstVisitProgress(p: HappyCallPatient): CallProgress {
   const dueDate = p.callDueDate ?? addDaysKst(p.firstVisitDate, 1);
   const attempts = p.callAttempts ?? 0;
   const result = p.callResult ?? null;
+  const originalDue = p.callOriginalDue ?? null;
   if (result !== null) {
-    return { dueDate, attempts, result, closed: isClosedResult(result) };
+    return { dueDate, attempts, result, closed: isClosedResult(result), originalDue };
   }
   // 결과 기능이 생기기 전에 통화내역(call_log)만 적어 둔 옛 행은 통화 완료로 본다.
   if (p.callLog) {
-    return { dueDate, attempts, result: 'answered', closed: true };
+    return { dueDate, attempts, result: 'answered', closed: true, originalDue };
   }
-  return { dueDate, attempts, result: null, closed: false };
+  return { dueDate, attempts, result: null, closed: false, originalDue };
 }
 
 // --- 목록 ---
@@ -141,6 +162,8 @@ export interface WorklistItem {
   phone: string | null;
   doctorStaffId: string | null;
   dueDate: string;
+  /** 첫 부재중으로 옮겨지기 전의 예정일(되돌리기용) */
+  originalDue: string | null;
   attempts: number;
   result: CallResult | null;
   closed: boolean;

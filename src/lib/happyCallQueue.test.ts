@@ -46,6 +46,7 @@ function makeItem(overrides: Partial<WorklistItem> = {}): WorklistItem {
     phone: null,
     doctorStaffId: null,
     dueDate: '2026-09-20',
+    originalDue: null,
     attempts: 0,
     result: null,
     closed: false,
@@ -60,17 +61,17 @@ function makeItem(overrides: Partial<WorklistItem> = {}): WorklistItem {
 describe('applyCallAction', () => {
   it('closes the call on 통화완료 and keeps the due date', () => {
     const next = applyCallAction({ dueDate: '2026-09-20', attempts: 0 }, 'answered', '2026-09-20');
-    expect(next).toEqual({ dueDate: '2026-09-20', attempts: 1, result: 'answered', closed: true });
+    expect(next).toEqual({ dueDate: '2026-09-20', attempts: 1, result: 'answered', closed: true, originalDue: null });
   });
 
   it('closes the call on 거부/연락불가', () => {
     const next = applyCallAction({ dueDate: '2026-09-20', attempts: 0 }, 'refused', '2026-09-20');
-    expect(next).toEqual({ dueDate: '2026-09-20', attempts: 1, result: 'refused', closed: true });
+    expect(next).toEqual({ dueDate: '2026-09-20', attempts: 1, result: 'refused', closed: true, originalDue: null });
   });
 
   it('first 부재중 re-schedules the call for tomorrow and keeps it open', () => {
     const next = applyCallAction({ dueDate: '2026-09-20', attempts: 0 }, 'no_answer', '2026-09-20');
-    expect(next).toEqual({ dueDate: '2026-09-21', attempts: 1, result: 'no_answer', closed: false });
+    expect(next).toEqual({ dueDate: '2026-09-21', attempts: 1, result: 'no_answer', closed: false, originalDue: '2026-09-20' });
   });
 
   it('second 부재중 closes the call as 연락 안 됨', () => {
@@ -109,6 +110,7 @@ describe('postponeCall', () => {
       attempts: 0,
       result: null,
       closed: false,
+      originalDue: null,
     });
   });
 
@@ -127,7 +129,7 @@ describe('postponeCall', () => {
 describe('undoCallAction', () => {
   it('reopens a completed first call', () => {
     const done: CallProgress = applyCallAction({ dueDate: '2026-09-20', attempts: 0 }, 'answered', '2026-09-20');
-    expect(undoCallAction(done, '2026-09-20')).toEqual({ dueDate: '2026-09-20', attempts: 0, result: null, closed: false });
+    expect(undoCallAction(done, '2026-09-20')).toEqual({ dueDate: '2026-09-20', attempts: 0, result: null, closed: false, originalDue: null });
   });
 
   it('reopens a call closed by the second 부재중 back to the 1차 부재중 state', () => {
@@ -137,12 +139,48 @@ describe('undoCallAction', () => {
       attempts: 1,
       result: 'no_answer',
       closed: false,
+      originalDue: null,
     });
   });
 
-  it('undoing a first 부재중 brings the call back to today', () => {
+  it('undoing a first 부재중 brings the call back to its original due date', () => {
     const retry = applyCallAction({ dueDate: '2026-09-20', attempts: 0 }, 'no_answer', '2026-09-20');
-    expect(undoCallAction(retry, '2026-09-20')).toEqual({ dueDate: '2026-09-20', attempts: 0, result: null, closed: false });
+    expect(undoCallAction(retry, '2026-09-20')).toEqual({ dueDate: '2026-09-20', attempts: 0, result: null, closed: false, originalDue: null });
+  });
+
+  it('undoing a first 부재중 on an overdue call restores the old due date and keeps it overdue', () => {
+    // due 09-15, first 부재중 on 09-18 moves it to 09-19
+    const retry = applyCallAction({ dueDate: '2026-09-15', attempts: 0 }, 'no_answer', '2026-09-18');
+    expect(retry.dueDate).toBe('2026-09-19');
+    expect(retry.originalDue).toBe('2026-09-15');
+    const undone = undoCallAction(retry, '2026-09-18');
+    expect(undone.dueDate).toBe('2026-09-15');
+    expect(undone.attempts).toBe(0);
+    expect(undone.result).toBeNull();
+    expect(undone.originalDue).toBeNull();
+    expect(overdueDays(undone.dueDate, '2026-09-18')).toBe(3);
+    expect(isOpenAndDue(undone, '2026-09-18')).toBe(true);
+  });
+
+  it('falls back to today when the original due date is unknown (older data)', () => {
+    expect(undoCallAction({ dueDate: '2026-09-21', attempts: 1, result: 'no_answer' }, '2026-09-20').dueDate).toBe('2026-09-20');
+  });
+
+  it('keeps the original due date through the second 부재중 so both undo steps work', () => {
+    const first = applyCallAction({ dueDate: '2026-09-15', attempts: 0 }, 'no_answer', '2026-09-18');
+    const second = applyCallAction(first, 'no_answer', '2026-09-19');
+    expect(second.closed).toBe(true);
+    expect(second.originalDue).toBe('2026-09-15');
+    const undoSecond = undoCallAction(second, '2026-09-19');
+    expect(undoSecond).toEqual({ dueDate: '2026-09-19', attempts: 1, result: 'no_answer', closed: false, originalDue: '2026-09-15' });
+    expect(undoCallAction(undoSecond, '2026-09-19').dueDate).toBe('2026-09-15');
+  });
+
+  it('postponing after a 부재중 keeps the original due date', () => {
+    const first = applyCallAction({ dueDate: '2026-09-15', attempts: 0 }, 'no_answer', '2026-09-18');
+    const postponed = postponeCall(first, '2026-09-19');
+    expect(postponed.dueDate).toBe('2026-09-20');
+    expect(postponed.originalDue).toBe('2026-09-15');
   });
 
   it('never goes below zero attempts', () => {
@@ -171,12 +209,19 @@ describe('firstVisitProgress', () => {
       attempts: 0,
       result: null,
       closed: false,
+      originalDue: null,
     });
   });
 
   it('uses the stored due date and attempts after a 부재중', () => {
-    const p = makePatient({ callDueDate: '2026-09-19', callAttempts: 1, callResult: 'no_answer' });
-    expect(firstVisitProgress(p)).toEqual({ dueDate: '2026-09-19', attempts: 1, result: 'no_answer', closed: false });
+    const p = makePatient({ callDueDate: '2026-09-19', callOriginalDue: '2026-09-18', callAttempts: 1, callResult: 'no_answer' });
+    expect(firstVisitProgress(p)).toEqual({
+      dueDate: '2026-09-19',
+      attempts: 1,
+      result: 'no_answer',
+      closed: false,
+      originalDue: '2026-09-18',
+    });
   });
 
   it('treats a stored closed result as closed', () => {

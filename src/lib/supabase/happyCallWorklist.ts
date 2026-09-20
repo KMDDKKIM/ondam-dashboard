@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { listHappyCallPatients } from './happyCallPatients';
+import { listFirstVisitCallCandidates } from './happyCallPatients';
 import {
   applyCallAction,
   buildWorklist,
@@ -30,6 +30,8 @@ export class CallConflictError extends Error {
 interface CallColumns {
   table: string;
   due: string;
+  /** 첫 부재중으로 예정일을 옮기기 전의 원래 예정일(되돌리기용) */
+  originalDue: string;
   attempts: string;
   result: string;
   /** 종료 여부 boolean 컬럼. 초진은 없다(결과값으로 판단). */
@@ -45,6 +47,7 @@ function columnsFor(item: Pick<WorklistItem, 'kind' | 'callNumber'>): CallColumn
       return {
         table: 'happy_call_patients',
         due: 'call_due_date',
+        originalDue: 'call_original_due',
         attempts: 'call_attempts',
         result: 'call_result',
         done: null,
@@ -57,6 +60,7 @@ function columnsFor(item: Pick<WorklistItem, 'kind' | 'callNumber'>): CallColumn
       return {
         table: 'herb_medicine_prescriptions',
         due: `call_date_${n}`,
+        originalDue: `call_${n}_original_due`,
         attempts: `call_${n}_attempts`,
         result: `call_${n}_result`,
         done: `call_${n}_done`,
@@ -69,6 +73,7 @@ function columnsFor(item: Pick<WorklistItem, 'kind' | 'callNumber'>): CallColumn
       return {
         table: 'diet_package_calls',
         due: 'call_date',
+        originalDue: 'original_due',
         attempts: 'attempts',
         result: 'result',
         done: 'done',
@@ -80,6 +85,7 @@ function columnsFor(item: Pick<WorklistItem, 'kind' | 'callNumber'>): CallColumn
       return {
         table: 'happy_call_manual_entries',
         due: 'call_date',
+        originalDue: 'original_due',
         attempts: 'attempts',
         result: 'result',
         done: 'done',
@@ -117,6 +123,7 @@ function herbItems(row: HerbRow): WorklistItem[] {
       phone: null,
       doctorStaffId: null,
       dueDate: row[`call_date_${n}`] as string,
+      originalDue: (row[`call_${n}_original_due`] as string | null) ?? null,
       attempts: (row[`call_${n}_attempts`] as number | null) ?? 0,
       result,
       closed: done,
@@ -131,6 +138,7 @@ function herbItems(row: HerbRow): WorklistItem[] {
 interface SimpleCallRow {
   id: string;
   call_date: string;
+  original_due: string | null;
   done: boolean;
   attempts: number | null;
   result: CallResult | null;
@@ -191,7 +199,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
     );
   const dietQuery = supabase
     .from('diet_package_calls')
-    .select('id, call_date, done, note, attempts, result, completed_by, completed_at, diet_packages(patient_name)')
+    .select('id, call_date, original_due, done, note, attempts, result, completed_by, completed_at, diet_packages(patient_name)')
     .or(`and(done.eq.false,call_date.lte.${today}),completed_at.gte.${since}`);
   const manualQuery = supabase
     .from('happy_call_manual_entries')
@@ -202,7 +210,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
     herbQuery,
     dietQuery,
     manualQuery,
-    listHappyCallPatients(supabase),
+    listFirstVisitCallCandidates(supabase, since),
   ]);
   if (herb.error) throw herb.error;
   if (diet.error) throw diet.error;
@@ -225,6 +233,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         phone: null, // 초진 등록에는 아직 연락처가 없다(추후 등록 화면에서 받는다)
         doctorStaffId: p.doctorStaffId,
         dueDate: progress.dueDate,
+        originalDue: progress.originalDue,
         attempts: progress.attempts,
         result: progress.result,
         closed: progress.closed,
@@ -244,6 +253,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         phone: null,
         doctorStaffId: null,
         dueDate: c.call_date,
+        originalDue: c.original_due,
         attempts: c.attempts ?? 0,
         result: resultOf(c.result, c.done),
         closed: c.done,
@@ -262,6 +272,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         phone: phones.get(m.id) ?? null,
         doctorStaffId: null,
         dueDate: m.call_date,
+        originalDue: m.original_due,
         attempts: m.attempts ?? 0,
         result: resultOf(m.result, m.done),
         closed: m.done,
@@ -290,6 +301,7 @@ export async function listStaffNames(supabase: SupabaseClient): Promise<Record<s
 function progressPatch(cols: CallColumns, next: CallProgress): Record<string, unknown> {
   const patch: Record<string, unknown> = {
     [cols.due]: next.dueDate,
+    [cols.originalDue]: next.originalDue,
     [cols.attempts]: next.attempts,
     [cols.result]: next.result,
   };
@@ -315,7 +327,11 @@ async function updateCall(
   if (!data || data.length === 0) throw new CallConflictError();
 }
 
-/** 초진 콜은 종료 시 기존 "통화내역(call_log)"에도 한 줄 남겨 초진 등록 화면과 맞춘다. */
+/**
+ * 초진 콜은 종료 시 기존 "통화내역(call_log)"에도 한 줄 남겨 초진 등록 화면과 맞춘다.
+ * 단 직원이 등록 화면에 이미 적어 둔 통화내역은 덮어쓰지 않고(비어 있을 때만 쓴다),
+ * 되돌릴 때도 이 함수가 만든 문구와 똑같을 때만 지운다 — 직원이 직접 쓴 내용은 건드리지 않는다.
+ */
 function firstVisitCallLog(result: CallResult, memo: string): string {
   const label = CALL_RESULT_LABEL[result];
   return memo ? `${label}: ${memo}` : label;
@@ -336,10 +352,15 @@ export async function recordCallResult(
     [cols.by]: options.staffId,
     [cols.at]: (options.now ?? new Date()).toISOString(),
   };
-  if (item.kind === 'firstVisit' && next.result && isClosedResult(next.result)) {
-    patch.call_log = firstVisitCallLog(next.result, memo);
-  }
   await updateCall(supabase, item, cols, patch);
+  if (item.kind === 'firstVisit' && next.result && isClosedResult(next.result)) {
+    // 통화내역 한 줄은 편의 기능이라 실패해도 결과 기록 자체는 유효하다(에러로 만들지 않는다).
+    await supabase
+      .from('happy_call_patients')
+      .update({ call_log: firstVisitCallLog(next.result, memo) })
+      .eq('id', item.id)
+      .is('call_log', null);
+  }
 }
 
 export async function postponeCallToTomorrow(supabase: SupabaseClient, item: WorklistItem, today: string): Promise<void> {
@@ -356,7 +377,16 @@ export async function undoCallResult(supabase: SupabaseClient, item: WorklistIte
     [cols.by]: null,
     [cols.at]: null,
   };
-  // 종료하면서 남긴 통화내역 한 줄도 함께 지운다(다시 열린 콜이 "통화 완료"로 남지 않도록).
-  if (item.kind === 'firstVisit') patch.call_log = null;
+  // 종료하면서 우리가 남긴 통화내역 한 줄만 지운다(다시 열린 콜이 "통화 완료"로 남지 않도록).
+  // 문구가 다르면 직원이 직접 적은 것이므로 그대로 둔다. 결과 기록 갱신보다 먼저 지워서, 갱신이
+  // 실패해도 "종료됐는데 통화내역만 사라진" 쪽으로만 어긋나게 한다.
+  if (item.kind === 'firstVisit' && item.closed && item.result) {
+    const { error } = await supabase
+      .from('happy_call_patients')
+      .update({ call_log: null })
+      .eq('id', item.id)
+      .eq('call_log', firstVisitCallLog(item.result, item.memo ?? ''));
+    if (error) throw error;
+  }
   await updateCall(supabase, item, cols, patch);
 }

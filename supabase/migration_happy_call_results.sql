@@ -55,3 +55,13 @@ alter table happy_call_manual_entries add column if not exists result text
   check (result in ('answered', 'no_answer', 'refused', 'unreachable'));
 alter table happy_call_manual_entries add column if not exists completed_by uuid references staff(id) on delete set null;
 alter table happy_call_manual_entries add column if not exists completed_at timestamptz;
+
+-- 첫 부재중으로 예정일이 다음날로 옮겨지기 전의 원래 예정일. 첫 부재중을 되돌릴 때
+-- 이 날짜로 복원한다(연체 표시 유지, 한약의 call_date_N 을 영구히 바꾸지 않기 위해).
+-- 초진은 call_original_due, 한약은 call_N_original_due, 그 외는 original_due.
+alter table happy_call_patients add column if not exists call_original_due date;
+alter table herb_medicine_prescriptions add column if not exists call_1_original_due date;
+alter table herb_medicine_prescriptions add column if not exists call_2_original_due date;
+alter table herb_medicine_prescriptions add column if not exists call_3_original_due date;
+alter table diet_package_calls add column if not exists original_due date;
+alter table happy_call_manual_entries add column if not exists original_due date;

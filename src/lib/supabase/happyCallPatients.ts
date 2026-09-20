@@ -20,6 +20,7 @@ interface HappyCallPatientRow {
   created_by: string | null;
   created_at: string;
   call_due_date?: string | null;
+  call_original_due?: string | null;
   call_attempts?: number | null;
   call_result?: 'answered' | 'no_answer' | 'refused' | 'unreachable' | null;
   call_completed_by?: string | null;
@@ -47,6 +48,7 @@ function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
     createdBy: row.created_by,
     createdAt: row.created_at,
     callDueDate: row.call_due_date ?? null,
+    callOriginalDue: row.call_original_due ?? null,
     callAttempts: row.call_attempts ?? 0,
     callResult: row.call_result ?? null,
     callCompletedBy: row.call_completed_by ?? null,
@@ -63,6 +65,33 @@ export async function listHappyCallPatients(supabase: SupabaseClient): Promise<H
     .limit(300);
   if (error) throw error;
   return (data as HappyCallPatientRow[]).map(rowToPatient);
+}
+
+// 해피콜 목록용: 등록일과 상관없이 "아직 열려 있는" 초진 콜(결과도 통화내역도 없거나 부재중 대기 중)과
+// 오늘 결과를 기록한 콜만 읽는다. 행 수로 자르지 않으므로 오래된 연체 콜이 조용히 빠지지 않는다
+// (PostgREST 한 번에 1000행 제한은 페이지를 넘기며 끝까지 읽는다).
+export async function listFirstVisitCallCandidates(
+  supabase: SupabaseClient,
+  processedSinceIso: string
+): Promise<HappyCallPatient[]> {
+  const PAGE = 1000;
+  const rows: HappyCallPatientRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('happy_call_patients')
+      .select('*')
+      .or(
+        `and(call_result.is.null,call_log.is.null),call_result.eq.no_answer,call_completed_at.gte.${processedSinceIso}`
+      )
+      .order('first_visit_date', { ascending: false })
+      .order('id')
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as HappyCallPatientRow[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows.map(rowToPatient);
 }
 
 export interface NewHappyCallPatient {
