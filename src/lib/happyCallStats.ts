@@ -38,6 +38,31 @@ export function computeDietCallDates(detoxStartDate: string): string[] {
   return dates;
 }
 
+// 삼진 = 초진 후 3주(21일) 안에 3번 내원. 재내원 1~3이 모두 있고, 세 번째 내원일이
+// 초진일 + 21일 이내여야 한다(그보다 늦게 채워진 3번째 내원은 삼진이 아니다).
+export function isTripleVisit(p: HappyCallPatient): boolean {
+  if (!p.revisit1 || !p.revisit2 || !p.revisit3) return false;
+  const latest = [p.revisit1, p.revisit2, p.revisit3].reduce((a, b) => (a > b ? a : b));
+  return daysBetween(p.firstVisitDate, latest) <= MATURITY_DAYS;
+}
+
+// 성숙(21일 경과)한 환자인데 재내원 날짜가 하나도 안 적혀 있는 환자 — 이탈로 잡히기 전에
+// 실제로는 왔는데 입력이 안 된 것일 수 있어 대조를 요청한다.
+export function countUnreconciledRevisits(patients: HappyCallPatient[], referenceDate: string): number {
+  return patients.filter(
+    (p) =>
+      daysBetween(p.firstVisitDate, referenceDate) >= MATURITY_DAYS &&
+      !p.revisit1 &&
+      !p.revisit2 &&
+      !p.revisit3
+  ).length;
+}
+
+/** 오늘(KST) 이전에 끝난 가장 최근 월~일 주. 오늘이 일요일이어도 아직 안 끝난 이번 주가 아니라 지난주다. */
+export function lastCompletedWeekRange(today: string): { start: string; end: string } {
+  return getWeekRange(addDays(getWeekRange(today).start, -1));
+}
+
 export interface FirstVisitStats {
   patientCount: number;
   revisitRate: number;
@@ -64,9 +89,7 @@ export function computeFirstVisitStats(
   const matureCount = mature.length;
 
   const dropoutCount = mature.filter((p) => p.revisit1 === null).length;
-  const tripleCount = mature.filter(
-    (p) => p.revisit1 !== null && p.revisit2 !== null && p.revisit3 !== null
-  ).length;
+  const tripleCount = mature.filter(isTripleVisit).length;
 
   return {
     patientCount,

@@ -26,6 +26,9 @@ interface HappyCallPatientRow {
   call_completed_by?: string | null;
   call_completed_at?: string | null;
   call_memo?: string | null;
+  chart_no?: string | null;
+  phone?: string | null;
+  visit_kind?: '초진' | '재초진' | null;
 }
 
 function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
@@ -54,6 +57,9 @@ function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
     callCompletedBy: row.call_completed_by ?? null,
     callCompletedAt: row.call_completed_at ?? null,
     callMemo: row.call_memo ?? null,
+    chartNo: row.chart_no ?? null,
+    phone: row.phone ?? null,
+    visitKind: row.visit_kind === '재초진' ? '재초진' : '초진',
   };
 }
 
@@ -94,12 +100,25 @@ export async function listFirstVisitCallCandidates(
   return rows.map(rowToPatient);
 }
 
+// 특정 날짜(초진일)에 등록된 환자 전부 — 후보 목록의 "이미 등록됨" 표시와 누락 대조용.
+export async function listHappyCallPatientsByFirstVisitDate(
+  supabase: SupabaseClient,
+  date: string
+): Promise<HappyCallPatient[]> {
+  const { data, error } = await supabase.from('happy_call_patients').select('*').eq('first_visit_date', date);
+  if (error) throw error;
+  return ((data ?? []) as HappyCallPatientRow[]).map(rowToPatient);
+}
+
 export interface NewHappyCallPatient {
   patientName: string;
   doctorStaffId: string | null;
   patientType: '건보' | '자보' | '비급여';
   firstVisitDate: string;
   createdBy: string | null;
+  visitKind?: '초진' | '재초진';
+  chartNo?: string | null;
+  phone?: string | null;
 }
 
 export async function createHappyCallPatient(
@@ -114,6 +133,9 @@ export async function createHappyCallPatient(
       patient_type: input.patientType,
       first_visit_date: input.firstVisitDate,
       created_by: input.createdBy,
+      visit_kind: input.visitKind ?? '초진',
+      chart_no: input.chartNo?.trim() || null,
+      phone: input.phone?.trim() || null,
     })
     .select()
     .single();
@@ -126,6 +148,9 @@ export type HappyCallPatientPatch = Partial<{
   doctorStaffId: string | null;
   patientType: '건보' | '자보' | '비급여';
   firstVisitDate: string;
+  visitKind: '초진' | '재초진';
+  chartNo: string | null;
+  phone: string | null;
   revisit1: string | null;
   revisit2: string | null;
   revisit3: string | null;
@@ -148,6 +173,9 @@ export async function updateHappyCallPatient(
   if ('doctorStaffId' in patch) dbPatch.doctor_staff_id = patch.doctorStaffId;
   if ('patientType' in patch) dbPatch.patient_type = patch.patientType;
   if ('firstVisitDate' in patch) dbPatch.first_visit_date = patch.firstVisitDate;
+  if ('visitKind' in patch) dbPatch.visit_kind = patch.visitKind;
+  if ('chartNo' in patch) dbPatch.chart_no = patch.chartNo;
+  if ('phone' in patch) dbPatch.phone = patch.phone;
   if ('revisit1' in patch) dbPatch.revisit_1 = patch.revisit1;
   if ('revisit2' in patch) dbPatch.revisit_2 = patch.revisit2;
   if ('revisit3' in patch) dbPatch.revisit_3 = patch.revisit3;
@@ -161,4 +189,11 @@ export async function updateHappyCallPatient(
 
   const { error } = await supabase.from('happy_call_patients').update(dbPatch).eq('id', id);
   if (error) throw error;
+}
+
+// 삭제 정책(RLS)이 없거나 막히면 PostgREST 는 에러 없이 0행을 지운다 — 그 경우를 실패로 다룬다.
+export async function deleteHappyCallPatient(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from('happy_call_patients').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제되지 않았습니다.');
 }

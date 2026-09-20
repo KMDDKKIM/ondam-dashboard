@@ -230,7 +230,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         kind: 'firstVisit',
         id: p.id,
         patientName: p.patientName,
-        phone: null, // 초진 등록에는 아직 연락처가 없다(추후 등록 화면에서 받는다)
+        phone: p.phone ?? null,
         doctorStaffId: p.doctorStaffId,
         dueDate: progress.dueDate,
         originalDue: progress.originalDue,

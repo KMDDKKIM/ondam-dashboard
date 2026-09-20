@@ -4,7 +4,10 @@ import {
   computeDietCallDates,
   computeFirstVisitStats,
   computeWeeklyTrend,
+  countUnreconciledRevisits,
   getWeekRange,
+  isTripleVisit,
+  lastCompletedWeekRange,
 } from './happyCallStats';
 import type { HappyCallPatient } from './types';
 
@@ -149,5 +152,57 @@ describe('getWeekRange', () => {
     const { start, end } = getWeekRange('2026-09-18');
     expect(new Date(start).getUTCDay()).toBe(1);
     expect(new Date(end).getUTCDay()).toBe(0);
+  });
+});
+
+describe('isTripleVisit (3 visits within 21 days after the first visit)', () => {
+  const base = { firstVisitDate: '2026-09-01' };
+
+  it('accepts a third visit exactly 21 days after the first', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-22' }))).toBe(true);
+  });
+
+  it('rejects a third visit on day 22', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-23' }))).toBe(false);
+  });
+
+  it('rejects when any revisit is missing', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10' }))).toBe(false);
+  });
+
+  it('is judged by the latest date even if the revisit columns are out of order', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-30', revisit2: '2026-09-05', revisit3: '2026-09-10' }))).toBe(false);
+  });
+
+  it('feeds tripleVisitRate: a late third visit is not a triple', () => {
+    const late = makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-25' });
+    const stats = computeFirstVisitStats([late], '2026-10-01');
+    expect(stats.matureCount).toBe(1);
+    expect(stats.tripleVisitRate).toBe(0);
+    expect(stats.dropoutRate).toBe(0);
+  });
+});
+
+describe('countUnreconciledRevisits', () => {
+  it('counts only matured patients with no revisit date at all', () => {
+    const patients = [
+      makePatient({ id: 'a', firstVisitDate: '2026-08-20' }), // matured, empty
+      makePatient({ id: 'b', firstVisitDate: '2026-08-20', revisit2: '2026-09-01' }), // has a date
+      makePatient({ id: 'c', firstVisitDate: '2026-09-15' }), // not matured
+      makePatient({ id: 'd', firstVisitDate: '2026-08-30' }), // exactly 21 days
+    ];
+    expect(countUnreconciledRevisits(patients, '2026-09-20')).toBe(2);
+  });
+});
+
+describe('lastCompletedWeekRange', () => {
+  it('returns the previous Mon-Sun week on a Sunday (the current week is not over)', () => {
+    expect(lastCompletedWeekRange('2026-09-20')).toEqual({ start: '2026-09-07', end: '2026-09-13' });
+  });
+  it('returns the previous week on a Monday', () => {
+    expect(lastCompletedWeekRange('2026-09-21')).toEqual({ start: '2026-09-14', end: '2026-09-20' });
+  });
+  it('returns the previous week midweek', () => {
+    expect(lastCompletedWeekRange('2026-09-23')).toEqual({ start: '2026-09-14', end: '2026-09-20' });
   });
 });

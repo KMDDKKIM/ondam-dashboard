@@ -30,6 +30,10 @@ export interface HappyCallPatient {
   callCompletedBy?: string | null;
   callCompletedAt?: string | null;
   callMemo?: string | null;
+  // 예약 명단에서 가져온 차트번호/연락처, 초진/재초진 구분(없으면 초진).
+  chartNo?: string | null;
+  phone?: string | null;
+  visitKind?: '초진' | '재초진';
 }
 
 export interface HerbMedicinePrescription {

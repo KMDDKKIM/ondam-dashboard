@@ -1,37 +1,40 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   listHappyCallPatients,
+  listHappyCallPatientsByFirstVisitDate,
   createHappyCallPatient,
   updateHappyCallPatient,
+  deleteHappyCallPatient,
 } from '@/lib/supabase/happyCallPatients';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
-import { addDays } from '@/lib/happyCallStats';
+import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
+import { addDays, countUnreconciledRevisits } from '@/lib/happyCallStats';
+import { todayKst } from '@/lib/kst';
 
 const MATURITY_DAYS = 21;
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
+const VISIT_KINDS = ['초진', '재초진'] as const;
 const PACKAGE_OPTIONS = ['성공', '실패', '비포함'] as const;
 
 const cellStyle = { border: '1px solid #ddd', padding: 4, fontSize: 13 };
 const selectStyle = { fontSize: 13, padding: 2, width: '100%' };
 const textInputStyle = { fontSize: 13, padding: 3, width: '100%', border: 'none', background: 'transparent' };
 
-function todayISO(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
+// 맨 아래 등록 줄. 구분/진료의는 일부러 비워 둔다 — 기본값이 들어간 채 저장되는 일이 없도록
+// 이름 + 진료의 + 구분을 모두 골라야만 등록된다.
 function emptyDraft() {
   return {
     patientName: '',
     doctorStaffId: '',
-    patientType: '건보' as HappyCallPatient['patientType'],
-    firstVisitDate: todayISO(),
+    patientType: '' as HappyCallPatient['patientType'] | '',
+    visitKind: '초진' as HappyCallPatient['visitKind'],
+    phone: '',
+    firstVisitDate: todayKst(),
   };
 }
 
@@ -43,20 +46,37 @@ export default function HappyCallRegisterPage() {
   const [draft, setDraft] = useState(emptyDraft());
   const [saving, setSaving] = useState(false);
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
+  const [candidateDate, setCandidateDate] = useState(todayKst());
+  const [registeredOnDate, setRegisteredOnDate] = useState<HappyCallPatient[]>([]);
+  const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
 
   const highlightFirstVisitDate = highlightDate ? addDays(highlightDate, -MATURITY_DAYS) : null;
+  const today = todayKst();
+  const unreconciledCount = useMemo(() => countUnreconciledRevisits(patients, today), [patients, today]);
+  const visiblePatients = useMemo(
+    () =>
+      onlyUnreconciled
+        ? patients.filter(
+            (p) =>
+              p.firstVisitDate <= addDays(today, -MATURITY_DAYS) && !p.revisit1 && !p.revisit2 && !p.revisit3
+          )
+        : patients,
+    [patients, onlyUnreconciled, today]
+  );
 
   const supabase = createClient();
 
-  async function load() {
+  async function load(forDate = candidateDate) {
     setLoading(true);
     try {
-      const [patientRows, staffResult] = await Promise.all([
+      const [patientRows, staffResult, registered] = await Promise.all([
         listHappyCallPatients(supabase),
         supabase.from('staff').select('id, name, role').eq('status', 'approved'),
+        listHappyCallPatientsByFirstVisitDate(supabase, forDate),
       ]);
       setPatients(patientRows);
       setStaffList((staffResult.data ?? []) as Staff[]);
+      setRegisteredOnDate(registered);
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
@@ -69,24 +89,58 @@ export default function HappyCallRegisterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 맨 아래 빈 줄에 이름과 초진일만 채워지면 바로 환자로 저장하고, 다음 사람을
-  // 바로 입력할 수 있도록 또 빈 줄을 남긴다 — 구글시트처럼 언제든 이어서 입력.
-  async function commitDraftIfReady(next = draft) {
-    if (!next.patientName.trim() || !next.firstVisitDate || saving) return;
+  async function handleCandidateDateChange(date: string) {
+    setCandidateDate(date);
+    try {
+      setRegisteredOnDate(await listHappyCallPatientsByFirstVisitDate(supabase, date));
+    } catch {
+      setError('불러오기에 실패했습니다.');
+    }
+  }
+
+  // 후보 목록에서 한 번에 등록 — 예약 명단의 차트번호·연락처와 그 날짜(초진일)를 그대로 옮긴다.
+  async function handleRegisterCandidate(reg: CandidateRegistration) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    await createHappyCallPatient(supabase, {
+      patientName: reg.candidate.patientName,
+      doctorStaffId: reg.doctorStaffId,
+      patientType: reg.patientType,
+      firstVisitDate: candidateDate,
+      createdBy: user?.id ?? null,
+      visitKind: reg.visitKind,
+      chartNo: reg.candidate.chartNo || null,
+      phone: reg.candidate.phone || null,
+    });
+    await load(candidateDate);
+  }
+
+  const draftReady = Boolean(
+    draft.patientName.trim() && draft.doctorStaffId && draft.patientType && draft.firstVisitDate
+  );
+
+  // 이름 + 진료의 + 구분이 다 정해졌을 때만 등록한다. 칸을 옮겨 다니는 것만으로는(blur)
+  // 절대 저장되지 않는다 — Enter 나 "등록" 버튼으로만.
+  async function commitDraft() {
+    if (!draftReady || saving || draft.patientType === '') return;
     setSaving(true);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       await createHappyCallPatient(supabase, {
-        patientName: next.patientName.trim(),
-        doctorStaffId: next.doctorStaffId || null,
-        patientType: next.patientType,
-        firstVisitDate: next.firstVisitDate,
+        patientName: draft.patientName.trim(),
+        doctorStaffId: draft.doctorStaffId,
+        patientType: draft.patientType,
+        firstVisitDate: draft.firstVisitDate,
         createdBy: user?.id ?? null,
+        visitKind: draft.visitKind,
+        phone: draft.phone,
       });
       setDraft(emptyDraft());
-      await load();
+      setError('');
+      await load(candidateDate);
     } catch {
       setError('저장에 실패했습니다.');
     } finally {
@@ -94,11 +148,12 @@ export default function HappyCallRegisterPage() {
     }
   }
 
-  type TextField = 'revisit1' | 'revisit2' | 'revisit3' | 'jaboHerb1' | 'jaboHerb2' | 'jaboHerb3' | 'nextVisitNote' | 'callLog' | 'memo';
+  type TextField = 'revisit1' | 'revisit2' | 'revisit3' | 'jaboHerb1' | 'jaboHerb2' | 'jaboHerb3' | 'nextVisitNote' | 'callLog' | 'memo' | 'phone' | 'chartNo';
 
   async function handleFieldUpdate(id: string, field: TextField, value: string) {
-    await updateHappyCallPatient(supabase, id, { [field]: value || null });
-    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value || null } : p)));
+    const next = value.trim() || null;
+    await updateHappyCallPatient(supabase, id, { [field]: next });
+    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: next } : p)));
   }
 
   async function handleNameUpdate(id: string, value: string) {
@@ -124,13 +179,31 @@ export default function HappyCallRegisterPage() {
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, patientType: value } : p)));
   }
 
+  async function handleKindUpdate(id: string, value: '초진' | '재초진') {
+    await updateHappyCallPatient(supabase, id, { visitKind: value });
+    setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, visitKind: value } : p)));
+  }
+
   async function handleSuccessUpdate(id: string, value: '성공' | '실패' | '비포함' | '') {
     const acupunctureSuccess = value === '' ? null : value;
     await updateHappyCallPatient(supabase, id, { acupunctureSuccess });
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, acupunctureSuccess } : p)));
   }
 
-  if (loading) return <p>불러오는 중...</p>;
+  async function handleDelete(p: HappyCallPatient) {
+    if (!window.confirm(`${p.patientName} (${p.firstVisitDate}) 등록을 삭제할까요? 되돌릴 수 없어요.`)) return;
+    try {
+      await deleteHappyCallPatient(supabase, p.id);
+      setError('');
+      await load(candidateDate);
+    } catch {
+      setError('삭제하지 못했어요. 이미 지워졌거나 권한이 없을 수 있어요.');
+    }
+  }
+
+  if (loading && patients.length === 0) return <p>불러오는 중...</p>;
+
+  const draftHint = draftReady ? 'Enter 또는 등록 버튼으로 저장돼요' : '이름 + 진료의 + 구분을 고르면 등록할 수 있어요';
 
   return (
     <div>
@@ -140,14 +213,51 @@ export default function HappyCallRegisterPage() {
       {/* 이 페이지는 AppMain의 WIDE_PATHS에 들어 있어 1100px 폭 제한 없이 화면 가로
           전체를 쓴다 — 표 칸이 많아서(성함~메모) 최대한 스크롤 없이 보이게 하려는 것. */}
       <div>
+        <FirstVisitCandidates
+          date={candidateDate}
+          onDateChange={handleCandidateDateChange}
+          staffList={staffList}
+          registered={registeredOnDate}
+          onRegister={handleRegisterCandidate}
+        />
+
         <HappyCallStatsPanel patients={patients} staffList={staffList} onDateClick={setHighlightDate} />
 
+        {unreconciledCount > 0 && (
+          <div
+            style={{
+              marginTop: 20,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#fff3cd',
+              color: '#7a5b00',
+              fontSize: 14,
+              fontWeight: 700,
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            재내원 미입력 {unreconciledCount}명
+            <span style={{ fontWeight: 400, fontSize: 12 }}>
+              초진 후 3주가 지났는데 재내원 날짜가 하나도 없어요. 실제로 왔다면 입력해 주세요(안 적힌 채로는 이탈로 계산돼요).
+            </span>
+            <button type="button" onClick={() => setOnlyUnreconciled((v) => !v)} style={{ fontSize: 12, padding: '2px 8px' }}>
+              {onlyUnreconciled ? '전체 보기' : '이 환자만 보기'}
+            </button>
+          </div>
+        )}
+
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1500, width: '100%', maxWidth: 1700, margin: '0 auto' }}>
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 2000, width: '100%', margin: '0 auto' }}>
         <colgroup>
           <col style={{ width: 110 }} />
           <col style={{ width: 85 }} />
           <col style={{ width: 70 }} />
+          <col style={{ width: 75 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 80 }} />
           <col style={{ width: 90 }} />
           <col style={{ width: 170 }} />
           <col style={{ width: 170 }} />
@@ -159,18 +269,19 @@ export default function HappyCallRegisterPage() {
           <col style={{ width: 95 }} />
           <col style={{ width: 95 }} />
           <col style={{ width: 140 }} />
+          <col style={{ width: 60 }} />
         </colgroup>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
-            {['성함', '진료의', '구분', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모'].map((h) => (
-              <th key={h} style={{ ...cellStyle, textAlign: 'left' }}>
+            {['성함', '진료의', '구분', '초진/재초진', '연락처', '차트번호', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모', ''].map((h, i) => (
+              <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left' }}>
                 {h}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {patients.map((p) => (
+          {visiblePatients.map((p) => (
             <tr
               key={p.id}
               style={
@@ -206,6 +317,21 @@ export default function HappyCallRegisterPage() {
                 </select>
               </td>
               <td style={cellStyle}>
+                <select value={p.visitKind ?? '초진'} onChange={(e) => handleKindUpdate(p.id, e.target.value as '초진' | '재초진')} style={selectStyle}>
+                  {VISIT_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td style={cellStyle}>
+                <input defaultValue={p.phone ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'phone', e.target.value)} style={textInputStyle} />
+              </td>
+              <td style={cellStyle}>
+                <input defaultValue={p.chartNo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'chartNo', e.target.value)} style={textInputStyle} />
+              </td>
+              <td style={cellStyle}>
                 <select value={p.acupunctureSuccess ?? ''} onChange={(e) => handleSuccessUpdate(p.id, e.target.value as '성공' | '실패' | '비포함' | '')} style={selectStyle}>
                   <option value=""></option>
                   {PACKAGE_OPTIONS.map((o) => (
@@ -237,18 +363,22 @@ export default function HappyCallRegisterPage() {
               <td style={cellStyle}>
                 <input defaultValue={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={textInputStyle} />
               </td>
+              <td style={cellStyle}>
+                <button type="button" onClick={() => handleDelete(p)} style={{ fontSize: 12, padding: '2px 6px', color: '#b3261e' }}>
+                  삭제
+                </button>
+              </td>
             </tr>
           ))}
 
-          {/* 언제든 이어서 입력할 수 있는 빈 줄 — 이름과 초진일이 채워지면 바로 저장되고 다시 빈 줄이 남는다. */}
+          {/* 등록 줄 — 이름 + 진료의 + 구분을 모두 고르고 Enter 또는 "등록"을 눌러야 저장된다(칸을 옮기는 것만으로는 저장되지 않음). */}
           <tr style={{ background: '#fafdf9' }}>
             <td style={cellStyle}>
               <input
                 value={draft.patientName}
                 onChange={(e) => setDraft((d) => ({ ...d, patientName: e.target.value }))}
-                onBlur={() => commitDraftIfReady()}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitDraftIfReady();
+                  if (e.key === 'Enter') commitDraft();
                 }}
                 placeholder="+ 환자 이름"
                 style={textInputStyle}
@@ -271,9 +401,10 @@ export default function HappyCallRegisterPage() {
             <td style={cellStyle}>
               <select
                 value={draft.patientType}
-                onChange={(e) => setDraft((d) => ({ ...d, patientType: e.target.value as HappyCallPatient['patientType'] }))}
+                onChange={(e) => setDraft((d) => ({ ...d, patientType: e.target.value as HappyCallPatient['patientType'] | '' }))}
                 style={selectStyle}
               >
+                <option value="">구분</option>
                 {PATIENT_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -281,19 +412,50 @@ export default function HappyCallRegisterPage() {
                 ))}
               </select>
             </td>
-            <td style={cellStyle} colSpan={3} className="muted-text">
-              이름 + 초진일 입력하면 자동 저장돼요
+            <td style={cellStyle}>
+              <select
+                value={draft.visitKind ?? '초진'}
+                onChange={(e) => setDraft((d) => ({ ...d, visitKind: e.target.value as '초진' | '재초진' }))}
+                style={selectStyle}
+              >
+                {VISIT_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </td>
+            <td style={cellStyle}>
+              <input
+                value={draft.phone}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitDraft();
+                }}
+                placeholder="연락처(선택)"
+                style={textInputStyle}
+              />
+            </td>
+            <td style={cellStyle} colSpan={4} className="muted-text">
+              <button
+                type="button"
+                onClick={commitDraft}
+                disabled={!draftReady || saving}
+                style={{ fontSize: 13, padding: '3px 12px', fontWeight: 700, marginRight: 8 }}
+              >
+                등록
+              </button>
+              {draftHint}
             </td>
             <td style={cellStyle}>
               <input
                 type="date"
                 value={draft.firstVisitDate}
                 onChange={(e) => setDraft((d) => ({ ...d, firstVisitDate: e.target.value }))}
-                onBlur={() => commitDraftIfReady()}
                 style={textInputStyle}
               />
             </td>
-            <td style={cellStyle} colSpan={7}></td>
+            <td style={cellStyle} colSpan={8}></td>
           </tr>
         </tbody>
       </table>

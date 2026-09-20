@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { computeFirstVisitStats, computeWeeklyTrend, getWeekRange } from '@/lib/happyCallStats';
+import { addDays, computeFirstVisitStats, computeWeeklyTrend, getWeekRange, lastCompletedWeekRange } from '@/lib/happyCallStats';
+import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
 const TYPE_FILTERS: (HappyCallPatient['patientType'] | '')[] = ['', '건보', '자보', '비급여'];
@@ -12,12 +13,6 @@ const TYPE_FILTER_LABEL: Record<HappyCallPatient['patientType'] | '', string> = 
   비급여: '비급여',
 };
 
-function todayISO(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 function formatPercent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
@@ -27,6 +22,7 @@ function formatMaturityGatedPercent(rate: number, matureCount: number): string {
 }
 
 const cellStyle = { border: '1px solid #eee', padding: '3px 6px', fontSize: 11 };
+const weekButtonStyle = { padding: '3px 10px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', fontSize: 11, fontWeight: 600 } as const;
 const cardStyle = { flex: '1 1 260px', minWidth: 260, padding: 10 } as const;
 
 interface HappyCallStatsPanelProps {
@@ -36,10 +32,11 @@ interface HappyCallStatsPanelProps {
 }
 
 export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyCallStatsPanelProps) {
-  const [referenceDate, setReferenceDate] = useState(todayISO());
+  // 처음엔 가장 최근에 끝난 한 주(월~일)를 보여 준다 — 이번 주는 3주 성숙 전이라 이탈/삼진이 늘 "-"가 되기 때문.
+  const [referenceDate, setReferenceDate] = useState(() => lastCompletedWeekRange(todayKst()).start);
   const [doctorId, setDoctorId] = useState('');
   const [typeFilter, setTypeFilter] = useState<HappyCallPatient['patientType'] | ''>('');
-  const today = todayISO();
+  const today = todayKst();
 
   useEffect(() => {
     onDateClick?.(referenceDate);
@@ -110,6 +107,12 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
         <span style={{ fontSize: 11, color: '#888' }}>
           {start} ~ {end}
         </span>
+        <button type="button" onClick={() => setReferenceDate(lastCompletedWeekRange(today).start)} style={weekButtonStyle}>
+          지난주
+        </button>
+        <button type="button" onClick={() => setReferenceDate(today)} style={weekButtonStyle}>
+          이번주
+        </button>
         <div style={{ display: 'flex', gap: 4 }}>
           {TYPE_FILTERS.map((t) => (
             <button
@@ -132,9 +135,13 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
         </div>
       </div>
 
+      <p style={{ fontSize: 11, color: '#888', margin: '0 0 8px' }}>
+        초진에는 재초진(마지막 내원 후 3개월 이상)도 포함돼요. 이탈률·삼진율은 초진 후 3주가 지난 환자만 집계하며(삼진 = 초진 후 3주 안에 3번 내원),
+        이 주의 마지막 환자는 {addDays(end, 21)} 부터 집계돼요.
+      </p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div className="card" style={cardStyle}>
-          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>이번주 ({doctorLabel} / 전체)</div>
+          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>{start.slice(5)} ~ {end.slice(5)} 주 ({doctorLabel} / 전체)</div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
               <tr>
@@ -201,7 +208,7 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
         </div>
 
         <div className="card" style={cardStyle}>
-          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>환자구분별 (이번주)</div>
+          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>환자구분별 (선택한 주)</div>
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
               <tr>

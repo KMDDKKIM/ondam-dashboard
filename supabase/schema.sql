@@ -997,3 +997,16 @@ alter table herb_medicine_prescriptions add column if not exists call_2_original
 alter table herb_medicine_prescriptions add column if not exists call_3_original_due date;
 alter table diet_package_calls add column if not exists original_due date;
 alter table happy_call_manual_entries add column if not exists original_due date;
+
+-- 초진환자 등록: 차트번호·연락처·초진/재초진 구분 + 삭제 권한 (migration_happy_call_first_visit.sql)
+alter table happy_call_patients add column if not exists chart_no text;
+alter table happy_call_patients add column if not exists phone text;
+alter table happy_call_patients add column if not exists visit_kind text not null default '초진';
+
+alter table happy_call_patients drop constraint if exists happy_call_patients_visit_kind_check;
+alter table happy_call_patients add constraint happy_call_patients_visit_kind_check
+  check (visit_kind in ('초진', '재초진'));
+
+drop policy if exists "authenticated can delete happy_call_patients" on happy_call_patients;
+create policy "authenticated can delete happy_call_patients" on happy_call_patients
+  for delete to authenticated using (public.is_approved_staff());
