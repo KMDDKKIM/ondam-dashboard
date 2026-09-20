@@ -112,12 +112,12 @@ export default function StaffApprovalPage() {
     }
   }
 
-  async function handleRemove(staff: StaffRow, label: string) {
-    if (
-      !window.confirm(
-        `"${staff.name}" 님을 ${label}할까요?\n계정이 삭제되어 로그인할 수 없게 됩니다. 이 직원이 남긴 기록은 그대로 남지만 작성자 이름은 비워져요.`
-      )
-    ) {
+  async function handleRemove(staff: StaffRow) {
+    const message =
+      staff.status === 'pending'
+        ? `"${staff.name}" 님의 가입 신청을 거절할까요?`
+        : `"${staff.name}" 님을 삭제할까요?\n계정이 삭제되어 로그인할 수 없게 됩니다. 이 직원이 남긴 기록은 남고 작성자 이름만 지워져요.`;
+    if (!window.confirm(message)) {
       return;
     }
     setRemovingId(staff.id);
@@ -208,7 +208,7 @@ export default function StaffApprovalPage() {
                   승인
                 </button>
                 <button
-                  onClick={() => handleRemove(s, '가입 신청을 거절')}
+                  onClick={() => handleRemove(s)}
                   disabled={removingId === s.id || approvingId === s.id}
                   style={removeButtonStyle}
                 >
@@ -254,7 +254,7 @@ export default function StaffApprovalPage() {
                     ))}
                   </select>
                   <button
-                    onClick={() => handleRemove(s, '삭제')}
+                    onClick={() => handleRemove(s)}
                     disabled={removingId === s.id}
                     style={{ ...removeButtonStyle, marginLeft: 'auto' }}
                   >

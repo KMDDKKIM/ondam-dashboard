@@ -60,3 +60,8 @@ begin
   end loop;
 end
 $$;
+
+-- 직원 이름은 로그인 아이디로 쓰이므로 중복을 DB가 막는다(가입 API의 사전 조회와
+-- insert 사이에 같은 이름이 끼어드는 경우까지 방어). 이미 같은 이름이 둘 이상
+-- 있으면 이 문장이 실패하니 먼저 정리한 뒤 실행한다.
+create unique index if not exists staff_name_unique on staff (name);

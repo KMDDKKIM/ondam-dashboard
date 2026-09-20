@@ -3,6 +3,9 @@ import { randomBytes } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { validateSignupInput } from '@/lib/signupValidation';
 
+const DUPLICATE_NAME_MESSAGE =
+  '이미 사용 중인 이름입니다. 같은 이름이 있다면 원장님께 문의해주세요.';
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const validation = validateSignupInput(body);
@@ -22,10 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: existingError.message }, { status: 500 });
   }
   if (existing) {
-    return NextResponse.json(
-      { error: '이미 사용 중인 이름입니다. 같은 이름이 있다면 원장님께 문의해주세요.' },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: DUPLICATE_NAME_MESSAGE }, { status: 409 });
   }
 
   // 로그인은 이름으로 하고, 이메일은 Supabase Auth가 요구해서 넣는 내부용 값일
@@ -56,6 +56,11 @@ export async function POST(request: Request) {
     // staff 정보가 없는 상태(미들웨어가 pending과 동일하게 막긴 하지만 지저분함)를
     // 남기지 않는다.
     await admin.auth.admin.deleteUser(created.user.id);
+    // 위 사전 조회와 insert 사이에 같은 이름이 들어온 경우(staff_name_unique 위반)도
+    // 사전 조회와 같은 409로 돌려준다.
+    if (staffInsertError.code === '23505') {
+      return NextResponse.json({ error: DUPLICATE_NAME_MESSAGE }, { status: 409 });
+    }
     return NextResponse.json({ error: staffInsertError.message }, { status: 500 });
   }
 

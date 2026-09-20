@@ -48,10 +48,22 @@ export async function POST(request: Request) {
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(staffId);
   if (deleteError) {
-    return NextResponse.json(
-      { error: `직원을 삭제하지 못했습니다. ${deleteError.message}` },
-      { status: 500 }
-    );
+    // auth 계정은 이미 없는데 staff 행만 남은 경우(고아 행)는 staff 행을 직접 지워 정리한다.
+    const authUserMissing =
+      deleteError.status === 404 || /not.?found/i.test(deleteError.message);
+    if (!authUserMissing) {
+      return NextResponse.json(
+        { error: `직원을 삭제하지 못했습니다. ${deleteError.message}` },
+        { status: 500 }
+      );
+    }
+    const { error: staffDeleteError } = await admin.from('staff').delete().eq('id', staffId);
+    if (staffDeleteError) {
+      return NextResponse.json(
+        { error: `직원을 삭제하지 못했습니다. ${staffDeleteError.message}` },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json({ ok: true });
