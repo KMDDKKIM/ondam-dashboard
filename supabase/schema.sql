@@ -381,8 +381,9 @@ create policy "authenticated can delete daily_revenue" on daily_revenue
 -- 날짜별로 지우고 다시 채우는 대신 별도 테이블로 둔 이유: 월말결산표에는 날짜별
 -- 내역이 없고 그 달 합계 한 줄뿐이라, 굳이 "월 1일에 몰아서 기록" 같은 억지
 -- 날짜를 만들면 나중에 그 날짜로 당일결산을 다시 붙여넣을 때 덮어써져 버린다.
--- getMonthlySummary()는 이 값이 있으면 daily_revenue 합계 대신 이 값을 쓴다 —
--- 그래서 "월결산을 다시 넣으면 리셋"이 이 테이블 upsert 하나로 끝난다.
+-- getMonthlySummary()는 이 값을 기준일(as_of_date)까지의 누계로 보고, 기준일 이후의
+-- daily_revenue를 더해서 그 달 총매출을 만든다 — "월결산을 다시 넣으면 리셋"은
+-- 이 테이블 upsert 하나로 끝난다.
 create table if not exists monthly_revenue_override (
   month text primary key, -- 'YYYY-MM'
   total_revenue numeric not null,
@@ -796,6 +797,15 @@ create policy "authenticated can delete herb_inventory" on herb_inventory
 -- 홈의 "일평균 환자수"를 결산표 기준으로 계산하기 위한 칸이다(월말결산 > 일일결산 누적).
 alter table daily_revenue add column if not exists visit_count integer;
 alter table monthly_revenue_override add column if not exists avg_daily_visits numeric;
+
+-- 월말결산의 기준일 — 월말결산 값은 이 날짜까지의 누계이고, 그 뒤 일일결산이 더해진다
+-- (migration_override_as_of.sql). null이면 예전 방식(월말결산 값만 사용).
+alter table monthly_revenue_override add column if not exists as_of_date date;
+-- 2026-09 행 기준일 보정(2026-09-19 월말결산 붙여넣기분, 이미 있으면 그대로 둠).
+update monthly_revenue_override
+   set as_of_date = date '2026-09-19'
+ where month = '2026-09'
+   and as_of_date is null;
 
 -- 총매출/일평균 환자수 목표
 -- 이번달 총매출 목표와 일평균 환자수 목표. 기존 한약/다이어트/특수한약/추나 목표와

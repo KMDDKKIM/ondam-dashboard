@@ -33,7 +33,15 @@ export type PasteAnalysis =
       /** 숫자가 아닌 값이 들어 있던 칸(예: "총진료비: '12a,000'"). 비어 있지 않으면 저장하지 말고 알려야 한다. */
       invalidCells: string[];
     }
-  | { format: 'monthly'; month: string; totalRevenue: number; avgDailyVisits: number | null; invalidCells: string[] }
+  | {
+      format: 'monthly';
+      month: string;
+      totalRevenue: number;
+      avgDailyVisits: number | null;
+      /** 붙여넣은 표의 일자별 행(일자/내원/총진료비) 중 그 달의 가장 늦은 날짜. 일자 행이 없으면 null(→ 저장할 때 오늘 날짜를 기준일로 쓴다). */
+      latestDate: string | null;
+      invalidCells: string[];
+    }
   | { format: 'unknown'; reason: string };
 
 // OK차트 "일일 결산표"/"월말 결산표"가 공유하는 진료비 요약 헤더 — 헤더 바로 다음
@@ -140,6 +148,17 @@ function tryParseReservation(rows: string[][]): PasteAnalysis | null {
   return { format: 'reservation', groups };
 }
 
+// 월말결산표 아래쪽의 일자별 행("2026-09-19  18  1610250 ...")에서 그 달의 가장 늦은 날짜.
+// 월말결산 값이 어느 날짜까지의 누계인지(기준일)를 알아내는 데 쓴다.
+function latestDateInMonth(rows: string[][], month: string): string | null {
+  let latest: string | null = null;
+  for (const row of rows) {
+    const cell = (row[0] ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cell) && cell.startsWith(`${month}-`) && (latest == null || cell > latest)) latest = cell;
+  }
+  return latest;
+}
+
 // 일일/월말 결산표 둘 다 "내원환자수 ... 총진료비 ... 환자부담계 ... 미수금" 헤더
 // 바로 아래에 합계 한 줄이 온다. 제목 줄(헤더보다 위)의 "진료날짜:YYYY-MM-DD"면
 // 당일결산, "월:YYYY-MM"(또는 "(YYYY-MM)월", "월말")이면 월결산으로 구분한다.
@@ -180,7 +199,9 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
     context.match(/월\s*[:：]\s*(\d{4}-\d{2})/) ?? context.match(/\((\d{4}-\d{2})\)\s*월/);
   if (monthlyMatch || context.includes('월말')) {
     const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
-    if (month) return { format: 'monthly', month, totalRevenue, avgDailyVisits, invalidCells };
+    if (month) {
+      return { format: 'monthly', month, totalRevenue, avgDailyVisits, latestDate: latestDateInMonth(rows.slice(headerIdx + 2), month), invalidCells };
+    }
   }
 
   // 제목 표기가 위 어느 쪽도 아니어도, 헤더 위에 날짜(YYYY-MM-DD)가 하나 있으면 그 날짜로 본다.

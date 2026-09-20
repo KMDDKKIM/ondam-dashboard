@@ -270,6 +270,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
             goal={summary.totalRevenueGoal}
             unit="원"
             pace={revenuePace(summary.totalRevenue, summary.totalRevenueGoal, summary.month, new Date())}
+            footer={<RevenueNotes summary={summary} compact={compact} />}
           >
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
           </StatTile>
@@ -282,6 +283,11 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
           >
             {summary.avgDailyVisits != null ? `${summary.avgDailyVisits}명` : '데이터 없음'}
           </StatTile>
+          {summary.averageTicket != null && (
+            <StatTile label="객단가" compact={compact} title="총진료비 ÷ 총 내원 인원">
+              {summary.averageTicket.toLocaleString()}원
+            </StatTile>
+          )}
         </div>
 
         <div
@@ -321,6 +327,35 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
   );
 }
 
+// 총매출 아래 안내 — 기준일 없는 월말결산 경고, 목표 달성/남은 금액/필요 일평균/월말 예상/지난달 대비.
+// 매출·목표는 모든 직원에게 보인다(권한 구분 없음).
+function RevenueNotes({ summary, compact }: { summary: MonthlySummary; compact?: boolean }) {
+  const { legacyOverride, motivation } = summary;
+  if (!legacyOverride && motivation.lines.length === 0) return null;
+  const fontSize = compact ? 10 : 12;
+  return (
+    <div style={{ marginTop: compact ? 4 : 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {legacyOverride && (
+        <div style={{ fontSize, color: 'var(--color-orange)', fontWeight: 600 }}>
+          월말결산 값이 있어 일일 마감이 합산되지 않아요 (기준일 없음)
+        </div>
+      )}
+      {motivation.lines.map((line, i) => (
+        <div
+          key={i}
+          className={i === 0 && motivation.reached ? undefined : 'muted-text'}
+          style={{
+            fontSize,
+            ...(i === 0 && motivation.reached ? { fontWeight: 700, color: 'var(--color-green)' } : {}),
+          }}
+        >
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function StatTile({
   label,
   compact,
@@ -330,6 +365,7 @@ export function StatTile({
   unit = '',
   pace = null,
   title,
+  footer,
 }: {
   label: string;
   compact?: boolean;
@@ -339,6 +375,7 @@ export function StatTile({
   unit?: string;
   pace?: 'behind' | 'onTrack' | null;
   title?: string;
+  footer?: ReactNode;
 }) {
   const percent = achievementPercent(achieved, goal);
   return (
@@ -392,6 +429,7 @@ export function StatTile({
           )}
         </div>
       )}
+      {footer}
     </div>
   );
 }

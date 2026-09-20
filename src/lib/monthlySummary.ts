@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { resolveMonthlyFigures } from '@/lib/monthlyFigures';
+import { computeMonthFigures, revenueMotivation, type DailyFigure, type MonthlyOverrideFigure } from '@/lib/monthlyFigures';
+import { addDaysKst, todayKst } from '@/lib/kst';
 import { computeReservationRates } from '@/lib/reservationRates';
 import { getWeekRange } from '@/lib/reservations/dashboardStats';
 
@@ -8,6 +9,12 @@ export interface MonthlySummary {
   month: string;
   avgDailyVisits: number | null;
   totalRevenue: number | null;
+  // 객단가 = 총진료비 ÷ 총 내원 인원(원). 내원 인원을 모르거나 0이면 null(화면에서 숨김).
+  averageTicket: number | null;
+  // 월말결산 값은 있는데 기준일이 없어 일일 마감이 합산되지 않는 옛 행이면 true(화면에 경고).
+  legacyOverride: boolean;
+  // 총매출 아래에 보여줄 동기부여 문구(목표 달성 여부 + 문구 목록). 항상 모든 직원에게 보인다.
+  motivation: { reached: boolean; lines: string[] };
   // 총매출 / 일평균 환자수 목표(대표원장이 입력). 없으면 null.
   totalRevenueGoal: number | null;
   avgDailyVisitsGoal: number | null;
@@ -29,9 +36,13 @@ interface DailyRecordRow {
   diet_count: number | null;
 }
 
+// 서버 시간대와 상관없이 한국 기준 이번 달.
 function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return todayKst().slice(0, 7);
+}
+
+function previousMonthOf(month: string): string {
+  return addDaysKst(`${month}-01`, -1).slice(0, 7);
 }
 
 function monthRange(month: string): { monthStart: string; monthEnd: string } {
@@ -40,6 +51,34 @@ function monthRange(month: string): { monthStart: string; monthEnd: string } {
   const next = new Date(y, m, 1);
   const monthEnd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
   return { monthStart, monthEnd };
+}
+
+// 그 달 일일결산(날짜별)과 월말결산(있으면)을 읽어 computeMonthFigures 입력 모양으로 돌려준다.
+async function loadMonthFigures(
+  admin: ReturnType<typeof createAdminClient>,
+  month: string,
+  revenueRows: { date: string; total_revenue: unknown; visit_count: unknown }[]
+): Promise<{ daily: DailyFigure[]; override: MonthlyOverrideFigure | null }> {
+  const { data: overrideRow, error } = await admin
+    .from('monthly_revenue_override')
+    .select('total_revenue, avg_daily_visits, as_of_date')
+    .eq('month', month)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    daily: revenueRows.map((r) => ({
+      date: r.date,
+      totalRevenue: Number(r.total_revenue) || 0,
+      visitCount: r.visit_count != null ? Number(r.visit_count) : null,
+    })),
+    override: overrideRow
+      ? {
+          totalRevenue: Number(overrideRow.total_revenue),
+          avgDailyVisits: overrideRow.avg_daily_visits != null ? Number(overrideRow.avg_daily_visits) : null,
+          asOfDate: overrideRow.as_of_date ?? null,
+        }
+      : null,
+  };
 }
 
 // 예약관리 앱(kh-ondam-reservation)의 daily_records/monthly_goals를 읽는다.
@@ -96,15 +135,21 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     .lt('date', monthEnd);
   if (revenueError) throw revenueError;
 
-  // 월말결산이 들어온 적 있으면(monthly_revenue_override) 총매출·일평균 환자수 모두
-  // 그 값이 항상 우선한다 — 일일결산을 누적한 값은 환불 등으로 어긋날 수 있어서
-  // 월말결산표가 더 정확한 원본이다("중간 수정 시 리셋").
-  const { data: overrideRow, error: overrideError } = await admin
-    .from('monthly_revenue_override')
-    .select('total_revenue, avg_daily_visits')
-    .eq('month', month)
-    .maybeSingle();
-  if (overrideError) throw overrideError;
+  // 월말결산(monthly_revenue_override)은 기준일(as_of_date)까지의 누계다 — 그 달 총매출은
+  // 월말결산 + 기준일 이후 일일결산 합계이고, 월말결산표를 다시 붙여넣으면 리셋된다.
+  // 기준일이 없는 옛 행만 예전처럼 월말결산 값이 일일결산을 대체한다(monthlyFigures.ts).
+  const monthlyFigures = await loadMonthFigures(admin, month, revenueRows ?? []);
+
+  // 지난달 같은 날 대비 문구용 — 지난달 일일결산과 지난달 총매출.
+  const prevMonth = previousMonthOf(month);
+  const prevRange = monthRange(prevMonth);
+  const { data: prevRevenueRows, error: prevRevenueError } = await admin
+    .from('daily_revenue')
+    .select('date, total_revenue, visit_count')
+    .gte('date', prevRange.monthStart)
+    .lt('date', prevRange.monthEnd);
+  if (prevRevenueError) throw prevRevenueError;
+  const prevFigures = await loadMonthFigures(admin, prevMonth, prevRevenueRows ?? []);
 
   const rows = (records ?? []) as DailyRecordRow[];
   const sum = (key: keyof DailyRecordRow) => rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
@@ -129,25 +174,25 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
   const recordedDays = rows.length;
   const avgFromReservations = recordedDays > 0 ? Math.round((totalVisits / recordedDays) * 10) / 10 : null;
 
-  const { totalRevenue, avgDailyVisits } = resolveMonthlyFigures(
-    (revenueRows ?? []).map((r) => ({
-      totalRevenue: Number(r.total_revenue) || 0,
-      visitCount: r.visit_count != null ? Number(r.visit_count) : null,
-    })),
-    overrideRow
-      ? {
-          totalRevenue: Number(overrideRow.total_revenue),
-          avgDailyVisits: overrideRow.avg_daily_visits != null ? Number(overrideRow.avg_daily_visits) : null,
-        }
-      : null,
-    avgFromReservations
-  );
+  const figures = computeMonthFigures(month, monthlyFigures.daily, monthlyFigures.override, avgFromReservations);
+  const totalRevenueGoal = goalsRow?.revenue_goal != null ? Number(goalsRow.revenue_goal) : null;
+  const prevTotal = computeMonthFigures(prevMonth, prevFigures.daily, prevFigures.override, null).totalRevenue;
 
   return {
     month,
-    avgDailyVisits,
-    totalRevenue,
-    totalRevenueGoal: goalsRow?.revenue_goal != null ? Number(goalsRow.revenue_goal) : null,
+    avgDailyVisits: figures.avgDailyVisits,
+    totalRevenue: figures.totalRevenue,
+    averageTicket: figures.averageTicket,
+    legacyOverride: figures.legacyOverride,
+    motivation: revenueMotivation({
+      month,
+      today: todayKst(),
+      totalRevenue: figures.totalRevenue,
+      goal: totalRevenueGoal,
+      dataThrough: figures.dataThrough,
+      previous: { month: prevMonth, daily: prevFigures.daily, totalRevenue: prevTotal },
+    }),
+    totalRevenueGoal,
     avgDailyVisitsGoal: goalsRow?.avg_visits_goal != null ? Number(goalsRow.avg_visits_goal) : null,
     goals: {
       herb: {

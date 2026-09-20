@@ -63,11 +63,15 @@ function MonthlySettlementSection() {
   const totalRevenue = analysis?.format === 'monthly' ? analysis.totalRevenue : null;
   const avgDailyVisits = analysis?.format === 'monthly' ? analysis.avgDailyVisits : null;
   const invalidCells = analysis?.format === 'monthly' ? analysis.invalidCells : [];
+  // 기준일 = 붙여넣은 표의 마지막 일자, 없으면 오늘(한국 날짜). 이 날짜까지는 월결산 값이 맞고 그 뒤 일일결산이 더해진다.
+  const asOfDate = analysis?.format === 'monthly' ? (analysis.latestDate ?? todayKst()) : null;
   const formatError = analysis && analysis.format !== 'monthly';
 
   async function handleSave() {
-    if (totalRevenue == null || !month || invalidCells.length > 0) return;
-    const ok = window.confirm(`${month}의 총매출을 ${totalRevenue.toLocaleString()}원으로 다시 채웁니다. 계속할까요?`);
+    if (totalRevenue == null || !month || !asOfDate || invalidCells.length > 0) return;
+    const ok = window.confirm(
+      `${month}의 총매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원으로 다시 채웁니다. 그 뒤 일일 마감이 여기에 더해져요. 계속할까요?`
+    );
     if (!ok) return;
     setSaving(true);
     setError('');
@@ -76,9 +80,9 @@ function MonthlySettlementSection() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      await upsertMonthlyOverride(supabase, month, totalRevenue, avgDailyVisits, user?.id ?? null);
+      await upsertMonthlyOverride(supabase, month, totalRevenue, avgDailyVisits, asOfDate, user?.id ?? null);
       setResult(
-        `${month} 매출을 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
+        `${month} 매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
       );
       setText('');
       await loadHistory();
@@ -95,7 +99,7 @@ function MonthlySettlementSection() {
         <span>📆</span>
         <span>월결산 입력</span>
         <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>
-          — 이번달 총매출·일평균 환자수를 일일결산 누적보다 우선해서 결정해요
+          — 붙여넣은 표의 마지막 날짜까지의 값으로 잡고, 그 뒤 일일 마감은 여기에 더해져요
         </span>
       </div>
 
@@ -113,7 +117,7 @@ function MonthlySettlementSection() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13 }}>
             {month} 총매출 {totalRevenue.toLocaleString()}원
-            {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} 확인됨
+            {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} · 기준일 {asOfDate} 확인됨
           </span>
           <button onClick={handleSave} disabled={saving || invalidCells.length > 0} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
@@ -129,7 +133,7 @@ function MonthlySettlementSection() {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {history.map((h) => (
               <li key={h.month} className="muted-text" style={{ fontSize: 12, background: 'var(--color-surface-2)', borderRadius: 8, padding: '4px 10px' }}>
-                {h.month} · {h.totalRevenue.toLocaleString()}원{h.avgDailyVisits != null ? ` · 일평균 ${h.avgDailyVisits}명` : ''} · 저장 {formatSavedAt(h.updatedAt)}
+                {h.month} · {h.totalRevenue.toLocaleString()}원{h.avgDailyVisits != null ? ` · 일평균 ${h.avgDailyVisits}명` : ''}{h.asOfDate ? ` · ${h.asOfDate}까지` : ' · 기준일 없음'} · 저장 {formatSavedAt(h.updatedAt)}
               </li>
             ))}
           </ul>

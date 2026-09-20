@@ -79,13 +79,14 @@ export interface MonthlyOverrideRow {
   month: string;
   totalRevenue: number;
   avgDailyVisits: number | null;
+  asOfDate: string | null;
   updatedAt: string;
 }
 
 export async function listRecentMonthlyOverrides(supabase: SupabaseClient, limit = 6): Promise<MonthlyOverrideRow[]> {
   const { data, error } = await supabase
     .from('monthly_revenue_override')
-    .select('month, total_revenue, avg_daily_visits, updated_at')
+    .select('month, total_revenue, avg_daily_visits, as_of_date, updated_at')
     .order('month', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -93,17 +94,21 @@ export async function listRecentMonthlyOverrides(supabase: SupabaseClient, limit
     month: row.month,
     totalRevenue: Number(row.total_revenue),
     avgDailyVisits: row.avg_daily_visits != null ? Number(row.avg_daily_visits) : null,
+    asOfDate: row.as_of_date ?? null,
     updatedAt: row.updated_at,
   }));
 }
 
-// 월결산 붙여넣기 — 그 달 총매출을 통째로 덮어쓴다("중간 수정 시 리셋"). 다시
-// 붙여넣으면 그냥 같은 달 값을 갱신(upsert)하는 것뿐이라 몇 번을 넣어도 안전하다.
+// 월결산 붙여넣기 — 그 달 총매출의 "기준일까지의 누계"를 통째로 덮어쓴다("중간 수정 시 리셋").
+// asOfDate는 붙여넣은 표의 마지막 일자(없으면 붙여넣은 날의 한국 날짜)이고, 그 이후에
+// 들어오는 일일결산만 여기에 더해진다(monthlyFigures.ts). 다시 붙여넣으면 같은 달 값을
+// 갱신(upsert)하는 것뿐이라 몇 번을 넣어도 안전하다.
 export async function upsertMonthlyOverride(
   supabase: SupabaseClient,
   month: string,
   totalRevenue: number,
   avgDailyVisits: number | null,
+  asOfDate: string,
   updatedBy: string | null
 ): Promise<void> {
   const { error } = await supabase.from('monthly_revenue_override').upsert(
@@ -111,6 +116,7 @@ export async function upsertMonthlyOverride(
       month,
       total_revenue: totalRevenue,
       avg_daily_visits: avgDailyVisits,
+      as_of_date: asOfDate,
       updated_by: updatedBy,
       updated_at: new Date().toISOString(),
     },
