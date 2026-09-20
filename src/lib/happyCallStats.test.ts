@@ -3,7 +3,6 @@ import {
   computeHerbCallDates,
   computeDietCallDates,
   computeFirstVisitStats,
-  listPendingFirstVisitCalls,
   computeWeeklyTrend,
   getWeekRange,
 } from './happyCallStats';
@@ -118,26 +117,6 @@ describe('computeFirstVisitStats', () => {
     const stats = computeFirstVisitStats(patients, '2026-09-22');
     expect(stats.revisitRate).toBe(1);
     expect(stats.matureCount).toBe(0);
-  });
-});
-
-describe('listPendingFirstVisitCalls', () => {
-  it('surfaces a patient the day after their first visit when no call log exists', () => {
-    const patients = [makePatient({ id: 'a', firstVisitDate: '2026-09-17' })];
-    const pending = listPendingFirstVisitCalls(patients, '2026-09-18');
-    expect(pending).toEqual([{ id: 'a', patientName: '테스트', callDate: '2026-09-18' }]);
-  });
-
-  it('does not surface a patient before the call date arrives', () => {
-    const patients = [makePatient({ id: 'a', firstVisitDate: '2026-09-17' })];
-    const pending = listPendingFirstVisitCalls(patients, '2026-09-17');
-    expect(pending).toEqual([]);
-  });
-
-  it('drops a patient once a call log is recorded', () => {
-    const patients = [makePatient({ id: 'a', firstVisitDate: '2026-09-17', callLog: '통화 완료' })];
-    const pending = listPendingFirstVisitCalls(patients, '2026-09-20');
-    expect(pending).toEqual([]);
   });
 });
 

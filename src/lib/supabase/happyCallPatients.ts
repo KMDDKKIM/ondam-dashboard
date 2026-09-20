@@ -19,6 +19,12 @@ interface HappyCallPatientRow {
   memo: string | null;
   created_by: string | null;
   created_at: string;
+  call_due_date?: string | null;
+  call_attempts?: number | null;
+  call_result?: 'answered' | 'no_answer' | 'refused' | 'unreachable' | null;
+  call_completed_by?: string | null;
+  call_completed_at?: string | null;
+  call_memo?: string | null;
 }
 
 function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
@@ -40,6 +46,12 @@ function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
     memo: row.memo,
     createdBy: row.created_by,
     createdAt: row.created_at,
+    callDueDate: row.call_due_date ?? null,
+    callAttempts: row.call_attempts ?? 0,
+    callResult: row.call_result ?? null,
+    callCompletedBy: row.call_completed_by ?? null,
+    callCompletedAt: row.call_completed_at ?? null,
+    callMemo: row.call_memo ?? null,
   };
 }
 

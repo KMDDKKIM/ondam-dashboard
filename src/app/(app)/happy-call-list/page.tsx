@@ -1,49 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import {
   createHerbPrescription,
-  listPendingHerbCalls,
-  markHerbCallDone,
   createDietPackage,
   addDietPackageCall,
   listDietPackages,
-  listPendingDietCalls,
-  markDietCallDone,
   createManualEntry,
-  listPendingManualEntries,
-  markManualEntryDone,
-  type PendingDietCall,
 } from '@/lib/supabase/happyCallQueue';
-import { listHappyCallPatients, updateHappyCallPatient } from '@/lib/supabase/happyCallPatients';
-import { listPendingFirstVisitCalls } from '@/lib/happyCallStats';
-import type { HerbMedicinePrescription, HappyCallManualEntry, DietPackage } from '@/lib/types';
+import { useHappyCallWorklist } from '@/components/happy-call/useHappyCallWorklist';
+import { CallActions, DoneTodaySection, OrdinalBadge, OverdueBadge, PhoneCell, kindText } from '@/components/happy-call/CallParts';
+import { todayKst } from '@/lib/kst';
+import type { DietPackage } from '@/lib/types';
 
-function todayISO(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-type WorklistRow =
-  | { kind: 'herb'; id: string; patientName: string; callDate: string; callNumber: 1 | 2 | 3; prescriptionId: string }
-  | { kind: 'diet'; id: string; patientName: string; callDate: string }
-  | { kind: 'manual'; id: string; patientName: string; callDate: string; note: string | null }
-  | { kind: 'firstVisit'; id: string; patientName: string; callDate: string };
-
-const cellStyle = { border: '1px solid #ddd', padding: 6 };
+const cellStyle = { border: '1px solid #ddd', padding: 6, verticalAlign: 'top' as const };
 const formBoxStyle = { border: '1px solid #ddd', borderRadius: 8, padding: 12 };
 const formInputStyle = { display: 'block' as const, marginBottom: 6, padding: 6 };
 
 export default function HappyCallListPage() {
-  const [herbPrescriptions, setHerbPrescriptions] = useState<HerbMedicinePrescription[]>([]);
-  const [dietCalls, setDietCalls] = useState<PendingDietCall[]>([]);
+  const { supabase, today, worklist, staffNames, loading, error, setError, busyKey, reload, record, postpone, undo } =
+    useHappyCallWorklist();
   const [dietPackages, setDietPackages] = useState<DietPackage[]>([]);
-  const [manualEntries, setManualEntries] = useState<HappyCallManualEntry[]>([]);
-  const [firstVisitCalls, setFirstVisitCalls] = useState<{ id: string; patientName: string; callDate: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   const [herbName, setHerbName] = useState('');
   const [herbPickupDate, setHerbPickupDate] = useState('');
@@ -57,37 +34,25 @@ export default function HappyCallListPage() {
 
   const [manualName, setManualName] = useState('');
   const [manualNote, setManualNote] = useState('');
-  const [manualCallDate, setManualCallDate] = useState(todayISO());
+  const [manualCallDate, setManualCallDate] = useState(todayKst());
 
-  const supabase = createClient();
-  const today = todayISO();
-
-  async function load() {
-    setLoading(true);
+  async function loadPackages() {
     try {
-      const [herb, diet, packages, manual, firstVisitPatients] = await Promise.all([
-        listPendingHerbCalls(supabase, today),
-        listPendingDietCalls(supabase, today),
-        listDietPackages(supabase),
-        listPendingManualEntries(supabase, today),
-        listHappyCallPatients(supabase),
-      ]);
-      setHerbPrescriptions(herb);
-      setDietCalls(diet);
-      setDietPackages(packages);
-      setManualEntries(manual);
-      setFirstVisitCalls(listPendingFirstVisitCalls(firstVisitPatients, today));
+      setDietPackages(await listDietPackages(supabase));
     } catch {
-      setError('불러오기에 실패했습니다.');
-    } finally {
-      setLoading(false);
+      setError('린다이어트 패키지 목록을 불러오지 못했어요.');
     }
   }
 
   useEffect(() => {
-    load();
+    loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 등록 폼들이 저장한 뒤 목록과 패키지 선택 목록을 함께 새로 읽는다.
+  async function load() {
+    await Promise.all([reload(), loadPackages()]);
+  }
 
   async function currentUserId(): Promise<string | null> {
     const {
@@ -157,88 +122,92 @@ export default function HappyCallListPage() {
       });
       setManualName('');
       setManualNote('');
-      setManualCallDate(todayISO());
+      setManualCallDate(todayKst());
       await load();
     } catch {
       setError('저장에 실패했습니다.');
     }
   }
 
-  const rows: WorklistRow[] = [
-    ...herbPrescriptions.flatMap((p) => {
-      const items: WorklistRow[] = [];
-      if (!p.call1Done && p.callDate1 <= today)
-        items.push({ kind: 'herb', id: `${p.id}-1`, patientName: p.patientName, callDate: p.callDate1, callNumber: 1, prescriptionId: p.id });
-      if (!p.call2Done && p.callDate2 <= today)
-        items.push({ kind: 'herb', id: `${p.id}-2`, patientName: p.patientName, callDate: p.callDate2, callNumber: 2, prescriptionId: p.id });
-      if (!p.call3Done && p.callDate3 <= today)
-        items.push({ kind: 'herb', id: `${p.id}-3`, patientName: p.patientName, callDate: p.callDate3, callNumber: 3, prescriptionId: p.id });
-      return items;
-    }),
-    ...dietCalls.map((c) => ({ kind: 'diet' as const, id: c.id, patientName: c.patientName, callDate: c.callDate })),
-    ...manualEntries.map((m) => ({ kind: 'manual' as const, id: m.id, patientName: m.patientName, callDate: m.callDate, note: m.note })),
-    ...firstVisitCalls.map((c) => ({ kind: 'firstVisit' as const, id: c.id, patientName: c.patientName, callDate: c.callDate })),
-  ].sort((a, b) => a.callDate.localeCompare(b.callDate));
+  const open = worklist?.open ?? [];
+  const doneToday = worklist?.doneToday ?? [];
 
-  async function handleComplete(row: WorklistRow) {
-    const note = window.prompt('통화 메모 (선택)');
-    if (note === null) return;
-    try {
-      if (row.kind === 'herb') {
-        await markHerbCallDone(supabase, row.prescriptionId, row.callNumber, note);
-      } else if (row.kind === 'diet') {
-        await markDietCallDone(supabase, row.id, note);
-      } else if (row.kind === 'manual') {
-        await markManualEntryDone(supabase, row.id, note);
-      } else {
-        await updateHappyCallPatient(supabase, row.id, { callLog: note || '통화 완료' });
-      }
-      await load();
-    } catch {
-      setError('처리에 실패했습니다.');
-    }
-  }
-
-  const kindLabel: Record<WorklistRow['kind'], string> = { herb: '한약', diet: '린다이어트', manual: '초진(수동)', firstVisit: '초진환자' };
-
-  if (loading) return <p>불러오는 중...</p>;
+  if (loading && !worklist && !error) return <p>불러오는 중...</p>;
 
   return (
     <div>
       <h1 style={{ marginBottom: 16 }}>해피콜 목록</h1>
       {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && !worklist && (
+        <button type="button" onClick={() => reload()} style={{ marginBottom: 16 }}>
+          다시 불러오기
+        </button>
+      )}
 
-      <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 32 }}>
-        <thead>
-          <tr style={{ background: '#f0f0f0' }}>
-            <th style={{ ...cellStyle, textAlign: 'left' }}>유형</th>
-            <th style={{ ...cellStyle, textAlign: 'left' }}>환자명</th>
-            <th style={{ ...cellStyle, textAlign: 'left' }}>예정일</th>
-            <th style={{ ...cellStyle, textAlign: 'left' }}>메모</th>
-            <th style={cellStyle}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ padding: 12, textAlign: 'center', color: '#666' }}>
-                오늘 해피콜 대상이 없습니다.
-              </td>
-            </tr>
-          )}
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td style={cellStyle}>{kindLabel[row.kind]}</td>
-              <td style={cellStyle}>{row.patientName}</td>
-              <td style={{ ...cellStyle, color: row.callDate < today ? 'red' : undefined }}>{row.callDate}</td>
-              <td style={cellStyle}>{row.kind === 'manual' ? row.note : ''}</td>
-              <td style={cellStyle}>
-                <button onClick={() => handleComplete(row)}>완료</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {worklist && (
+        <>
+          <p className="muted-text" style={{ marginBottom: 8, fontSize: 13 }}>
+            오늘({today}) 걸 콜 {open.length}건
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: 16 }}>
+              <thead>
+                <tr style={{ background: '#f0f0f0' }}>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>유형</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>환자명</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>차수</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>전화번호</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>진료의</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>예정일</th>
+                  <th style={{ ...cellStyle, textAlign: 'left' }}>메모</th>
+                  <th style={cellStyle}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {open.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 12, textAlign: 'center', color: '#666' }}>
+                      오늘 해피콜 대상이 없습니다.
+                    </td>
+                  </tr>
+                )}
+                {open.map((item) => (
+                  <tr key={item.key}>
+                    <td style={cellStyle}>{kindText(item)}</td>
+                    <td style={cellStyle}>{item.patientName}</td>
+                    <td style={cellStyle}>
+                      <OrdinalBadge attempts={item.attempts} />
+                    </td>
+                    <td style={cellStyle}>
+                      <PhoneCell phone={item.phone} />
+                    </td>
+                    <td style={cellStyle}>{item.doctorStaffId ? (staffNames[item.doctorStaffId] ?? '-') : '-'}</td>
+                    <td style={cellStyle}>
+                      <span style={{ marginRight: 6, color: item.dueDate < today ? 'var(--color-error)' : undefined }}>{item.dueDate}</span>
+                      <OverdueBadge dueDate={item.dueDate} today={today} />
+                    </td>
+                    <td style={cellStyle}>
+                      {[item.note, item.memo].filter(Boolean).join(' · ') || ''}
+                    </td>
+                    <td style={cellStyle}>
+                      <CallActions
+                        item={item}
+                        busy={busyKey === item.key}
+                        onRecord={(action, memo) => record(item, action, memo)}
+                        onPostpone={() => postpone(item)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <DoneTodaySection items={doneToday} staffNames={staffNames} busyKey={busyKey} onUndo={undo} />
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <form onSubmit={handleAddHerb} style={formBoxStyle}>

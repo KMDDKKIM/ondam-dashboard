@@ -22,6 +22,13 @@ export interface HappyCallPatient {
   memo: string | null;
   createdBy: string | null;
   createdAt: string;
+  // 해피콜(전화) 진행 상태 — 초진 콜 1건의 결과/재시도/예정일. 아직 없으면 undefined/null.
+  callDueDate?: string | null;
+  callAttempts?: number;
+  callResult?: 'answered' | 'no_answer' | 'refused' | 'unreachable' | null;
+  callCompletedBy?: string | null;
+  callCompletedAt?: string | null;
+  callMemo?: string | null;
 }
 
 export interface HerbMedicinePrescription {

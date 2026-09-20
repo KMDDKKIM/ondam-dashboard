@@ -1,0 +1,362 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { listHappyCallPatients } from './happyCallPatients';
+import {
+  applyCallAction,
+  buildWorklist,
+  CALL_RESULT_LABEL,
+  firstVisitProgress,
+  isClosedResult,
+  postponeCall,
+  undoCallAction,
+  type CallAction,
+  type CallProgress,
+  type CallResult,
+  type Worklist,
+  type WorklistItem,
+} from '@/lib/happyCallQueue';
+
+// 네 가지 콜 출처(초진 / 한약 / 린다이어트 / 수동·비급여)를 하나의 WorklistItem 목록으로
+// 읽고, 결과 기록·미루기·되돌리기를 각 출처의 컬럼에 써 넣는다.
+// 규칙 자체(재시도, 미루기, 연체)는 src/lib/happyCallQueue.ts 의 순수 함수가 정한다.
+
+/** 다른 직원이 먼저 같은 콜을 처리해서 화면의 상태가 낡았을 때. */
+export class CallConflictError extends Error {
+  constructor() {
+    super('call state changed');
+    this.name = 'CallConflictError';
+  }
+}
+
+interface CallColumns {
+  table: string;
+  due: string;
+  attempts: string;
+  result: string;
+  /** 종료 여부 boolean 컬럼. 초진은 없다(결과값으로 판단). */
+  done: string | null;
+  memo: string;
+  by: string;
+  at: string;
+}
+
+function columnsFor(item: Pick<WorklistItem, 'kind' | 'callNumber'>): CallColumns {
+  switch (item.kind) {
+    case 'firstVisit':
+      return {
+        table: 'happy_call_patients',
+        due: 'call_due_date',
+        attempts: 'call_attempts',
+        result: 'call_result',
+        done: null,
+        memo: 'call_memo',
+        by: 'call_completed_by',
+        at: 'call_completed_at',
+      };
+    case 'herb': {
+      const n = item.callNumber ?? 1;
+      return {
+        table: 'herb_medicine_prescriptions',
+        due: `call_date_${n}`,
+        attempts: `call_${n}_attempts`,
+        result: `call_${n}_result`,
+        done: `call_${n}_done`,
+        memo: `call_${n}_note`,
+        by: `call_${n}_completed_by`,
+        at: `call_${n}_completed_at`,
+      };
+    }
+    case 'diet':
+      return {
+        table: 'diet_package_calls',
+        due: 'call_date',
+        attempts: 'attempts',
+        result: 'result',
+        done: 'done',
+        memo: 'note',
+        by: 'completed_by',
+        at: 'completed_at',
+      };
+    case 'manual':
+      return {
+        table: 'happy_call_manual_entries',
+        due: 'call_date',
+        attempts: 'attempts',
+        result: 'result',
+        done: 'done',
+        memo: 'done_note',
+        by: 'completed_by',
+        at: 'completed_at',
+      };
+  }
+}
+
+// --- 읽기 ---
+
+function resultOf(raw: CallResult | null, done: boolean): CallResult | null {
+  // 결과 기능 이전에 "완료"로만 표시된 옛 행은 통화완료로 본다.
+  if (raw) return raw;
+  return done ? 'answered' : null;
+}
+
+interface HerbRow {
+  id: string;
+  patient_name: string;
+  [column: string]: unknown;
+}
+
+function herbItems(row: HerbRow): WorklistItem[] {
+  return ([1, 2, 3] as const).map((n) => {
+    const done = Boolean(row[`call_${n}_done`]);
+    const result = resultOf((row[`call_${n}_result`] as CallResult | null) ?? null, done);
+    return {
+      key: `herb-${row.id}-${n}`,
+      kind: 'herb' as const,
+      id: row.id,
+      callNumber: n,
+      patientName: row.patient_name,
+      phone: null,
+      doctorStaffId: null,
+      dueDate: row[`call_date_${n}`] as string,
+      attempts: (row[`call_${n}_attempts`] as number | null) ?? 0,
+      result,
+      closed: done,
+      memo: (row[`call_${n}_note`] as string | null) ?? null,
+      note: null,
+      completedBy: (row[`call_${n}_completed_by`] as string | null) ?? null,
+      completedAt: (row[`call_${n}_completed_at`] as string | null) ?? null,
+    };
+  });
+}
+
+interface SimpleCallRow {
+  id: string;
+  call_date: string;
+  done: boolean;
+  attempts: number | null;
+  result: CallResult | null;
+  completed_by: string | null;
+  completed_at: string | null;
+}
+
+interface DietCallRow extends SimpleCallRow {
+  note: string | null;
+  diet_packages: { patient_name: string } | null;
+}
+
+interface ManualRow extends SimpleCallRow {
+  patient_name: string;
+  note: string | null;
+  done_note: string | null;
+}
+
+/** 비급여 구매에 적힌 연락처를 수동 콜(해피콜 행 id)에 이어 붙인다. 실패하면 그냥 "-"로 둔다. */
+async function phonesByManualEntryId(supabase: SupabaseClient, entryIds: string[]): Promise<Map<string, string>> {
+  const phones = new Map<string, string>();
+  const columns = ['happy_call_entry_id', 'happy_call_entry_id_2', 'happy_call_entry_id_3'] as const;
+  for (let i = 0; i < entryIds.length; i += 50) {
+    const chunk = entryIds.slice(i, i + 50);
+    for (const column of columns) {
+      const { data, error } = await supabase
+        .from('non_covered_purchases')
+        .select(`phone, ${column}`)
+        .in(column, chunk)
+        .not('phone', 'is', null);
+      if (error || !data) continue;
+      for (const row of data as unknown as Record<string, string | null>[]) {
+        const entryId = row[column];
+        const phone = row.phone;
+        if (entryId && phone) phones.set(entryId, phone);
+      }
+    }
+  }
+  return phones;
+}
+
+/**
+ * 오늘 목록에 필요한 콜 전부(예정일 ≤ 오늘인 미완료 + 오늘 결과를 기록한 콜)를 네 출처에서 읽는다.
+ * 하나라도 실패하면 throw 한다 — 호출한 화면이 오류를 보여 줘야 하며 "대상 없음"으로 보이면 안 된다.
+ */
+export async function loadWorklist(supabase: SupabaseClient, today: string): Promise<Worklist> {
+  // 오늘 0시(한국)부터 기록된 결과를 "오늘 처리한 콜"로 본다.
+  const since = new Date(`${today}T00:00:00+09:00`).toISOString();
+
+  const herbQuery = supabase
+    .from('herb_medicine_prescriptions')
+    .select('*')
+    .or(
+      [1, 2, 3]
+        .map((n) => `and(call_${n}_done.eq.false,call_date_${n}.lte.${today})`)
+        .concat([1, 2, 3].map((n) => `call_${n}_completed_at.gte.${since}`))
+        .join(',')
+    );
+  const dietQuery = supabase
+    .from('diet_package_calls')
+    .select('id, call_date, done, note, attempts, result, completed_by, completed_at, diet_packages(patient_name)')
+    .or(`and(done.eq.false,call_date.lte.${today}),completed_at.gte.${since}`);
+  const manualQuery = supabase
+    .from('happy_call_manual_entries')
+    .select('*')
+    .or(`and(done.eq.false,call_date.lte.${today}),completed_at.gte.${since}`);
+
+  const [herb, diet, manual, patients] = await Promise.all([
+    herbQuery,
+    dietQuery,
+    manualQuery,
+    listHappyCallPatients(supabase),
+  ]);
+  if (herb.error) throw herb.error;
+  if (diet.error) throw diet.error;
+  if (manual.error) throw manual.error;
+
+  const manualRows = (manual.data ?? []) as ManualRow[];
+  const phones = await phonesByManualEntryId(
+    supabase,
+    manualRows.map((m) => m.id)
+  );
+
+  const items: WorklistItem[] = [
+    ...patients.map((p): WorklistItem => {
+      const progress = firstVisitProgress(p);
+      return {
+        key: `firstVisit-${p.id}`,
+        kind: 'firstVisit',
+        id: p.id,
+        patientName: p.patientName,
+        phone: null, // 초진 등록에는 아직 연락처가 없다(추후 등록 화면에서 받는다)
+        doctorStaffId: p.doctorStaffId,
+        dueDate: progress.dueDate,
+        attempts: progress.attempts,
+        result: progress.result,
+        closed: progress.closed,
+        memo: p.callMemo ?? null,
+        note: null,
+        completedBy: p.callCompletedBy ?? null,
+        completedAt: p.callCompletedAt ?? null,
+      };
+    }),
+    ...((herb.data ?? []) as HerbRow[]).flatMap(herbItems),
+    ...((diet.data ?? []) as unknown as DietCallRow[]).map(
+      (c): WorklistItem => ({
+        key: `diet-${c.id}`,
+        kind: 'diet',
+        id: c.id,
+        patientName: c.diet_packages?.patient_name ?? '-',
+        phone: null,
+        doctorStaffId: null,
+        dueDate: c.call_date,
+        attempts: c.attempts ?? 0,
+        result: resultOf(c.result, c.done),
+        closed: c.done,
+        memo: c.note,
+        note: null,
+        completedBy: c.completed_by,
+        completedAt: c.completed_at,
+      })
+    ),
+    ...manualRows.map(
+      (m): WorklistItem => ({
+        key: `manual-${m.id}`,
+        kind: 'manual',
+        id: m.id,
+        patientName: m.patient_name,
+        phone: phones.get(m.id) ?? null,
+        doctorStaffId: null,
+        dueDate: m.call_date,
+        attempts: m.attempts ?? 0,
+        result: resultOf(m.result, m.done),
+        closed: m.done,
+        memo: m.done_note,
+        note: m.note,
+        completedBy: m.completed_by,
+        completedAt: m.completed_at,
+      })
+    ),
+  ];
+
+  return buildWorklist(items, today);
+}
+
+/** 직원 id -> 이름 (진료의/완료자 표시용). 퇴사해서 지워진 직원은 없다. */
+export async function listStaffNames(supabase: SupabaseClient): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('staff').select('id, name').eq('status', 'approved');
+  if (error) throw error;
+  const names: Record<string, string> = {};
+  for (const row of (data ?? []) as { id: string; name: string }[]) names[row.id] = row.name;
+  return names;
+}
+
+// --- 쓰기 ---
+
+function progressPatch(cols: CallColumns, next: CallProgress): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    [cols.due]: next.dueDate,
+    [cols.attempts]: next.attempts,
+    [cols.result]: next.result,
+  };
+  if (cols.done) patch[cols.done] = next.closed;
+  return patch;
+}
+
+// 화면에 떠 있는 동안 다른 직원이 같은 콜을 처리했을 수 있으므로, 읽었을 때의 attempts 가
+// 그대로일 때만 갱신한다. 0행이 갱신되면 CallConflictError.
+async function updateCall(
+  supabase: SupabaseClient,
+  item: WorklistItem,
+  cols: CallColumns,
+  patch: Record<string, unknown>
+): Promise<void> {
+  const { data, error } = await supabase
+    .from(cols.table)
+    .update(patch)
+    .eq('id', item.id)
+    .eq(cols.attempts, item.attempts)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new CallConflictError();
+}
+
+/** 초진 콜은 종료 시 기존 "통화내역(call_log)"에도 한 줄 남겨 초진 등록 화면과 맞춘다. */
+function firstVisitCallLog(result: CallResult, memo: string): string {
+  const label = CALL_RESULT_LABEL[result];
+  return memo ? `${label}: ${memo}` : label;
+}
+
+export async function recordCallResult(
+  supabase: SupabaseClient,
+  item: WorklistItem,
+  action: CallAction,
+  options: { memo: string; staffId: string | null; today: string; now?: Date }
+): Promise<void> {
+  const cols = columnsFor(item);
+  const next = applyCallAction(item, action, options.today);
+  const memo = options.memo.trim();
+  const patch: Record<string, unknown> = {
+    ...progressPatch(cols, next),
+    [cols.memo]: memo || null,
+    [cols.by]: options.staffId,
+    [cols.at]: (options.now ?? new Date()).toISOString(),
+  };
+  if (item.kind === 'firstVisit' && next.result && isClosedResult(next.result)) {
+    patch.call_log = firstVisitCallLog(next.result, memo);
+  }
+  await updateCall(supabase, item, cols, patch);
+}
+
+export async function postponeCallToTomorrow(supabase: SupabaseClient, item: WorklistItem, today: string): Promise<void> {
+  const cols = columnsFor(item);
+  const next = postponeCall(item, today);
+  await updateCall(supabase, item, cols, progressPatch(cols, next));
+}
+
+export async function undoCallResult(supabase: SupabaseClient, item: WorklistItem, today: string): Promise<void> {
+  const cols = columnsFor(item);
+  const next = undoCallAction(item, today);
+  const patch: Record<string, unknown> = {
+    ...progressPatch(cols, next),
+    [cols.by]: null,
+    [cols.at]: null,
+  };
+  // 종료하면서 남긴 통화내역 한 줄도 함께 지운다(다시 열린 콜이 "통화 완료"로 남지 않도록).
+  if (item.kind === 'firstVisit') patch.call_log = null;
+  await updateCall(supabase, item, cols, patch);
+}
