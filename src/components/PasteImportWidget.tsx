@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { analyzePasteText } from '@/lib/pasteImport';
+import { closingSaveWarnings } from '@/lib/closingChecks';
+import { todayKst } from '@/lib/kst';
+import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
 import { computeDerivedStats } from '@/lib/reservations/reservationStats';
@@ -10,6 +13,7 @@ import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
   getSavedDailyClosing,
+  getSavedDailyRevenue,
   upsertMonthlyOverride,
   listRecentDailyRevenue,
   listRecentMonthlyOverrides,
@@ -20,6 +24,15 @@ import type { DailyRevenue } from '@/lib/types';
 const sectionCardStyle = { padding: 16, marginBottom: 20 } as const;
 const headerStyle = { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 8, fontSize: 14 } as const;
 const textareaStyle = { minHeight: 64, fontFamily: 'monospace', fontSize: 12, resize: 'vertical' as const };
+
+// 붙여넣은 결산표에 숫자가 아닌 값이 있으면 조용히 0으로 저장하지 않고 이렇게 알리고 저장을 막는다.
+function InvalidCellsNotice({ cells }: { cells: string[] }) {
+  return (
+    <p className="error-text" style={{ marginTop: 8 }}>
+      숫자가 아닌 값이 있어서 저장할 수 없어요: {cells.join(', ')}. 엑셀에서 해당 칸을 확인하고 다시 복사해 붙여넣어 주세요.
+    </p>
+  );
+}
 
 // ── 월결산 ──────────────────────────────────────────────────────────
 // 월은 붙여넣은 결산표 제목("월말결산:2026-09")에서 읽어 오므로 따로 고르지 않는다.
@@ -49,10 +62,11 @@ function MonthlySettlementSection() {
   const month = analysis?.format === 'monthly' ? analysis.month : null;
   const totalRevenue = analysis?.format === 'monthly' ? analysis.totalRevenue : null;
   const avgDailyVisits = analysis?.format === 'monthly' ? analysis.avgDailyVisits : null;
+  const invalidCells = analysis?.format === 'monthly' ? analysis.invalidCells : [];
   const formatError = analysis && analysis.format !== 'monthly';
 
   async function handleSave() {
-    if (totalRevenue == null || !month) return;
+    if (totalRevenue == null || !month || invalidCells.length > 0) return;
     const ok = window.confirm(`${month}의 총매출을 ${totalRevenue.toLocaleString()}원으로 다시 채웁니다. 계속할까요?`);
     if (!ok) return;
     setSaving(true);
@@ -94,13 +108,14 @@ function MonthlySettlementSection() {
       />
 
       {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
+      {invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
       {totalRevenue != null && month && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13 }}>
             {month} 총매출 {totalRevenue.toLocaleString()}원
             {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} 확인됨
           </span>
-          <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
+          <button onClick={handleSave} disabled={saving || invalidCells.length > 0} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
           </button>
         </div>
@@ -125,7 +140,7 @@ function MonthlySettlementSection() {
 }
 
 // ── 예약 명단 ─────────────────────────────────────────────────────────
-function ReservationSection() {
+function ReservationSection({ onSaved }: { onSaved: (dates: string[]) => void }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
@@ -157,14 +172,30 @@ function ReservationSection() {
     setError('');
     setResult('');
     try {
+      // 저장 전에 날짜별 "기존 N명 → 새 N명"을 확인받는다(새 명단이 기존의 절반 미만이면 경고 추가).
+      const dates = analysis.groups.map((g) => g.date);
+      const countsResponse = await fetch(`/api/reservation-paste?dates=${encodeURIComponent(dates.join(','))}`);
+      const countsBody = await countsResponse.json().catch(() => null);
+      if (!countsResponse.ok || !countsBody?.counts) {
+        throw new Error(countsBody?.error ?? '기존 예약 명단을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+      const lines = summarizeReplace(
+        analysis.groups.map((g) => ({ date: g.date, newCount: g.rows.length })),
+        countsBody.counts as Record<string, number>
+      );
+      if (!window.confirm(replaceConfirmMessage(lines))) return;
+
       const response = await fetch('/api/reservation-paste', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
       const body = await response.json();
+      // 여러 날짜 중 일부만 저장된 채 실패했더라도, 저장된 날짜는 결산 칸을 다시 계산한다.
+      if (Array.isArray(body.savedDates) && body.savedDates.length > 0) onSaved(body.savedDates);
       if (!response.ok) throw new Error(body.error ?? '저장에 실패했습니다.');
-      setResult(`예약관리에 저장했어요: ${(body.savedDates as string[]).join(', ')}`);
+      const savedDates = body.savedDates as string[];
+      setResult(`예약관리에 저장했어요: ${savedDates.join(', ')}`);
       setText('');
       await loadHistory();
     } catch (err) {
@@ -274,7 +305,14 @@ function Warning({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DailySettlementSection() {
+// 예약 명단이 저장될 때마다 version 이 오르고 dates 에 저장된 날짜가 담긴다 — 결산 칸이 "저장된
+// 예약 명단"에서 미리 채워지므로, 명단을 결산보다 나중에 붙여넣어도 칸이 다시 계산돼야 한다.
+interface ReservationSync {
+  version: number;
+  dates: string[];
+}
+
+function DailySettlementSection({ reservationSync }: { reservationSync: ReservationSync }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
@@ -303,6 +341,7 @@ function DailySettlementSection() {
   const totalRevenue = analysis?.format === 'daily' ? analysis.totalRevenue : null;
   const visitCount = analysis?.format === 'daily' ? analysis.visitCount : null;
   const newPatientCount = analysis?.format === 'daily' ? analysis.newPatientCount : null;
+  const invalidCells = analysis?.format === 'daily' ? analysis.invalidCells : [];
   const formatError = analysis && analysis.format !== 'daily';
   const missingDate = analysis?.format === 'daily' && !analysis.date;
 
@@ -311,10 +350,17 @@ function DailySettlementSection() {
   //  2) 없으면 저장된 예약 명단에서 예약·정상 이행(내원)·취소·추나를 세서,
   //  3) 한약·비급여 판매는 그 날 비급여 현황 등록분으로, 초진은 결산표의 신규환자수로.
   // 노쇼와 제외환자는 명단만으로 알 수 없어 직접 입력한다.
+  // 예약 명단이 새로 저장되면(reservationSync.version) 그 날짜가 지금 결산 날짜일 때만 칸을 다시 채운다 —
+  // 다른 날짜 명단을 넣은 것 때문에 지금 손으로 고친 값이 지워지지 않게.
+  const handledSyncVersion = useRef(reservationSync.version);
   useEffect(() => {
     if (!date) {
       setClosing(EMPTY_CLOSING);
       return;
+    }
+    if (handledSyncVersion.current !== reservationSync.version) {
+      handledSyncVersion.current = reservationSync.version;
+      if (!reservationSync.dates.includes(date)) return;
     }
     let cancelled = false;
     (async () => {
@@ -374,7 +420,7 @@ function DailySettlementSection() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, newPatientCount]);
+  }, [date, newPatientCount, reservationSync]);
 
   const n = (key: keyof ClosingFields) => toNumberOrNull(closing[key]);
 
@@ -413,6 +459,7 @@ function DailySettlementSection() {
 
   // 붙여넣은 결산표와 아래 칸을 전부 비운다(화면만 비우고, 이미 저장한 기록은 그대로다).
   function handleClearAll() {
+    if (text.trim() && !window.confirm('붙여넣은 결산표와 아래 입력칸을 모두 비울까요? (이미 저장한 기록은 그대로예요)')) return;
     setText('');
     setClosing(EMPTY_CLOSING);
     setCopied(false);
@@ -430,11 +477,18 @@ function DailySettlementSection() {
   }
 
   async function handleSave() {
-    if (totalRevenue == null || !date) return;
+    if (totalRevenue == null || !date || invalidCells.length > 0) return;
     setSaving(true);
     setError('');
     setResult('');
     try {
+      // 저장 전 확인: 매출/내원 0, 미래 날짜, 이미 저장된 마감(덮어쓰기)이면 한 번 더 묻는다.
+      const existing = await getSavedDailyRevenue(supabase, date);
+      const warnings = closingSaveWarnings({ date, totalRevenue, visitCount, today: todayKst(), existing });
+      if (warnings.length > 0) {
+        const ok = window.confirm(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);
+        if (!ok) return;
+      }
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -499,6 +553,7 @@ function DailySettlementSection() {
       />
 
       {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '일일 결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
+      {invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
       {missingDate && (
         <p className="error-text" style={{ marginTop: 8 }}>
           결산표에서 진료날짜를 찾지 못했어요. "진료날짜:YYYY-MM-DD" 줄이 함께 복사되도록 다시 붙여넣어 주세요.
@@ -618,7 +673,7 @@ function DailySettlementSection() {
           />
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ padding: '8px 20px', fontSize: 13 }}>
+            <button onClick={handleSave} disabled={saving || invalidCells.length > 0} className="btn-primary" style={{ padding: '8px 20px', fontSize: 13 }}>
               {saving ? '저장 중...' : '저장'}
             </button>
             <button
@@ -647,7 +702,7 @@ function DailySettlementSection() {
                 color: 'var(--color-error)',
               }}
             >
-              모두 삭제
+              입력칸 비우기
             </button>
             {copied && <span style={{ fontSize: 12, color: 'var(--color-teal-deep)' }}>복사했어요. 카톡에 붙여넣기 하세요.</span>}
           </div>
@@ -675,10 +730,13 @@ function DailySettlementSection() {
 // 자주 쓰는 순서대로 — 일일결산(매일) → 예약 명단 → 월결산(월말에 한 번). 월결산은
 // 맨 아래에 있어도 이번달 현황의 총매출·일평균 환자수를 가장 우선해서 결정한다.
 export function PasteImportWidget() {
+  const [reservationSync, setReservationSync] = useState<ReservationSync>({ version: 0, dates: [] });
   return (
     <div>
-      <DailySettlementSection />
-      <ReservationSection />
+      <DailySettlementSection reservationSync={reservationSync} />
+      <ReservationSection
+        onSaved={(dates) => setReservationSync((prev) => ({ version: prev.version + 1, dates }))}
+      />
       <MonthlySettlementSection />
     </div>
   );

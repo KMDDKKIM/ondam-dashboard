@@ -1010,3 +1010,55 @@ alter table happy_call_patients add constraint happy_call_patients_visit_kind_ch
 drop policy if exists "authenticated can delete happy_call_patients" on happy_call_patients;
 create policy "authenticated can delete happy_call_patients" on happy_call_patients
   for delete to authenticated using (public.is_approved_staff());
+
+
+-- 예약 명단 원자적 대체 (migration_replace_reservations_rpc.sql)
+create or replace function public.replace_reservations(p_date date, p_rows jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if p_date is null then
+    raise exception 'p_date is required';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'p_rows must be a json array';
+  end if;
+
+  -- 행을 잠가서 같은 날짜를 동시에 대체하는 요청이 순서대로 처리되게 한다.
+  insert into public.daily_records (date)
+  values (p_date)
+  on conflict (date) do update set date = excluded.date
+  returning id into v_id;
+
+  delete from public.reservations where daily_record_id = v_id;
+
+  insert into public.reservations (
+    daily_record_id, doctor_name, time_label, patient_name, chart_no, phone, mobile,
+    visit_status, treatment_area, treatment, special_notes, memo
+  )
+  select
+    v_id,
+    coalesce(r->>'doctor_name', ''),
+    coalesce(r->>'time_label', ''),
+    coalesce(r->>'patient_name', ''),
+    coalesce(r->>'chart_no', ''),
+    coalesce(r->>'phone', ''),
+    coalesce(r->>'mobile', ''),
+    coalesce(r->>'visit_status', ''),
+    coalesce(r->>'treatment_area', ''),
+    coalesce(r->>'treatment', ''),
+    coalesce(r->>'special_notes', ''),
+    coalesce(r->>'memo', '')
+  from jsonb_array_elements(p_rows) as r;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.replace_reservations(date, jsonb) from public, anon, authenticated;
+grant execute on function public.replace_reservations(date, jsonb) to service_role;

@@ -24,8 +24,16 @@ export interface ReservationDateGroup {
 
 export type PasteAnalysis =
   | { format: 'reservation'; groups: ReservationDateGroup[] }
-  | { format: 'daily'; date: string | null; totalRevenue: number; visitCount: number | null; newPatientCount: number | null }
-  | { format: 'monthly'; month: string; totalRevenue: number; avgDailyVisits: number | null }
+  | {
+      format: 'daily';
+      date: string | null;
+      totalRevenue: number;
+      visitCount: number | null;
+      newPatientCount: number | null;
+      /** 숫자가 아닌 값이 들어 있던 칸(예: "총진료비: '12a,000'"). 비어 있지 않으면 저장하지 말고 알려야 한다. */
+      invalidCells: string[];
+    }
+  | { format: 'monthly'; month: string; totalRevenue: number; avgDailyVisits: number | null; invalidCells: string[] }
   | { format: 'unknown'; reason: string };
 
 // OK차트 "일일 결산표"/"월말 결산표"가 공유하는 진료비 요약 헤더 — 헤더 바로 다음
@@ -59,10 +67,22 @@ function findHeaderIndex(rows: string[][], mustInclude: string[]): number {
   return rows.findIndex((row) => mustInclude.every((name) => row.includes(name)));
 }
 
-function parseNumber(cell: string): number {
+// 숫자로 읽을 수 없으면 null — 예전에는 조용히 0이 되어 매출 0원이 저장될 수 있었다.
+export function parseNumber(cell: string): number | null {
   const cleaned = cell.replace(/[,원\s]/g, '');
+  if (cleaned === '') return null;
   const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? n : null;
+}
+
+// 셀을 읽어 숫자로 돌려준다. 비어 있으면 null(problems에 안 넣음), 값이 있는데 숫자가
+// 아니면 null + problems에 "칸이름: '값'"을 남긴다.
+function readNumber(cell: string | undefined, label: string, problems: string[]): number | null {
+  const raw = (cell ?? '').trim();
+  if (raw === '') return null;
+  const n = parseNumber(raw);
+  if (n == null) problems.push(`${label}: '${raw}'`);
+  return n;
 }
 
 const DATE_RE = /\d{4}-\d{2}-\d{2}/;
@@ -131,15 +151,19 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
   const dataRow = rows[headerIdx + 1];
   const revenueCol = header.indexOf('총진료비');
   if (!dataRow || revenueCol === -1) return null;
-  const totalRevenue = parseNumber(dataRow[revenueCol] ?? '0');
+  const invalidCells: string[] = [];
+  // 총진료비 칸이 비어 있거나 숫자가 아니면 0으로 두되 invalidCells에 남겨 저장을 막는다.
+  const totalRevenueRaw = readNumber(dataRow[revenueCol], '총진료비', invalidCells);
+  if (totalRevenueRaw == null && invalidCells.length === 0) invalidCells.push('총진료비: (비어 있음)');
+  const totalRevenue = totalRevenueRaw ?? 0;
 
   // 일일결산은 그날 내원환자수를, 월말결산은 진료일평균환자수를 같이 읽는다(없으면 null).
   const visitCol = header.indexOf('내원환자수');
   const avgCol = header.indexOf('진료일평균환자수');
-  const visitCount = visitCol !== -1 && dataRow[visitCol] ? parseNumber(dataRow[visitCol]) : null;
+  const visitCount = visitCol !== -1 ? readNumber(dataRow[visitCol], '내원환자수', invalidCells) : null;
   const newCol = header.indexOf('신규환자수');
-  const newPatientCount = newCol !== -1 && dataRow[newCol] ? parseNumber(dataRow[newCol]) : null;
-  const avgDailyVisits = avgCol !== -1 && dataRow[avgCol] ? parseNumber(dataRow[avgCol]) : null;
+  const newPatientCount = newCol !== -1 ? readNumber(dataRow[newCol], '신규환자수', invalidCells) : null;
+  const avgDailyVisits = avgCol !== -1 ? readNumber(dataRow[avgCol], '진료일평균환자수', invalidCells) : null;
 
   const context = rows.slice(0, headerIdx).flat().join(' ');
 
@@ -149,23 +173,23 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
     context.match(/진료\s*날짜\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/) ??
     context.match(/일\s*일\s*결\s*산\s*표?\s*[:：]?\s*(\d{4}-\d{2}-\d{2})/);
   if (dailyMatch) {
-    return { format: 'daily', date: dailyMatch[1], totalRevenue, visitCount, newPatientCount };
+    return { format: 'daily', date: dailyMatch[1], totalRevenue, visitCount, newPatientCount, invalidCells };
   }
 
   const monthlyMatch =
     context.match(/월\s*[:：]\s*(\d{4}-\d{2})/) ?? context.match(/\((\d{4}-\d{2})\)\s*월/);
   if (monthlyMatch || context.includes('월말')) {
     const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
-    if (month) return { format: 'monthly', month, totalRevenue, avgDailyVisits };
+    if (month) return { format: 'monthly', month, totalRevenue, avgDailyVisits, invalidCells };
   }
 
   // 제목 표기가 위 어느 쪽도 아니어도, 헤더 위에 날짜(YYYY-MM-DD)가 하나 있으면 그 날짜로 본다.
   const anyDate = context.match(/\d{4}-\d{2}-\d{2}/);
-  if (anyDate) return { format: 'daily', date: anyDate[0], totalRevenue, visitCount, newPatientCount };
+  if (anyDate) return { format: 'daily', date: anyDate[0], totalRevenue, visitCount, newPatientCount, invalidCells };
 
   // 제목 줄 없이 헤더+합계 행만 붙여넣은 경우 — 당일결산으로 보고 날짜는 직접
   // 지정하게 한다(붙여넣기 칸의 날짜 입력란).
-  return { format: 'daily', date: fallbackDate, totalRevenue, visitCount, newPatientCount };
+  return { format: 'daily', date: fallbackDate, totalRevenue, visitCount, newPatientCount, invalidCells };
 }
 
 export interface ReservationDerivedStats {

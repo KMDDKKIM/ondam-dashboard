@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { analyzePasteText, computeReservationDerivedStats } from '@/lib/pasteImport';
+import { analyzePasteText } from '@/lib/pasteImport';
+import { countReservationsByDates, replaceReservationsForDate } from '@/lib/reservations/dailyRecords.server';
 
 // 예약시트 붙여넣기 → kh-ondam-reservation의 daily_records/reservations에 직접
 // 쓴다. 같은 hanyak-ondam Supabase 프로젝트를 공유하지만 그쪽 RLS는 anon/
 // authenticated를 전부 막아둔 구조라 admin(service_role) 클라이언트로만 쓸 수
 // 있다(kh-ondam-reservation/supabase/schema.sql 참고). 그 앱의 엑셀 업로드와
-// 동일하게, 붙여넣은 날짜의 기존 예약 목록은 통째로 대체된다.
+// 동일하게, 붙여넣은 날짜의 기존 예약 목록은 통째로 대체된다(DB 함수로 원자적으로).
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -32,53 +33,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '예약시트 형식이 아닙니다.' }, { status: 400 });
   }
 
-  const admin = createAdminClient();
   const savedDates: string[] = [];
   try {
     for (const group of analysis.groups) {
-      const { data: record, error: upsertError } = await admin
-        .from('daily_records')
-        .upsert({ date: group.date }, { onConflict: 'date', ignoreDuplicates: false })
-        .select('id')
-        .single();
-      if (upsertError) throw upsertError;
-
-      const { error: deleteError } = await admin.from('reservations').delete().eq('daily_record_id', record.id);
-      if (deleteError) throw deleteError;
-
-      const { error: insertError } = await admin.from('reservations').insert(
-        group.rows.map((row) => ({
-          daily_record_id: record.id,
-          doctor_name: row.doctorName,
-          time_label: row.timeLabel,
-          patient_name: row.patientName,
-          chart_no: row.chartNo,
-          phone: row.phone,
-          mobile: row.mobile,
-          visit_status: row.visitStatus,
-          treatment_area: row.treatmentArea,
-          treatment: row.treatment,
-          special_notes: row.specialNotes,
-          memo: row.memo,
-        }))
-      );
-      if (insertError) throw insertError;
-
-      const stats = computeReservationDerivedStats(group.rows);
-      const { error: statsError } = await admin
-        .from('daily_records')
-        .update({
-          visit_count: stats.visitCount,
-          reservation_count: stats.reservationCount,
-          excluded_count: stats.excludedCount,
-          excluded_names: stats.excludedNames,
-          chuna_count: stats.chunaCount,
-          chuna_names: stats.chunaNames,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', record.id);
-      if (statsError) throw statsError;
-
+      // 지우기+넣기는 DB 함수(replace_reservations) 안에서 한 트랜잭션 — 날짜 단위로 전부 되거나 전혀 안 된다.
+      await replaceReservationsForDate(group.date, group.rows);
       savedDates.push(group.date);
     }
   } catch (err) {
@@ -94,7 +53,7 @@ export async function POST(request: NextRequest) {
 // 있는 날짜가 있어(그 뒤로 예약 명단을 다시 저장한 적이 없으면) 실제 행 수와
 // 어긋날 수 있다 — 그래서 reservations 테이블을 직접 세어서 보여준다(사이드바
 // "(예약 N명)"과 같은 방식).
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -105,6 +64,21 @@ export async function GET() {
   const { data: staff } = await supabase.from('staff').select('status').eq('id', user.id).maybeSingle();
   if (staff?.status !== 'approved') {
     return NextResponse.json({ error: '승인된 계정만 사용할 수 있습니다.' }, { status: 403 });
+  }
+
+  // ?dates=2026-09-20,2026-09-21 — 붙여넣기 저장 전 "기존 N명 → 새 N명" 확인용으로 날짜별 현재 인원수만 돌려준다.
+  const datesParam = request.nextUrl.searchParams.get('dates');
+  if (datesParam !== null) {
+    const dates = [...new Set(datesParam.split(',').map((d) => d.trim()))];
+    if (dates.length === 0 || dates.length > 62 || !dates.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) {
+      return NextResponse.json({ error: '날짜(dates=YYYY-MM-DD,...)가 올바르지 않습니다.' }, { status: 400 });
+    }
+    try {
+      return NextResponse.json({ counts: await countReservationsByDates(dates) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
   const admin = createAdminClient();

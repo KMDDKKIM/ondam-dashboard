@@ -4,30 +4,27 @@ import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { DayDetail } from './DayDetail';
 import { WeeklyDashboard } from './WeeklyDashboard';
+import { MissingClosingBanner } from '@/components/MissingClosingBanner';
 import { ensureDailyRecord, listDailyRecords } from '@/lib/reservations/dailyRecords';
+import { addDaysKst, todayKst } from '@/lib/kst';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
 import type { MonthlySummary } from '@/lib/monthlySummary';
-
-function todayString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 export function ReservationsApp({
   summary,
   rates,
   isOwner,
+  missingClosingDates = [],
 }: {
   summary: MonthlySummary;
   rates: { reservationRate: number | null; noShowRate: number | null };
   isOwner: boolean;
+  missingClosingDates?: string[];
 }) {
   const [records, setRecords] = useState<DailyRecordSummary[]>([]);
-  const [selectedDate, setSelectedDate] = useState(todayString());
+  const [selectedDate, setSelectedDate] = useState(todayKst());
   const [addDateError, setAddDateError] = useState('');
+  const [printToken, setPrintToken] = useState(0);
 
   const refresh = useCallback(async () => {
     setRecords(await listDailyRecords());
@@ -49,19 +46,29 @@ export function ReservationsApp({
     }
   }
 
+  // 내일(한국 날짜) 예약 시트를 열고, 불러오기가 끝나면 바로 인쇄한다.
+  function handlePrintTomorrow() {
+    setSelectedDate(addDaysKst(todayKst(), 1));
+    setPrintToken((n) => n + 1);
+  }
+
   return (
     <div className="reservation-app app-shell">
+      <MissingClosingBanner dates={missingClosingDates} />
       <WeeklyDashboard records={records} summary={summary} isOwner={isOwner} rates={rates} />
+      <div className="no-print" style={{ marginBottom: 8 }}>
+        <button onClick={handlePrintTomorrow}>내일 예약 시트 인쇄</button>
+      </div>
       <div className="main-row card" style={{ display: 'flex', overflow: 'hidden' }}>
         <Sidebar
           records={records}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
-          onAddToday={() => handleAddDate(todayString())}
+          onAddToday={() => handleAddDate(todayKst())}
           onAddDate={handleAddDate}
           addDateError={addDateError}
         />
-        <DayDetail key={selectedDate} date={selectedDate} onSaved={refresh} />
+        <DayDetail key={selectedDate} date={selectedDate} onSaved={refresh} printToken={printToken} />
       </div>
     </div>
   );

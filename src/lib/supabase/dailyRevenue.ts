@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DailyClosing, DailyRevenue } from '@/lib/types';
+import { missingClosingDates } from '@/lib/closingChecks';
+import { addDaysKst, todayKst } from '@/lib/kst';
 
 // 당일결산 붙여넣기 — 그 날짜의 매출을 그대로 입력(갱신)한다. source='daily'로
 // 남겨서, 나중에 월결산이 들어오면 이 값들이 리셋 대상이라는 걸 구분할 수 있다.
@@ -115,4 +117,34 @@ export async function upsertMonthlyOverride(
     { onConflict: 'month' }
   );
   if (error) throw error;
+}
+
+// 그 날짜에 이미 저장된 일일 결산(매출·내원). 없으면 null — 덮어쓰기 확인에 쓴다.
+export async function getSavedDailyRevenue(
+  supabase: SupabaseClient,
+  date: string
+): Promise<{ totalRevenue: number; visitCount: number | null } | null> {
+  const { data, error } = await supabase
+    .from('daily_revenue')
+    .select('total_revenue, visit_count')
+    .eq('date', date)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    totalRevenue: Number(data.total_revenue),
+    visitCount: data.visit_count != null ? Number(data.visit_count) : null,
+  };
+}
+
+// 어제 마감이 아직 없으면 [어제]를, 있으면 []를 돌려준다(어제만 본다 — closingChecks.ts).
+// 예약관리 화면 배너와 홈 화면이 함께 쓴다. RLS상 승인된 직원이면 읽을 수 있다.
+export async function fetchMissingClosingDates(
+  supabase: SupabaseClient,
+  today: string = todayKst()
+): Promise<string[]> {
+  const yesterday = addDaysKst(today, -1);
+  const { data, error } = await supabase.from('daily_revenue').select('date').eq('date', yesterday);
+  if (error) throw error;
+  return missingClosingDates((data ?? []).map((row) => row.date as string), today);
 }

@@ -120,7 +120,7 @@
 
   .reservation-app h2 {
     margin: 0 0 1mm 0;
-    font-size: 9pt;
+    font-size: 10pt;
   }
 
   .reservation-app .weekly-dashboard {
@@ -131,7 +131,7 @@
 
   .reservation-app .weekly-dashboard .print-only {
     padding: 1mm 0 !important;
-    font-size: 8pt !important;
+    font-size: 10pt !important;
     font-weight: 600;
   }
 
@@ -140,36 +140,65 @@
     margin-top: 0.5mm !important;
   }
 
-  /* !important가 붙은 font-size/padding은 의도적이다 — ReservationTable.tsx가
-     화면 가독성을 위해 <table>/<th>/<td>/<input>에 인라인 style로 폭·글씨크기를
-     지정하는데, 인라인 style은 보통의 스타일시트 규칙보다 항상 우선한다. 50명이
-     A4 가로 한 장에 들어가도록 맞춘 인쇄용 축소가 화면 쪽 인라인 값에 조용히
-     덮이지 않게 하려면 여기서 !important로 명시적으로 이겨야 한다. */
-  .reservation-app table.reservation-table {
+  /* 인쇄용 예약 시트(DayDetail.tsx의 .print-sheet) — 주치의별로 한 페이지씩, 글씨는 10pt 이상.
+     화면용 편집 표(.reservation-table)는 .no-print 안에 있어서 인쇄에는 나오지 않는다. */
+  .reservation-app .print-sheet-doctor.page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .reservation-app .print-sheet h3 {
+    margin: 0 0 2mm 0;
+    font-size: 13pt;
+  }
+
+  .reservation-app table.print-sheet-table {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    font-size: 6pt !important;
-    line-height: 1;
+    font-size: 10.5pt;
+    line-height: 1.25;
   }
 
-  .reservation-app table.reservation-table th,
-  .reservation-app table.reservation-table td {
-    border: 0.4pt solid #000;
-    padding: 0 2px !important;
-    height: 2.6mm;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  .reservation-app table.print-sheet-table th,
+  .reservation-app table.print-sheet-table td {
+    border: 0.5pt solid #000;
+    padding: 1mm 1.5mm;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-all;
   }
 
-  .reservation-app table.reservation-table input {
-    height: 2.2mm;
-    border: none;
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0;
-    font-size: 6pt !important;
-    line-height: inherit;
+  .reservation-app table.print-sheet-table th {
+    font-weight: 700;
+    font-size: 10.5pt;
+  }
+
+  .reservation-app table.print-sheet-table tr {
+    break-inside: avoid;
+  }
+
+  .reservation-app table.print-sheet-table .col-time {
+    width: 17mm;
+  }
+  .reservation-app table.print-sheet-table .col-name {
+    width: 30mm;
+  }
+  .reservation-app table.print-sheet-table .col-chart {
+    width: 24mm;
+  }
+  .reservation-app table.print-sheet-table .col-phone {
+    width: 32mm;
+  }
+
+  /* 색이 빠져도(흑백 인쇄) 눈에 띄도록 테두리+굵은 글씨. */
+  .reservation-app .first-visit-mark {
+    display: inline-block;
+    margin-left: 1.5mm;
+    padding: 0 1.2mm;
+    border: 0.8pt solid #000;
+    border-radius: 1mm;
+    font-size: 10pt;
+    font-weight: 700;
   }
 }

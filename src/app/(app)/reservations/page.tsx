@@ -1,6 +1,7 @@
 import { ReservationsApp } from '@/components/reservations/ReservationsApp';
 import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary, getWeeklyRates } from '@/lib/monthlySummary';
+import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import './reservations.css';
 
 export default async function ReservationsPage() {
@@ -12,7 +13,19 @@ export default async function ReservationsPage() {
     ? await supabase.from('staff').select('role').eq('id', user.id).maybeSingle()
     : { data: null };
 
-  const [summary, rates] = await Promise.all([getMonthlySummary(), getWeeklyRates()]);
+  const [summary, rates, missingClosing] = await Promise.all([
+    getMonthlySummary(),
+    getWeeklyRates(),
+    // 알림을 못 구해도 화면은 떠야 한다.
+    fetchMissingClosingDates(supabase).catch(() => [] as string[]),
+  ]);
 
-  return <ReservationsApp summary={summary} rates={rates} isOwner={staff?.role === 'owner'} />;
+  return (
+    <ReservationsApp
+      summary={summary}
+      rates={rates}
+      isOwner={staff?.role === 'owner'}
+      missingClosingDates={missingClosing}
+    />
+  );
 }

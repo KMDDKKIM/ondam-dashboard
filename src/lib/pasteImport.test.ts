@@ -103,7 +103,7 @@ describe('analyzePasteText - daily settlement', () => {
       ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16, newPatientCount: 1 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-18', totalRevenue: 814000, visitCount: 16, newPatientCount: 1, invalidCells: [] });
   });
 
   it('reads the date from the spaced title "일 일 결 산 표:YYYY-MM-DD" (real OK차트 paste)', () => {
@@ -136,7 +136,7 @@ describe('analyzePasteText - daily settlement', () => {
   it('falls back to the provided date when no 진료날짜 label appears', () => {
     const text = [SETTLEMENT_HEADER, ['16', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text, '2026-09-20');
-    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000, visitCount: 16, newPatientCount: 1 });
+    expect(result).toEqual({ format: 'daily', date: '2026-09-20', totalRevenue: 814000, visitCount: 16, newPatientCount: 1, invalidCells: [] });
   });
 });
 
@@ -149,7 +149,7 @@ describe('analyzePasteText - monthly settlement', () => {
       ['486', '31', '8', '27.0', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t'),
     ].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null });
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null, invalidCells: [] });
   });
 
   it('reads 진료일평균환자수 from a real 월말결산 paste (title "월말결산:YYYY-MM")', () => {
@@ -160,13 +160,13 @@ describe('analyzePasteText - monthly settlement', () => {
       ['일자', '내원환자수', '총진료비', '환자부담계', '미수금'].join('\t'),
       ['2026-09-01', '16', '1736170', '705400', '0'].join('\t'),
     ].join('\n');
-    expect(analyzePasteText(text)).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 47338780, avgDailyVisits: 27.4 });
+    expect(analyzePasteText(text)).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 47338780, avgDailyVisits: 27.4, invalidCells: [] });
   });
 
   it('recognizes a "(YYYY-MM)월" title anchor as well', () => {
     const text = ['(2026-09)월 진료비 내역', SETTLEMENT_HEADER, ['486', '31', '8', '43841860', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t')].join('\n');
     const result = analyzePasteText(text);
-    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null });
+    expect(result).toEqual({ format: 'monthly', month: '2026-09', totalRevenue: 43841860, avgDailyVisits: null, invalidCells: [] });
   });
 });
 
@@ -179,5 +179,64 @@ describe('analyzePasteText - unrecognized input', () => {
   it('returns unknown for empty input', () => {
     const result = analyzePasteText('   \n  ');
     expect(result.format).toBe('unknown');
+  });
+});
+
+describe('analyzePasteText - non-numeric cells are reported, not turned into 0', () => {
+  it('reports a non-numeric 총진료비 and keeps totalRevenue at 0 without pretending it was read', () => {
+    const text = [
+      '진료날짜:2026-09-19',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '81a4000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'daily') throw new Error('expected daily');
+    expect(result.invalidCells).toEqual(["총진료비: '81a4000'"]);
+  });
+
+  it('reports an empty 총진료비 cell', () => {
+    const text = [
+      '진료날짜:2026-09-19',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'daily') throw new Error('expected daily');
+    expect(result.invalidCells).toEqual(['총진료비: (비어 있음)']);
+  });
+
+  it('reports a non-numeric 내원환자수 and leaves it null instead of 0', () => {
+    const text = [
+      '진료날짜:2026-09-19',
+      SETTLEMENT_HEADER,
+      ['열여섯', '1', '0', '814000', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'daily') throw new Error('expected daily');
+    expect(result.visitCount).toBeNull();
+    expect(result.invalidCells).toEqual(["내원환자수: '열여섯'"]);
+  });
+
+  it('still accepts thousands separators and the 원 suffix', () => {
+    const text = [
+      '진료날짜:2026-09-19',
+      SETTLEMENT_HEADER,
+      ['16', '1', '0', '1,814,000원', '200900', '451100', '0', '0', '162000', '362900', '0'].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'daily') throw new Error('expected daily');
+    expect(result.totalRevenue).toBe(1814000);
+    expect(result.invalidCells).toEqual([]);
+  });
+
+  it('reports a non-numeric monthly 총진료비 too', () => {
+    const text = [
+      '월말결산:2026-09',
+      SETTLEMENT_HEADER,
+      ['486', '31', '8', 'N/A', '7196750', '15745410', '2483200', '0', '18416500', '25613250', '0'].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    if (result.format !== 'monthly') throw new Error('expected monthly');
+    expect(result.invalidCells).toEqual(["총진료비: 'N/A'"]);
   });
 });

@@ -147,39 +147,34 @@ export async function ensureDailyRecord(date: string): Promise<string> {
   return data.id;
 }
 
+// 그 날짜의 예약 명단을 통째로 대체한다. 지우기+넣기는 DB 함수 replace_reservations 안에서
+// 한 트랜잭션으로 처리한다(중간에 실패해도 예전 명단이 그대로 남는다). 그 날짜의
+// daily_records 행이 없으면 함수가 만든다. 함수는 service_role 만 실행할 수 있다.
+//
 // 마감 멘트 없이도 예약률/부도취소율/추나 통계가 나오도록, 명단을 저장할 때마다
 // 그 자리에서 다시 계산해 daily_records에 반영한다(reservationStats.ts 참고).
 // 녹용/일반 한약·다이어트·초진 수는 명단만으로는 못 가려서 손대지 않는다 — 마지막
-// 저장된 값이 그대로 남는다.
-export async function replaceReservations(
-  dailyRecordId: string,
-  rows: Reservation[]
-): Promise<void> {
-  const { error: deleteError } = await supabase
-    .from('reservations')
-    .delete()
-    .eq('daily_record_id', dailyRecordId);
-  if (deleteError) throw deleteError;
-
-  if (rows.length > 0) {
-    const { error: insertError } = await supabase.from('reservations').insert(
-      rows.map((row) => ({
-        daily_record_id: dailyRecordId,
-        doctor_name: row.doctorName,
-        time_label: row.timeLabel,
-        patient_name: row.patientName,
-        chart_no: row.chartNo,
-        phone: row.phone,
-        mobile: row.mobile,
-        visit_status: row.visitStatus,
-        treatment_area: row.treatmentArea,
-        treatment: row.treatment,
-        special_notes: row.specialNotes,
-        memo: row.memo,
-      }))
-    );
-    if (insertError) throw insertError;
-  }
+// 저장된 값이 그대로 남는다. 통계 갱신은 대체와 별개 요청이지만 명단에서 다시 계산하는
+// 값이라 실패하면 같은 저장을 다시 하면 된다.
+export async function replaceReservationsForDate(date: string, rows: Reservation[]): Promise<string> {
+  const { data: dailyRecordId, error: rpcError } = await supabase.rpc('replace_reservations', {
+    p_date: date,
+    p_rows: rows.map((row) => ({
+      doctor_name: row.doctorName,
+      time_label: row.timeLabel,
+      patient_name: row.patientName,
+      chart_no: row.chartNo,
+      phone: row.phone,
+      mobile: row.mobile,
+      visit_status: row.visitStatus,
+      treatment_area: row.treatmentArea,
+      treatment: row.treatment,
+      special_notes: row.specialNotes,
+      memo: row.memo,
+    })),
+  });
+  if (rpcError) throw rpcError;
+  if (typeof dailyRecordId !== 'string') throw new Error('예약 명단을 대체하지 못했습니다.');
 
   const stats = computeDerivedStats(rows);
   const { error: statsError } = await supabase
@@ -195,4 +190,45 @@ export async function replaceReservations(
     })
     .eq('id', dailyRecordId);
   if (statsError) throw statsError;
+  return dailyRecordId;
+}
+
+export async function replaceReservations(
+  dailyRecordId: string,
+  rows: Reservation[]
+): Promise<void> {
+  const { data: record, error } = await supabase
+    .from('daily_records')
+    .select('date')
+    .eq('id', dailyRecordId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!record) throw new Error('해당 날짜의 기록을 찾을 수 없습니다.');
+  await replaceReservationsForDate(record.date, rows);
+}
+
+// 날짜별 현재 저장된 예약 명단 인원수(붙여넣기 저장 전 "기존 N명 → 새 N명" 확인용). 읽기 전용.
+export async function countReservationsByDates(dates: string[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = Object.fromEntries(dates.map((d) => [d, 0]));
+  if (dates.length === 0) return counts;
+
+  const { data: records, error } = await supabase
+    .from('daily_records')
+    .select('id, date')
+    .in('date', dates)
+    .is('deleted_at', null);
+  if (error) throw error;
+  if (!records || records.length === 0) return counts;
+
+  const dateById = new Map(records.map((r) => [r.id as string, r.date as string]));
+  const { data: rows, error: rowsError } = await supabase
+    .from('reservations')
+    .select('daily_record_id')
+    .in('daily_record_id', [...dateById.keys()]);
+  if (rowsError) throw rowsError;
+  for (const row of rows ?? []) {
+    const d = dateById.get(row.daily_record_id);
+    if (d) counts[d] += 1;
+  }
+  return counts;
 }
