@@ -42,11 +42,11 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   select exists (
     select 1 from public.staff where id = auth.uid() and status = 'approved'
   )
-$;
+$$;
 
 revoke all on function public.is_approved_staff() from public, anon;
 grant execute on function public.is_approved_staff() to authenticated;

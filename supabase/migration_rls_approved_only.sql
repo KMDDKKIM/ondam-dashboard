@@ -18,7 +18,10 @@
 -- left as they are. prescriptions / daily_records / reservations /
 -- monthly_goals belong to another app sharing this database and are NOT touched.
 --
--- Idempotent: safe to re-run.
+-- Idempotent: safe to re-run. Runs as one transaction: any failure (including the
+-- safeguards at the end) rolls everything back.
+
+begin;
 
 -- 1) Helper: is the caller an approved staff member?
 --    SECURITY DEFINER so it can read staff regardless of the staff RLS policy
@@ -275,11 +278,14 @@ create policy "authenticated can view chat attachments" on storage.objects
   for select to authenticated
   using (bucket_id = 'chat-attachments' and public.is_approved_staff());
 
--- 5) Safeguard: fail (and roll back, when run as one script) if any policy on
---    these tables still relies on the loose `auth.role()` check.
+-- 5) Safeguards (run inside the transaction, before commit): fail and roll back if
+--    (a) any policy on these tables still relies on the loose `auth.role()` check, or
+--    (b) any table has fewer policies than the live database had (a dropped
+--        policy that was not recreated would silently lock everyone out).
 do $$
 declare
   leftovers text;
+  missing text;
 begin
   select string_agg(schemaname || '.' || tablename || ': ' || policyname, '; ')
     into leftovers
@@ -300,4 +306,45 @@ begin
   if leftovers is not null then
     raise exception 'Policies still using auth.role(): %', leftovers;
   end if;
+
+  select string_agg(e.t || ' (expected >= ' || e.n || ', found ' || coalesce(a.c, 0) || ')', '; ')
+    into missing
+  from (values
+    ('staff', 2),
+    ('happy_call_patients', 3),
+    ('herb_medicine_prescriptions', 3),
+    ('diet_packages', 3),
+    ('diet_package_calls', 3),
+    ('happy_call_manual_entries', 3),
+    ('herb_inventory', 4),
+    ('herb_inventory_logs', 2),
+    ('non_covered_purchases', 4),
+    ('non_covered_products', 4),
+    ('daily_revenue', 4),
+    ('monthly_revenue_override', 3),
+    ('consult_summaries', 3),
+    ('todos', 4),
+    ('supply_items', 4),
+    ('supply_requests', 4)
+  ) as e(t, n)
+  left join (
+    select tablename, count(*) as c
+    from pg_policies
+    where schemaname = 'public'
+    group by tablename
+  ) a on a.tablename = e.t
+  where coalesce(a.c, 0) < e.n;
+
+  if missing is not null then
+    raise exception 'Too few policies: %', missing;
+  end if;
+
+  if (select count(*) from pg_policies
+      where schemaname = 'storage' and tablename = 'objects'
+        and policyname in ('authenticated can upload chat attachments',
+                           'authenticated can view chat attachments')) < 2 then
+    raise exception 'chat-attachments storage policies missing';
+  end if;
 end $$;
+
+commit;

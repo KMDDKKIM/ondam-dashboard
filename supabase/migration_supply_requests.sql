@@ -1,3 +1,4 @@
+-- 주의: 이 파일의 정책은 나중에 migration_rls_approved_only.sql 로 대체됨. 새 DB가 아니면 다시 실행하지 말 것.
 -- 물품신청: 자주 쓰는 품목(supply_items) + 신청 내역(supply_requests).
 -- 상태는 컬럼으로 따로 두지 않고 시각으로 판단한다 — received_at이 있으면 도착,
 -- ordered_at이 있으면 주문완료, 둘 다 없으면 신청됨.
