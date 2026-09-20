@@ -6,20 +6,32 @@ import {
   listHerbInventory,
   createHerbInventoryItems,
   deleteHerbInventoryItem,
-  adjustHerbStock,
+  applyHerbStockChanges,
+  setHerbLowStockThreshold,
+  listRecentHerbInventoryLogs,
+  listStaffNames,
+  stockErrorMessage,
 } from '@/lib/supabase/herbInventory';
 import { parseBulkHerbEntry, parseNewHerbs } from '@/lib/herbEntryParser';
-import type { HerbInventoryItem } from '@/lib/types';
+import { listShortHerbs } from '@/lib/herbOrder';
+import type { HerbInventoryItem, HerbInventoryLog } from '@/lib/types';
+import LowStockPanel from '@/components/herb-inventory/LowStockPanel';
+import BulkStockForms from '@/components/herb-inventory/BulkStockForms';
+import HerbCard from '@/components/herb-inventory/HerbCard';
+import HistorySection from '@/components/herb-inventory/HistorySection';
 
-type ActiveAction = { id: string; type: 'use' | 'restock' } | null;
-
-function warningText(unmatched: string[], dangling: string[]): string {
+// 일괄 입력에서 반영하면 안 되는 항목들을 한 줄 문구로 만든다. 하나라도 있으면 아무것도 반영하지 않는다
+// (일부만 반영되면 다시 시도할 때 이중 반영되기 때문).
+function blockingProblems(parsed: ReturnType<typeof parseBulkHerbEntry>): string {
   const parts: string[] = [];
-  if (unmatched.length > 0) {
-    parts.push(`목록에 없는 약재라 반영 안 됨: ${unmatched.join(', ')} — 먼저 "+ 약재 추가"로 등록해주세요.`);
+  if (parsed.unmatchedNames.length > 0) {
+    parts.push(`목록에 없는 약재: ${parsed.unmatchedNames.join(', ')} (먼저 "+ 약재 추가"로 등록해주세요)`);
   }
-  if (dangling.length > 0) {
-    parts.push(`개수가 안 붙어서 반영 안 됨: ${dangling.join(', ')}`);
+  if (parsed.danglingNames.length > 0) {
+    parts.push(`봉지 수가 안 붙은 약재: ${parsed.danglingNames.join(', ')}`);
+  }
+  if (parsed.invalidAmountNames.length > 0) {
+    parts.push(`봉지 수는 1 이상의 정수여야 해요: ${parsed.invalidAmountNames.join(', ')}`);
   }
   return parts.join(' / ');
 }
@@ -35,27 +47,31 @@ export default function HerbInventoryPage() {
   const [addingHerbs, setAddingHerbs] = useState(false);
   const [notice, setNotice] = useState('');
 
-  const [restockText, setRestockText] = useState('');
-  const [useText, setUseText] = useState('');
-  const [bulkSubmitting, setBulkSubmitting] = useState<'restock' | 'use' | null>(null);
-
-  const [active, setActive] = useState<ActiveAction>(null);
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [logs, setLogs] = useState<HerbInventoryLog[]>([]);
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
 
   const supabase = createClient();
 
+  // 처음 한 번만 "불러오는 중"을 보여준다(다시 불러올 때 화면을 비우면 입력 중인 내용이 사라진다).
   async function load() {
-    setLoading(true);
-    setError('');
     try {
-      const rows = await listHerbInventory(supabase);
-      setItems(rows);
+      setItems(await listHerbInventory(supabase));
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
       setLoading(false);
+    }
+    await loadHistory();
+  }
+
+  // 이력은 부가 정보라 실패해도 재고 화면은 그대로 보여준다.
+  async function loadHistory() {
+    try {
+      const [l, names] = await Promise.all([listRecentHerbInventoryLogs(supabase, 50), listStaffNames(supabase)]);
+      setLogs(l);
+      setStaffNames(names);
+    } catch {
+      // 이력 표시만 비어 있게 둔다.
     }
   }
 
@@ -68,8 +84,8 @@ export default function HerbInventoryPage() {
   // 나머지는 한 번의 insert로 같이 넣어서 중간에 일부만 들어가는 일이 없게 한다.
   async function handleAddHerbs(event: FormEvent) {
     event.preventDefault();
-    const { entries, duplicateNames } = parseNewHerbs(newHerbsText);
-    if (entries.length === 0) return;
+    const { entries, duplicateNames, invalidStockNames } = parseNewHerbs(newHerbsText);
+    if (entries.length === 0 && invalidStockNames.length === 0) return;
 
     const existing = new Set(items.map((i) => i.name));
     const toAdd = entries.filter((e) => !existing.has(e.name));
@@ -78,6 +94,9 @@ export default function HerbInventoryPage() {
     const warnings: string[] = [];
     if (skipped.length > 0) warnings.push(`이미 있어서 건너뜀: ${skipped.join(', ')}`);
     if (duplicateNames.length > 0) warnings.push(`중복 입력이라 처음 것만 사용: ${duplicateNames.join(', ')}`);
+    if (invalidStockNames.length > 0) {
+      warnings.push(`재고(봉지 수)는 정수여야 해서 등록 안 함: ${invalidStockNames.join(', ')}`);
+    }
     setWarning(warnings.join(' / '));
     setError('');
     setNotice('');
@@ -106,51 +125,43 @@ export default function HerbInventoryPage() {
     }
   }
 
-  // "당귀 천궁 3 생강 대조 1" 처럼 처방 적듯이 이름 여러 개 + 개수를 한 번에
-  // 입력받아, 목록에 있는 약재만 골라 사용/입고를 한 번에 반영한다. 목록에 없는
-  // 이름이나 개수가 안 붙은 이름은 반영하지 않고 warning으로 알려준다.
-  async function handleBulkSubmit(type: 'use' | 'restock') {
-    const text = type === 'use' ? useText : restockText;
-    if (!text.trim()) return;
-
-    const { matched, unmatchedNames, danglingNames } = parseBulkHerbEntry(
+  // "당귀 천궁 3 생강 대조 1" 처럼 처방 적듯이 이름 여러 개 + 봉지 수를 한 번에 입력받아
+  // 사용/입고를 DB 함수 한 번(한 트랜잭션)으로 반영한다. 목록에 없는 이름, 봉지 수가 없거나
+  // 잘못된 이름이 하나라도 있으면 아무것도 반영하지 않고 알려준다. 재고가 모자라도 전체가 거부된다.
+  async function handleBulkSubmit(type: 'use' | 'restock', text: string): Promise<boolean> {
+    setNotice('');
+    const parsed = parseBulkHerbEntry(
       text,
       items.map((i) => i.name)
     );
-
-    setWarning(warningText(unmatchedNames, danglingNames));
-    setError('');
-
-    if (matched.length === 0) {
-      return;
+    const problems = blockingProblems(parsed);
+    if (problems) {
+      setWarning(problems);
+      setError('아무것도 반영하지 않았어요. 위 항목을 고친 뒤 다시 눌러주세요.');
+      return false;
     }
+    setWarning('');
+    setError('');
+    if (parsed.matched.length === 0) return false;
 
-    setBulkSubmitting(type);
+    const byName = new Map(items.map((i) => [i.name, i]));
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      for (const entry of matched) {
-        const item = items.find((i) => i.name === entry.name);
-        if (!item) continue;
-        await adjustHerbStock(supabase, {
-          herbId: item.id,
+      await applyHerbStockChanges(
+        supabase,
+        parsed.matched.map((m) => ({
+          herbId: byName.get(m.name)!.id,
           changeType: type,
-          amount: entry.amount,
+          amount: m.amount,
           note: '일괄 입력',
-          createdBy: user?.id ?? null,
-          currentStock: item.currentStock,
-        });
-      }
-
-      if (type === 'use') setUseText('');
-      else setRestockText('');
+        }))
+      );
+      setNotice(`${parsed.matched.length}개 약재의 ${type === 'use' ? '사용' : '입고'}을 반영했어요.`);
       await load();
-    } catch {
-      setError('처리 중 일부가 실패했습니다. 재고를 확인 후 다시 시도해주세요.');
-    } finally {
-      setBulkSubmitting(null);
+      return true;
+    } catch (e) {
+      await load(); // 화면의 재고가 오래됐을 수 있어 다시 불러온다
+      setError(stockErrorMessage(e) + ' (아무것도 반영되지 않았어요)');
+      return false;
     }
   }
 
@@ -168,37 +179,26 @@ export default function HerbInventoryPage() {
     }
   }
 
-  function openAction(id: string, type: 'use' | 'restock') {
-    setActive({ id, type });
-    setAmount('');
-    setNote('');
+  // 카드에서 한 약재만 사용/입고. 실패하면 메시지를 던져 카드가 보여준다.
+  async function handleAdjust(item: HerbInventoryItem, type: 'use' | 'restock', amount: number, note: string | null) {
+    try {
+      await applyHerbStockChanges(supabase, [{ herbId: item.id, changeType: type, amount, note }]);
+    } catch (e) {
+      await load();
+      throw new Error(stockErrorMessage(e));
+    }
+    setNotice('');
+    await load();
   }
 
-  async function submitAction(item: HerbInventoryItem) {
-    if (!active || !amount || Number(amount) <= 0) return;
-    setSubmitting(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await adjustHerbStock(supabase, {
-        herbId: item.id,
-        changeType: active.type,
-        amount: Number(amount),
-        note: note.trim() || null,
-        createdBy: user?.id ?? null,
-        currentStock: item.currentStock,
-      });
-      setActive(null);
-      await load();
-    } catch {
-      setError('처리에 실패했습니다.');
-    } finally {
-      setSubmitting(false);
-    }
+  async function handleSaveThreshold(item: HerbInventoryItem, threshold: number | null) {
+    await setHerbLowStockThreshold(supabase, item.id, threshold);
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, lowStockThreshold: threshold } : i)));
   }
 
   const outOfStock = useMemo(() => items.filter((i) => i.currentStock <= 0), [items]);
+  const shorts = useMemo(() => listShortHerbs(items), [items]);
+  const herbNames = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.name])), [items]);
   const preview = useMemo(() => parseNewHerbs(newHerbsText).entries, [newHerbsText]);
 
   if (loading) return <p className="muted-text">불러오는 중...</p>;
@@ -208,7 +208,7 @@ export default function HerbInventoryPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 24, marginBottom: 4 }}>한약재 재고 현황</h1>
-          <p className="muted-text">재고가 부족한 약재를 한눈에 확인하고, 사용·입고를 기록하세요.</p>
+          <p className="muted-text">재고는 봉지 수로 관리해요. 부족한 약재를 확인하고 사용·입고를 기록하세요.</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
           + 약재 추가
@@ -253,63 +253,15 @@ export default function HerbInventoryPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>📥 일괄 입고</div>
-          <p className="muted-text" style={{ marginBottom: 8 }}>
-            예: 당귀 천궁 3 생강 대조 1
-          </p>
-          <textarea
-            value={restockText}
-            onChange={(e) => setRestockText(e.target.value)}
-            className="input-field"
-            rows={2}
-            style={{ resize: 'vertical', marginBottom: 8 }}
-          />
-          <button
-            onClick={() => handleBulkSubmit('restock')}
-            disabled={bulkSubmitting === 'restock'}
-            className="btn-primary"
-            style={{ width: '100%' }}
-          >
-            입고 반영
-          </button>
-        </div>
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>📤 일괄 사용</div>
-          <p className="muted-text" style={{ marginBottom: 8 }}>
-            예: 당귀 생지황 1
-          </p>
-          <textarea
-            value={useText}
-            onChange={(e) => setUseText(e.target.value)}
-            className="input-field"
-            rows={2}
-            style={{ resize: 'vertical', marginBottom: 8 }}
-          />
-          <button
-            onClick={() => handleBulkSubmit('use')}
-            disabled={bulkSubmitting === 'use'}
-            style={{
-              width: '100%',
-              padding: '10px 18px',
-              borderRadius: 10,
-              border: '1px solid var(--color-line)',
-              background: 'var(--color-surface-2)',
-              fontWeight: 600,
-              fontSize: 14,
-            }}
-          >
-            사용 반영
-          </button>
-        </div>
-      </div>
+      <LowStockPanel shorts={shorts} />
+
+      <BulkStockForms onSubmit={handleBulkSubmit} />
 
       {showAddForm && (
         <form onSubmit={handleAddHerbs} className="card" style={{ padding: 16, marginBottom: 20 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>새 약재 여러 개 한 번에 추가</div>
           <p className="muted-text" style={{ marginBottom: 8 }}>
-            약재명 뒤에 현재 재고를 적어주세요. 줄바꿈이나 띄어쓰기로 구분하고, 재고가 같은 약재는 이름을 이어 쓴 뒤 숫자를
+            약재명 뒤에 현재 재고(봉지 수, 정수)를 적어주세요. 줄바꿈이나 띄어쓰기로 구분하고, 재고가 같은 약재는 이름을 이어 쓴 뒤 숫자를
             한 번만 쓰면 돼요. 예: 당귀 5 천궁 3 생강 대조 1 (엑셀에서 복사해 붙여넣어도 돼요)
           </p>
           <textarea
@@ -347,128 +299,19 @@ export default function HerbInventoryPage() {
             gap: 16,
           }}
         >
-          {items.map((item) => {
-            const empty = item.currentStock <= 0;
-            const low = !empty && item.lowStockThreshold != null && item.currentStock <= item.lowStockThreshold;
-            const isActive = active?.id === item.id;
-            return (
-              <div
-                key={item.id}
-                className="card"
-                style={{
-                  padding: 18,
-                  borderColor: low || empty ? 'var(--color-error)' : 'var(--color-line)',
-                  background: empty ? '#fdecea' : undefined,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</span>
-                  {(low || empty) && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: '#fff',
-                        background: 'var(--color-error)',
-                        borderRadius: 999,
-                        padding: '2px 8px',
-                      }}
-                    >
-                      {empty ? '재고 없음' : '부족'}
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{ fontSize: 24, fontWeight: 700, marginBottom: 4, color: empty ? 'var(--color-error)' : undefined }}
-                >
-                  {item.currentStock.toLocaleString()}
-                </div>
-                {item.lowStockThreshold != null && (
-                  <div className="muted-text" style={{ marginBottom: 12 }}>
-                    부족 기준 {item.lowStockThreshold}
-                  </div>
-                )}
-
-                {isActive ? (
-                  <div style={{ marginTop: 12 }}>
-                    <input
-                      type="number"
-                      autoFocus
-                      placeholder={active.type === 'use' ? '사용량' : '입고량'}
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="input-field"
-                      style={{ marginBottom: 6 }}
-                    />
-                    <input
-                      placeholder="메모 (선택)"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      className="input-field"
-                      style={{ marginBottom: 6 }}
-                    />
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        onClick={() => submitAction(item)}
-                        disabled={submitting}
-                        className="btn-primary"
-                        style={{ flex: 1, padding: '8px 0', fontSize: 13 }}
-                      >
-                        확인
-                      </button>
-                      <button
-                        onClick={() => setActive(null)}
-                        style={{
-                          flex: 1,
-                          padding: '8px 0',
-                          fontSize: 13,
-                          borderRadius: 10,
-                          border: '1px solid var(--color-line)',
-                          background: 'var(--color-surface-2)',
-                        }}
-                      >
-                        취소
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button
-                      onClick={() => openAction(item.id, 'use')}
-                      style={{
-                        flex: 1,
-                        padding: '8px 0',
-                        fontSize: 13,
-                        borderRadius: 10,
-                        border: '1px solid var(--color-line)',
-                        background: 'var(--color-surface-2)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      사용
-                    </button>
-                    <button
-                      onClick={() => openAction(item.id, 'restock')}
-                      className="btn-primary"
-                      style={{ flex: 1, padding: '8px 0', fontSize: 13 }}
-                    >
-                      입고
-                    </button>
-                  </div>
-                )}
-                {!isActive && (
-                  <button
-                    onClick={() => handleDeleteHerb(item)}
-                    style={{ border: 'none', background: 'transparent', color: 'var(--color-muted)', fontSize: 12, padding: '10px 0 0' }}
-                  >
-                    삭제
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          {items.map((item) => (
+            <HerbCard
+              key={item.id}
+              item={item}
+              onSaveThreshold={handleSaveThreshold}
+              onAdjust={handleAdjust}
+              onDelete={handleDeleteHerb}
+            />
+          ))}
         </div>
       )}
+
+      <HistorySection logs={logs} herbNames={herbNames} staffNames={staffNames} />
     </div>
   );
 }

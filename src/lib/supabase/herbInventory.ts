@@ -33,8 +33,8 @@ export async function createHerbInventoryItems(
   const { error } = await supabase.from('herb_inventory').insert(
     inputs.map((i) => ({
       name: i.name,
-      // 단위는 이제 화면에 안 쓰지만 컬럼이 not null이라 빈 값으로 채운다.
-      unit: '',
+      // 단위는 봉지 하나뿐이다(컬럼이 not null이라 명시).
+      unit: '봉지',
       current_stock: i.currentStock,
       created_by: i.createdBy,
     }))
@@ -49,46 +49,67 @@ export async function deleteHerbInventoryItem(supabase: SupabaseClient, id: stri
   if (!data || data.length === 0) throw new Error('삭제하지 못했습니다.');
 }
 
-// 사용(use)은 재고를 줄이고, 입고(restock)는 늘린다. 두 종류 모두 herb_inventory의
-// current_stock을 바로 갱신하면서, herb_inventory_logs에 변동 이력을 같이 남긴다.
-// 한 번의 사용자 조작이 두 테이블에 걸쳐 있으므로, 두 번째 쓰기가 실패하면 첫 번째
-// 갱신도 되돌려 재고 숫자와 이력이 어긋나지 않게 한다.
-export async function adjustHerbStock(
+export interface HerbStockChange {
+  herbId: string;
+  changeType: 'use' | 'restock';
+  amount: number; // 1 이상의 정수(봉지)
+  note?: string | null;
+}
+
+export interface HerbStockResult {
+  herbId: string;
+  name: string;
+  currentStock: number;
+}
+
+// 입고/사용을 DB 함수 한 번으로 처리한다. 여러 약재도 한 트랜잭션이라, 하나라도 안 되면
+// (재고가 모자라거나 목록에 없는 약재) 전부 반영되지 않는다 — 그래서 다시 시도해도 이중 반영이 없다.
+// 이력(herb_inventory_logs)도 함수 안에서 같이 남는다.
+export async function applyHerbStockChanges(
   supabase: SupabaseClient,
-  input: {
-    herbId: string;
-    changeType: 'use' | 'restock';
-    amount: number;
-    note: string | null;
-    createdBy: string | null;
-    currentStock: number;
-  }
-): Promise<number> {
-  const delta = input.changeType === 'use' ? -input.amount : input.amount;
-  const nextStock = Math.max(0, input.currentStock + delta);
-
-  const { error: updateError } = await supabase
-    .from('herb_inventory')
-    .update({ current_stock: nextStock, updated_at: new Date().toISOString() })
-    .eq('id', input.herbId);
-  if (updateError) throw updateError;
-
-  const { error: logError } = await supabase.from('herb_inventory_logs').insert({
-    herb_id: input.herbId,
-    change_type: input.changeType,
-    amount: input.amount,
-    note: input.note,
-    created_by: input.createdBy,
+  changes: HerbStockChange[]
+): Promise<HerbStockResult[]> {
+  const { data, error } = await supabase.rpc('apply_herb_stock_changes', {
+    p_changes: changes.map((c) => ({
+      herb_id: c.herbId,
+      change_type: c.changeType,
+      amount: c.amount,
+      note: c.note ?? null,
+    })),
   });
-  if (logError) {
-    await supabase
-      .from('herb_inventory')
-      .update({ current_stock: input.currentStock })
-      .eq('id', input.herbId);
-    throw logError;
-  }
+  if (error) throw error;
+  return (data as { herb_id: string; name: string; current_stock: number }[]).map((r) => ({
+    herbId: r.herb_id,
+    name: r.name,
+    currentStock: Number(r.current_stock),
+  }));
+}
 
-  return nextStock;
+/** DB 함수가 직접 던진 오류(P0001)는 한국어 안내 문구라 그대로 보여주고, 나머지는 일반 문구로. */
+export function stockErrorMessage(err: unknown): string {
+  if (typeof err === 'object' && err !== null) {
+    const e = err as { code?: unknown; message?: unknown };
+    if (e.code === 'P0001' && typeof e.message === 'string') return e.message;
+    if (e.code === 'PGRST202' || e.code === '42883') {
+      return '재고 처리 함수가 아직 설치되지 않았어요(관리자 문의).';
+    }
+  }
+  return '재고 처리에 실패했습니다. 잠시 후 다시 시도해주세요.';
+}
+
+// 부족 기준(봉지). null이면 기준 없음. RLS가 막으면 에러 없이 0행이 바뀌므로 확인한다.
+export async function setHerbLowStockThreshold(
+  supabase: SupabaseClient,
+  id: string,
+  threshold: number | null
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('herb_inventory')
+    .update({ low_stock_threshold: threshold })
+    .eq('id', id)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('저장하지 못했습니다.');
 }
 
 interface HerbInventoryLogRow {
@@ -101,16 +122,15 @@ interface HerbInventoryLogRow {
   created_at: string;
 }
 
-export async function listHerbInventoryLogs(
+export async function listRecentHerbInventoryLogs(
   supabase: SupabaseClient,
-  herbId: string
+  limit = 50
 ): Promise<HerbInventoryLog[]> {
   const { data, error } = await supabase
     .from('herb_inventory_logs')
     .select('*')
-    .eq('herb_id', herbId)
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(limit);
   if (error) throw error;
   return (data as HerbInventoryLogRow[]).map((row) => ({
     id: row.id,
@@ -121,4 +141,13 @@ export async function listHerbInventoryLogs(
     createdBy: row.created_by,
     createdAt: row.created_at,
   }));
+}
+
+// 이력의 처리자 이름을 보여주기 위한 직원 id -> 이름. 퇴사로 삭제된 직원은 없다.
+export async function listStaffNames(supabase: SupabaseClient): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('staff').select('id, name');
+  if (error) throw error;
+  const map: Record<string, string> = {};
+  for (const row of data as { id: string; name: string }[]) map[row.id] = row.name;
+  return map;
 }

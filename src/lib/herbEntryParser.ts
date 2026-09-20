@@ -2,6 +2,8 @@ export interface ParsedBulkEntry {
   matched: { name: string; amount: number }[];
   unmatchedNames: string[];
   danglingNames: string[];
+  // 개수가 0이거나 소수(봉지는 1 이상의 정수만 가능)라 반영하지 않는 이름들.
+  invalidAmountNames: string[];
 }
 
 const NUMBER_PATTERN = /^[0-9]+(\.[0-9]+)?$/;
@@ -31,13 +33,17 @@ export function parseBulkHerbEntry(text: string, knownNames: string[]): ParsedBu
   const knownSet = new Set(knownNames);
   const totals = new Map<string, number>();
   const unmatched = new Set<string>();
+  const invalid = new Set<string>();
 
   for (const group of groups) {
+    const validAmount = Number.isInteger(group.amount) && group.amount >= 1;
     for (const name of group.names) {
-      if (knownSet.has(name)) {
-        totals.set(name, (totals.get(name) ?? 0) + group.amount);
-      } else {
+      if (!knownSet.has(name)) {
         unmatched.add(name);
+      } else if (!validAmount) {
+        invalid.add(name);
+      } else {
+        totals.set(name, (totals.get(name) ?? 0) + group.amount);
       }
     }
   }
@@ -46,12 +52,15 @@ export function parseBulkHerbEntry(text: string, knownNames: string[]): ParsedBu
     matched: Array.from(totals.entries()).map(([name, amount]) => ({ name, amount })),
     unmatchedNames: Array.from(unmatched),
     danglingNames: pending,
+    invalidAmountNames: Array.from(invalid),
   };
 }
 
 export interface ParsedNewHerbs {
   entries: { name: string; stock: number; missingStock: boolean }[];
   duplicateNames: string[];
+  // 재고가 소수라(봉지는 정수만) 등록하지 않는 이름들.
+  invalidStockNames: string[];
 }
 
 // 새 약재를 여러 개 한 번에 등록할 때 쓰는 입력. 일괄 입고와 같은 표기를 따른다 —
@@ -64,10 +73,15 @@ export function parseNewHerbs(text: string): ParsedNewHerbs {
   const entries: ParsedNewHerbs['entries'] = [];
   const seen = new Set<string>();
   const duplicateNames: string[] = [];
+  const invalidStockNames: string[] = [];
   let pending: string[] = [];
 
   function flush(stock: number, missingStock: boolean) {
     for (const name of pending) {
+      if (!Number.isInteger(stock)) {
+        if (!invalidStockNames.includes(name)) invalidStockNames.push(name);
+        continue;
+      }
       if (seen.has(name)) {
         if (!duplicateNames.includes(name)) duplicateNames.push(name);
         continue;
@@ -87,5 +101,5 @@ export function parseNewHerbs(text: string): ParsedNewHerbs {
   }
   flush(0, true);
 
-  return { entries, duplicateNames };
+  return { entries, duplicateNames, invalidStockNames };
 }

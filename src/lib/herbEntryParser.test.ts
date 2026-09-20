@@ -60,6 +60,14 @@ describe('parseBulkHerbEntry', () => {
   });
 });
 
+describe('parseBulkHerbEntry invalid amounts', () => {
+  it('0봉지나 소수는 반영하지 않고 잘못된 개수로 알린다', () => {
+    const result = parseBulkHerbEntry('당귀 0 천궁 1.5 생강 2', KNOWN);
+    expect(result.matched).toEqual([{ name: '생강', amount: 2 }]);
+    expect(result.invalidAmountNames).toEqual(['당귀', '천궁']);
+  });
+});
+
 describe('parseNewHerbs', () => {
   it('숫자가 나오면 앞의 이름들에 그 재고를 준다', () => {
     const { entries } = parseNewHerbs('당귀 5 천궁 3 생강 대조 1');
@@ -96,5 +104,11 @@ describe('parseNewHerbs', () => {
 
   it('빈 입력이면 아무것도 만들지 않는다', () => {
     expect(parseNewHerbs('  \n ').entries).toEqual([]);
+  });
+
+  it('소수 재고는 등록하지 않고 알린다', () => {
+    const { entries, invalidStockNames } = parseNewHerbs('당귀 2.5 천궁 3');
+    expect(entries).toEqual([{ name: '천궁', stock: 3, missingStock: false }]);
+    expect(invalidStockNames).toEqual(['당귀']);
   });
 });
