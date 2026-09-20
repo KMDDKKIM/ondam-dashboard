@@ -290,6 +290,11 @@ drop policy if exists "authenticated can update happy_call_manual_entries" on ha
 create policy "authenticated can update happy_call_manual_entries" on happy_call_manual_entries
   for update to authenticated using (public.is_approved_staff());
 
+-- 비급여 구매 삭제/수정 시 자동 생성된 해피콜을 함께 지운다 (migration_manual_entries_delete.sql).
+drop policy if exists "authenticated can delete happy_call_manual_entries" on happy_call_manual_entries;
+create policy "authenticated can delete happy_call_manual_entries" on happy_call_manual_entries
+  for delete to authenticated using (public.is_approved_staff());
+
 -- 비급여 현황: 환자 이름/차트번호/연락처 + 어떤 상품을 샀는지 + 어느 구분(일반 /
 -- 26추석이벤트 / 27설이벤트 ...)인지 한 행에 남긴다. 환자별 별도 테이블을 두지
 -- 않고, 같은 환자가 다시 구매하면 이 테이블에서 이름/차트번호/연락처로 검색해

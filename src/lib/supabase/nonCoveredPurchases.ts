@@ -1,7 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
-import { createManualEntry, updateManualEntryCallDate } from './happyCallQueue';
-import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
+import {
+  createManualEntry,
+  getManualEntryStates,
+  removeOpenManualEntries,
+  updateUntouchedManualEntry,
+} from './happyCallQueue';
+import { addDays } from '@/lib/happyCallStats';
+import { CALL_SLOTS, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
+
+const TABLE = 'non_covered_purchases';
 
 interface NonCoveredPurchaseRow {
   id: string;
@@ -61,20 +69,32 @@ export function suggestGoalCategory(productName: string): GoalCategory | null {
   return SPECIAL_HERB_PRODUCTS.some((name) => productName.includes(name)) ? 'special_herb' : null;
 }
 
+const PAGE_SIZE = 1000; // Supabase(PostgREST) 한 번에 돌려주는 최대 행 수
+
+// 전체 구매를 1000건씩 이어서 끝까지 읽는다(limit 로 자르면 오래된 기록이 조용히 빠진다).
+// 정렬 키가 겹치지 않도록 id 까지 정렬해 페이지 사이에 행이 겹치거나 빠지지 않게 한다.
 export async function listNonCoveredPurchases(supabase: SupabaseClient): Promise<NonCoveredPurchase[]> {
-  const { data, error } = await supabase
-    .from('non_covered_purchases')
-    .select('*')
-    .order('purchase_date', { ascending: false })
-    .limit(1000);
-  if (error) throw error;
-  return (data as NonCoveredPurchaseRow[]).map(rowToPurchase);
+  const rows: NonCoveredPurchaseRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .order('purchase_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as NonCoveredPurchaseRow[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return rows.map(rowToPurchase);
 }
 
 // 그 날짜에 등록된 구매만 — 일일 마무리 멘트의 "한약/비급여 판매" 칸을 미리 채우는 데 쓴다.
 export async function listPurchasesByDate(supabase: SupabaseClient, date: string): Promise<NonCoveredPurchase[]> {
   const { data, error } = await supabase
-    .from('non_covered_purchases')
+    .from(TABLE)
     .select('*')
     .eq('purchase_date', date)
     .order('created_at', { ascending: true });
@@ -97,50 +117,32 @@ export interface NewNonCoveredPurchase {
   createdBy: string | null;
 }
 
-// 처방일수가 있으면(한약 수령) 한약 처방 등록과 같은 공식(computeHerbCallDates:
-// 수령일+1일 / 수령일+처방일수÷2 / 수령일+처방일수-3)으로 해피콜 3회를 만들고,
-// 없으면 기존처럼 한 번만 만든다. 각 콜의 happy_call_manual_entries id를
-// non_covered_purchases에 남겨 해피콜 목록/홈 화면에 뜨도록 연결한다.
+/** 구매 기록 자체는 처리됐지만 딸린 해피콜을 만들거나 맞추거나 지우는 데 문제가 생겼을 때. message 는 화면에 그대로 보여 준다. */
+export class HappyCallSyncError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HappyCallSyncError';
+  }
+}
+
+function slotIds(purchase: Pick<NonCoveredPurchase, 'happyCallEntryId' | 'happyCallEntryId2' | 'happyCallEntryId3'>) {
+  return {
+    1: purchase.happyCallEntryId,
+    2: purchase.happyCallEntryId2,
+    3: purchase.happyCallEntryId3,
+  } satisfies Record<CallSlot, string | null>;
+}
+
+// 구매를 먼저 저장한 뒤 해피콜을 만들고 그 id를 구매에 연결한다. 처방일수가 있으면(한약 수령)
+// 한약 처방 등록과 같은 공식(수령일+1일 / 수령일+처방일수÷2 / 수령일+처방일수-3)으로 3회,
+// 수령일만 있으면 다음날 1회(src/lib/nonCoveredCalls.ts). 해피콜을 만들다 실패하면 구매와 이미 만든
+// 콜을 되돌린다(최선을 다해 — 되돌리기도 실패할 수 있어 그 경우 메시지로 알린다).
 export async function createNonCoveredPurchase(
   supabase: SupabaseClient,
   input: NewNonCoveredPurchase
 ): Promise<NonCoveredPurchase> {
-  let entryId1: string | null = null;
-  let entryId2: string | null = null;
-  let entryId3: string | null = null;
-
-  if (input.happyCallDate && input.durationDays) {
-    const { callDate1, callDate2, callDate3 } = computeHerbCallDates(input.happyCallDate, input.durationDays);
-    entryId1 = await createManualEntry(supabase, {
-      patientName: input.patientName,
-      note: `${input.productName} 수령 후속 1차`,
-      callDate: callDate1,
-      createdBy: input.createdBy,
-    });
-    entryId2 = await createManualEntry(supabase, {
-      patientName: input.patientName,
-      note: `${input.productName} 수령 후속 2차`,
-      callDate: callDate2,
-      createdBy: input.createdBy,
-    });
-    entryId3 = await createManualEntry(supabase, {
-      patientName: input.patientName,
-      note: `${input.productName} 수령 후속 3차(종료 임박)`,
-      callDate: callDate3,
-      createdBy: input.createdBy,
-    });
-  } else if (input.happyCallDate) {
-    entryId1 = await createManualEntry(supabase, {
-      patientName: input.patientName,
-      note: `비급여 구매 후속 - ${input.productName}`,
-      // 처방일수가 없어도 1차 해피콜은 수령일 다음날이다(처방일수가 있을 때와 같은 기준).
-      callDate: addDays(input.happyCallDate, 1),
-      createdBy: input.createdBy,
-    });
-  }
-
   const { data, error } = await supabase
-    .from('non_covered_purchases')
+    .from(TABLE)
     .insert({
       patient_name: input.patientName,
       chart_no: input.chartNo,
@@ -151,9 +153,6 @@ export async function createNonCoveredPurchase(
       purchase_date: input.purchaseDate,
       memo: input.memo,
       happy_call_date: input.happyCallDate,
-      happy_call_entry_id: entryId1,
-      happy_call_entry_id_2: entryId2,
-      happy_call_entry_id_3: entryId3,
       duration_days: input.durationDays,
       goal_category: input.goalCategory,
       created_by: input.createdBy,
@@ -161,7 +160,55 @@ export async function createNonCoveredPurchase(
     .select()
     .single();
   if (error) throw error;
-  return rowToPurchase(data as NonCoveredPurchaseRow);
+  const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
+
+  const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays);
+  if (calls.length === 0) return purchase;
+
+  const createdIds: string[] = [];
+  try {
+    const linked: Partial<Record<CallSlot, string>> = {};
+    for (const call of calls) {
+      const id = await createManualEntry(supabase, {
+        patientName: input.patientName,
+        note: call.note,
+        callDate: call.callDate,
+        createdBy: input.createdBy,
+      });
+      createdIds.push(id);
+      linked[call.slot] = id;
+    }
+    const { error: linkError } = await supabase
+      .from(TABLE)
+      .update({
+        happy_call_entry_id: linked[1] ?? null,
+        happy_call_entry_id_2: linked[2] ?? null,
+        happy_call_entry_id_3: linked[3] ?? null,
+      })
+      .eq('id', purchase.id);
+    if (linkError) throw linkError;
+    return {
+      ...purchase,
+      happyCallEntryId: linked[1] ?? null,
+      happyCallEntryId2: linked[2] ?? null,
+      happyCallEntryId3: linked[3] ?? null,
+    };
+  } catch {
+    // 구매를 먼저 지워야(콜을 가리키는 연결이 없어야) 콜을 지울 수 있다.
+    let purchaseRemoved = false;
+    try {
+      const { error: deleteError } = await supabase.from(TABLE).delete().eq('id', purchase.id);
+      purchaseRemoved = !deleteError;
+    } catch {
+      purchaseRemoved = false;
+    }
+    await removeOpenManualEntries(supabase, createdIds).catch(() => {});
+    throw new HappyCallSyncError(
+      purchaseRemoved
+        ? '해피콜을 만들지 못해 등록을 취소했어요. 다시 시도해 주세요.'
+        : '해피콜을 만들지 못했어요. 구매 기록이 남아 있을 수 있으니 목록을 확인해 주세요.'
+    );
+  }
 }
 
 export interface EditableNonCoveredPurchase {
@@ -174,50 +221,103 @@ export interface EditableNonCoveredPurchase {
   purchaseDate: string;
   memo: string | null;
   goalCategory: GoalCategory | null;
+  /** 한약 수령일(해피콜 기준일) */
+  happyCallDate: string | null;
+  durationDays: number | null;
 }
 
+// 구매를 고치고, 수령일/처방일수/상품명에 맞게 해피콜을 다시 맞춘다(planCallResync):
+// 이미 끝났거나 이미 전화를 시도한 콜은 그대로 두고, 아직 손대지 않은 콜만 날짜를 옮기거나
+// 새로 만들거나 지운다. 새 콜을 먼저 만들고 → 구매를 저장(콜 연결 갱신) → 기존 콜을 옮기고/지운다
+// 순서라, 도중에 실패해도 콜이 사라진 채 구매만 남는 일이 없다.
 export async function updateNonCoveredPurchase(
   supabase: SupabaseClient,
-  id: string,
+  existing: NonCoveredPurchase,
   patch: EditableNonCoveredPurchase
 ): Promise<void> {
-  const { error } = await supabase
-    .from('non_covered_purchases')
-    .update({
-      patient_name: patch.patientName,
-      chart_no: patch.chartNo,
-      phone: patch.phone,
-      category: patch.category,
-      product_name: patch.productName,
-      amount: patch.amount,
-      purchase_date: patch.purchaseDate,
-      memo: patch.memo,
-      goal_category: patch.goalCategory,
-    })
-    .eq('id', id);
-  if (error) throw error;
-}
+  const current = slotIds(existing);
+  const linked = CALL_SLOTS.flatMap((slot) => (current[slot] ? [{ slot, id: current[slot] as string }] : []));
+  const states = await getManualEntryStates(
+    supabase,
+    linked.map((l) => l.id)
+  );
+  const existingCalls: ExistingCall[] = linked.flatMap(({ slot, id }) => {
+    const state = states.find((s) => s.id === id);
+    return state ? [{ slot, ...state }] : [];
+  });
+  const ops = planCallResync(desiredCalls(patch.productName, patch.happyCallDate, patch.durationDays), existingCalls);
 
-export async function deleteNonCoveredPurchase(supabase: SupabaseClient, id: string): Promise<void> {
-  const { error } = await supabase.from('non_covered_purchases').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// 해피콜 예정일만 나중에 고칠 때 — 이미 연결된 happy_call_manual_entries 행도
-// 같이 갱신한다(1차 콜 기준).
-export async function updatePurchaseHappyCallDate(
-  supabase: SupabaseClient,
-  purchase: NonCoveredPurchase,
-  newDate: string
-): Promise<void> {
-  if (purchase.happyCallEntryId) {
-    await updateManualEntryCallDate(supabase, purchase.happyCallEntryId, newDate);
+  const nextIds: Record<CallSlot, string | null> = { ...current };
+  const createdIds: string[] = [];
+  try {
+    for (const op of ops) {
+      if (op.type !== 'create') continue;
+      const id = await createManualEntry(supabase, {
+        patientName: patch.patientName,
+        note: op.note,
+        callDate: op.callDate,
+        createdBy: existing.createdBy,
+      });
+      createdIds.push(id);
+      nextIds[op.slot] = id;
+    }
+    for (const op of ops) {
+      if (op.type === 'remove') nextIds[op.slot] = null;
+    }
+    const { error } = await supabase
+      .from(TABLE)
+      .update({
+        patient_name: patch.patientName,
+        chart_no: patch.chartNo,
+        phone: patch.phone,
+        category: patch.category,
+        product_name: patch.productName,
+        amount: patch.amount,
+        purchase_date: patch.purchaseDate,
+        memo: patch.memo,
+        goal_category: patch.goalCategory,
+        happy_call_date: patch.happyCallDate,
+        duration_days: patch.durationDays,
+        happy_call_entry_id: nextIds[1],
+        happy_call_entry_id_2: nextIds[2],
+        happy_call_entry_id_3: nextIds[3],
+      })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } catch (err) {
+    await removeOpenManualEntries(supabase, createdIds).catch(() => {});
+    throw err;
   }
-  const { error } = await supabase
-    .from('non_covered_purchases')
-    .update({ happy_call_date: newDate })
-    .eq('id', purchase.id);
+
+  try {
+    for (const op of ops) {
+      if (op.type === 'update') {
+        await updateUntouchedManualEntry(supabase, op.id, { callDate: op.callDate, note: op.note });
+      }
+    }
+    await removeOpenManualEntries(
+      supabase,
+      ops.flatMap((op) => (op.type === 'remove' ? [op.id] : [])),
+      { onlyUntouched: true }
+    );
+  } catch {
+    throw new HappyCallSyncError('구매 기록은 저장했지만 해피콜 일정을 다 맞추지 못했어요. 해피콜 목록을 확인해 주세요.');
+  }
+}
+
+// 구매를 지우고, 그 구매로 자동 생성된 해피콜 중 아직 열려 있는 것도 함께 지운다
+// (이미 끝난 콜은 통화 기록이라 남긴다). 구매를 먼저 지워야 콜을 지울 수 있다(콜을 가리키는 연결).
+export async function deleteNonCoveredPurchase(supabase: SupabaseClient, purchase: NonCoveredPurchase): Promise<void> {
+  const { data, error } = await supabase.from(TABLE).delete().eq('id', purchase.id).select('id');
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제하지 못했습니다.');
+
+  const ids = Object.values(slotIds(purchase)).filter((id): id is string => Boolean(id));
+  try {
+    await removeOpenManualEntries(supabase, ids);
+  } catch {
+    throw new HappyCallSyncError('기록은 삭제했지만 예정된 해피콜을 다 지우지 못했어요. 해피콜 목록을 확인해 주세요.');
+  }
 }
 
 export interface KnownPatient {
