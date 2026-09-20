@@ -7,7 +7,8 @@ import type { MonthlySummary } from '@/lib/monthlySummary';
 
 interface WeeklyDashboardProps {
   records: DailyRecordSummary[];
-  summary: MonthlySummary;
+  // 이번달 현황을 못 불러왔으면 null — 패널 대신 오류 문구를 보여 준다.
+  summary: MonthlySummary | null;
   isOwner: boolean;
   // 이번 주 예약률·부도취소율 — 일일 결산에 입력한 예약 숫자로 계산한 값(서버에서 내려준다).
   rates: { reservationRate: number | null; noShowRate: number | null };
@@ -29,25 +30,29 @@ export function WeeklyDashboard({ records, summary, isOwner, rates }: WeeklyDash
   return (
     <section className="weekly-dashboard" style={{ marginBottom: 12 }}>
       <div className="no-print">
-        <MonthlyStatsPanel
-          initial={summary}
-          isOwner={isOwner}
-          compact
-          extraTiles={
-            <>
-              <StatTile label="이번 주 예약률" compact title="이번 주 예약 정상 이행 ÷ (내원환자수 − 제외환자수)">
-                <span style={{ color: 'var(--color-teal-deep)' }}>
-                  {rates.reservationRate != null ? `${rates.reservationRate}%` : '-'}
-                </span>
-              </StatTile>
-              <StatTile label="이번 주 부도취소율" compact title="이번 주 (예약 노쇼 + 예약 취소) ÷ 예약 환자수">
-                <span style={{ color: 'var(--color-error)' }}>
-                  {rates.noShowRate != null ? `${rates.noShowRate}%` : '-'}
-                </span>
-              </StatTile>
-            </>
-          }
-        />
+        {summary ? (
+          <MonthlyStatsPanel
+            initial={summary}
+            isOwner={isOwner}
+            compact
+            extraTiles={
+              <>
+                <StatTile label="이번 주 예약률" compact title="이번 주 예약 정상 이행 ÷ (내원환자수 − 제외환자수)">
+                  <span style={{ color: 'var(--color-teal-deep)' }}>
+                    {rates.reservationRate != null ? `${rates.reservationRate}%` : '-'}
+                  </span>
+                </StatTile>
+                <StatTile label="이번 주 부도취소율" compact title="이번 주 (예약 노쇼 + 예약 취소) ÷ 예약 환자수">
+                  <span style={{ color: 'var(--color-error)' }}>
+                    {rates.noShowRate != null ? `${rates.noShowRate}%` : '-'}
+                  </span>
+                </StatTile>
+              </>
+            }
+          />
+        ) : (
+          <p className="error-text">이번달 현황을 불러오지 못했습니다.</p>
+        )}
       </div>
 
       {/* 인쇄용 — 아침 브리핑 출력지에 그대로 남는 한 줄 요약(화면에는 안 보임). */}
@@ -62,7 +67,9 @@ export function WeeklyDashboard({ records, summary, isOwner, rates }: WeeklyDash
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginTop: 4 }}>
           <span>이번달 현황/목표</span>
-          {GOAL_LABELS.map(([key, label]) => {
+          {!summary && <span>불러오지 못했습니다</span>}
+          {summary &&
+            GOAL_LABELS.map(([key, label]) => {
             const item = summary.goals[key];
             return (
               <span key={key}>

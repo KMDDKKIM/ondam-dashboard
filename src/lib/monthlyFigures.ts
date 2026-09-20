@@ -68,7 +68,8 @@ function ticketOf(revenue: number, visits: number | null): number | null {
 //     환자수: override의 avgDailyVisits는 "하루당 평균"이지 합계가 아니므로
 //        기준 내원 합계 = avgDailyVisits × (1일부터 기준일까지의 경과일수)  ← 반올림
 //        총 내원 = 기준 내원 합계 + 기준일 이후 일일결산 내원 합계
-//        일평균 = 총 내원 ÷ (1일부터 "마지막 데이터 날짜"까지의 경과일수)
+//        일평균 = 총 내원 ÷ (1일부터 "내원 수가 적힌 마지막 날짜"까지의 경과일수)
+//     (내원 수를 안 적은 날은 "모름"이라 내원 합계·나눗셈 일수·객단가에서 뺀다. 총매출에는 그대로 더한다.)
 //     한의원은 공휴일·주말 포함 매일 진료하므로 달력 기준 경과일수가 맞다.
 //     기준일 이후 일일결산이 없으면 override의 값을 그대로 쓴다(반올림 오차를 피하려고).
 //     예) 2026-09: 27.4명 × 19일 ≈ 521명 → 9/20에 30명이 오면 (521+30) ÷ 20 = 27.6명.
@@ -112,10 +113,16 @@ export function computeMonthFigures(
       };
     }
 
+    // 내원 수를 안 적은 날(visitCount null)은 "모름"이다 — 내원 합계·일평균의 나눗셈 일수·객단가에서 모두 뺀다.
+    const afterWithVisits = after.filter((d) => d.visitCount != null);
     const baselineVisits = Math.round(override.avgDailyVisits * clampDays(asOf));
-    const totalVisits = baselineVisits + after.reduce((acc, d) => acc + (d.visitCount ?? 0), 0);
-    const avgDailyVisits = after.length === 0 || elapsed === 0 ? override.avgDailyVisits : roundOne(totalVisits / elapsed);
-    return { totalRevenue, avgDailyVisits, totalVisits, averageTicket: ticketOf(totalRevenue, totalVisits), dataThrough, legacyOverride: false };
+    const totalVisits = baselineVisits + afterWithVisits.reduce((acc, d) => acc + (d.visitCount ?? 0), 0);
+    const latestVisitDate = afterWithVisits.reduce((max, d) => (d.date > max ? d.date : max), asOf);
+    const visitElapsed = clampDays(latestVisitDate > monthEnd ? monthEnd : latestVisitDate);
+    const avgDailyVisits =
+      afterWithVisits.length === 0 || visitElapsed === 0 ? override.avgDailyVisits : roundOne(totalVisits / visitElapsed);
+    const ticketRevenue = override.totalRevenue + afterWithVisits.reduce((acc, d) => acc + d.totalRevenue, 0);
+    return { totalRevenue, avgDailyVisits, totalVisits, averageTicket: ticketOf(ticketRevenue, totalVisits), dataThrough, legacyOverride: false };
   }
 
   if (override) {

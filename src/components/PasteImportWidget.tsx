@@ -69,6 +69,13 @@ function MonthlySettlementSection() {
 
   async function handleSave() {
     if (totalRevenue == null || !month || !asOfDate || invalidCells.length > 0) return;
+    // 붙여넣은 표에 날짜별 행이 없으면 기준일이 오늘로 잡혀서 오늘 마감이 합산되지 않는다 — 먼저 확인받는다.
+    if (analysis?.format === 'monthly' && analysis.latestDate == null) {
+      const fallbackOk = window.confirm(
+        `붙여넣은 표에 날짜별 행이 없어 오늘(${asOfDate})을 기준일로 저장해요. 오늘 마감은 합산되지 않아요. 계속할까요?`
+      );
+      if (!fallbackOk) return;
+    }
     const ok = window.confirm(
       `${month}의 총매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원으로 다시 채웁니다. 그 뒤 일일 마감이 여기에 더해져요. 계속할까요?`
     );

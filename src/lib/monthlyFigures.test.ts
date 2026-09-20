@@ -3,6 +3,7 @@ import {
   achievementPercent,
   averageVisitsPerDay,
   computeMonthFigures,
+  daysInMonth,
   elapsedDaysForMonth,
   goalPace,
   previousSameDayTotal,
@@ -110,6 +111,25 @@ describe('computeMonthFigures', () => {
       expect(r.totalRevenue).toBe(47338780);
     });
 
+    it('기준일 이후 내원 수가 빈(null) 날은 총매출에는 더하되 일평균 나눗셈 일수·내원·객단가에서는 뺀다', () => {
+      const r = computeMonthFigures(
+        '2026-09',
+        [
+          { date: '2026-09-20', totalRevenue: 2000000, visitCount: 30 },
+          { date: '2026-09-21', totalRevenue: 1500000, visitCount: null },
+        ],
+        override,
+        null
+      );
+      expect(r.totalRevenue).toBe(47338780 + 2000000 + 1500000);
+      expect(r.totalVisits).toBe(551);
+      expect(r.avgDailyVisits).toBe(27.6); // 551 ÷ 20일 (9/21은 나눗셈에 넣지 않음)
+      expect(r.averageTicket).toBe(89544); // (47,338,780+2,000,000) ÷ 551 — null 날 매출 제외
+      expect(r.dataThrough).toBe('2026-09-21');
+      const onlyNull = computeMonthFigures('2026-09', [{ date: '2026-09-21', totalRevenue: 1500000, visitCount: null }], override, null);
+      expect(onlyNull).toMatchObject({ totalRevenue: 48838780, avgDailyVisits: 27.4, totalVisits: 521, averageTicket: 90861 });
+    });
+
     it('월말결산에 일평균이 없으면 총매출만 합산하고 내원/객단가는 모른다', () => {
       const r = computeMonthFigures(
         '2026-09',
@@ -205,6 +225,15 @@ describe('goalPace / shortfallCount', () => {
   });
 });
 
+describe('daysInMonth', () => {
+  it('28/29/30/31일을 맞게 센다(윤년 포함)', () => {
+    expect(daysInMonth('2026-02')).toBe(28);
+    expect(daysInMonth('2028-02')).toBe(29);
+    expect(daysInMonth('2026-09')).toBe(30);
+    expect(daysInMonth('2026-10')).toBe(31);
+  });
+});
+
 describe('previousSameDayTotal', () => {
   const full = Array.from({ length: 31 }, (_, i) => ({ date: `2026-08-${String(i + 1).padStart(2, '0')}`, totalRevenue: 100 }));
 
@@ -220,6 +249,16 @@ describe('previousSameDayTotal', () => {
   it('지난달이 더 짧아도(D > 지난달 일수) 지난달 전체를 쓴다', () => {
     const sept = { month: '2026-09', daily: [], totalRevenue: 3000 };
     expect(previousSameDayTotal(sept, 31)).toEqual({ amount: 3000, approximate: true });
+  });
+
+  it('오늘이 31일이고 지난달이 30일/2월이어도 지난달 전체 기준으로 비교한다', () => {
+    const daily = (month: string, n: number) => Array.from({ length: n }, (_, i) => ({ date: `${month}-${String(i + 1).padStart(2, '0')}`, totalRevenue: 100 }));
+    // 지난달 30일 전부 있음 → D=31이어도 30일 합계(exact)
+    expect(previousSameDayTotal({ month: '2026-09', daily: daily('2026-09', 30), totalRevenue: 3000 }, 31)).toEqual({ amount: 3000, approximate: false });
+    // 2월(28일) 일부만 있음 → 2월 전체를 일할(28/28)로
+    expect(previousSameDayTotal({ month: '2026-02', daily: daily('2026-02', 10), totalRevenue: 2800 }, 31)).toEqual({ amount: 2800, approximate: true });
+    // 2월 28일 전부 있음 → exact
+    expect(previousSameDayTotal({ month: '2026-02', daily: daily('2026-02', 28), totalRevenue: 2800 }, 31)).toEqual({ amount: 2800, approximate: false });
   });
 
   it('지난달 데이터가 없거나 D가 0이면 null', () => {

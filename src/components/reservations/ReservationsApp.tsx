@@ -17,7 +17,7 @@ export function ReservationsApp({
   isOwner,
   missingClosingDates = [],
 }: {
-  summary: MonthlySummary;
+  summary: MonthlySummary | null;
   rates: { reservationRate: number | null; noShowRate: number | null };
   isOwner: boolean;
   missingClosingDates?: string[];
