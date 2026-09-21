@@ -7,7 +7,7 @@ import { visibleTodos } from '@/lib/todoVisibility';
 import { todayKst } from '@/lib/kst';
 import type { Staff, Todo } from '@/lib/types';
 
-// 목록 보기 기준: '' = 전체, 'me' = 내 것, 그 외 = 그 직원 id. 처음 화면은 '내 것'이고, 고른 값은 이 브라우저에 기억한다.
+// 목록 보기 기준: '' = 전체, 'me' = 내 것, 그 외 = 그 직원 id. 처음 화면은 '전체 보기'이고(담당자 없는 할 일이 숨지 않게), 고른 값은 이 브라우저에 기억한다.
 const FILTER_KEY = 'todoChecklist.assigneeFilter';
 const MINE = 'me';
 
@@ -44,7 +44,7 @@ function TodoSkeleton() {
 export function TodoChecklist() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState(MINE);
+  const [assigneeFilter, setAssigneeFilter] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,6 +140,8 @@ export function TodoChecklist() {
   const selectValue = assigneeFilter === MINE || staffList.some((s) => s.id === assigneeFilter) ? assigneeFilter : '';
   const visible = visibleTodos(todos, today, filterId);
   const doneCount = visible.filter((t) => t.done).length;
+  // 특정 사람(내 것 포함)만 보고 있을 때, 담당자가 없어서 목록에서 빠진 할 일 수.
+  const hiddenUnassigned = filterId ? visibleTodos(todos, today, null).filter((t) => !t.assigneeStaffId).length : 0;
 
   if (loading) return <TodoSkeleton />;
 
@@ -170,6 +172,12 @@ export function TodoChecklist() {
           </span>
         </div>
       </div>
+
+      {hiddenUnassigned > 0 && (
+        <p className="muted-text" style={{ fontSize: 12, marginBottom: 8 }}>
+          담당자 없는 할 일 {hiddenUnassigned}건은 전체 보기에서 볼 수 있어요
+        </p>
+      )}
 
       {error && <p className="error-text" style={{ marginBottom: 8 }}>{error}</p>}
 

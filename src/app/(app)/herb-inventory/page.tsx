@@ -151,6 +151,7 @@ export default function HerbInventoryPage() {
         supabase,
         parsed.matched.map((m) => ({
           herbId: byName.get(m.name)!.id,
+          name: m.name,
           changeType: type,
           amount: m.amount,
           note: '일괄 입력',
@@ -183,7 +184,7 @@ export default function HerbInventoryPage() {
   // 카드에서 한 약재만 사용/입고. 실패하면 메시지를 던져 카드가 보여준다.
   async function handleAdjust(item: HerbInventoryItem, type: 'use' | 'restock', amount: number, note: string | null) {
     try {
-      await applyHerbStockChanges(supabase, [{ herbId: item.id, changeType: type, amount, note }]);
+      await applyHerbStockChanges(supabase, [{ herbId: item.id, name: item.name, changeType: type, amount, note }]);
     } catch (e) {
       await load();
       throw new Error(stockErrorMessage(e));
@@ -194,7 +195,7 @@ export default function HerbInventoryPage() {
 
   async function handleSaveThreshold(item: HerbInventoryItem, threshold: number | null) {
     await setHerbLowStockThreshold(supabase, item.id, threshold);
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, lowStockThreshold: threshold } : i)));
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, lowStockThreshold: threshold, updatedAt: new Date().toISOString() } : i)));
   }
 
   const outOfStock = useMemo(() => items.filter((i) => i.currentStock <= 0), [items]);

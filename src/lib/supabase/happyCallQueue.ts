@@ -128,3 +128,17 @@ export async function removeOpenManualEntries(
   const { error: closeError } = await close;
   if (closeError) throw closeError;
 }
+
+/**
+ * 아직 열려 있는(done=false) 콜의 환자 이름을 바꾼다(비급여 구매의 환자 이름을 고쳤을 때).
+ * 이미 끝난 콜은 통화 기록이라 이름도 그대로 둔다.
+ */
+export async function renameOpenManualEntries(supabase: SupabaseClient, ids: string[], patientName: string): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from('happy_call_manual_entries')
+    .update({ patient_name: patientName })
+    .in('id', ids)
+    .eq('done', false);
+  if (error) throw error;
+}

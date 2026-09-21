@@ -111,8 +111,8 @@ export function EventComparison({ purchases, categories, eventCategories }: Prop
             <thead>
               <tr style={{ background: 'var(--color-surface-2)' }}>
                 <th style={{ ...th, textAlign: 'left' }}>상품명</th>
-                {sides.map((s) => (
-                  <th key={s.category} style={th}>
+                {sides.map((s, i) => (
+                  <th key={`${i}-${s.category}`} style={th}>
                     {s.category} 건수/금액
                   </th>
                 ))}
@@ -122,8 +122,8 @@ export function EventComparison({ purchases, categories, eventCategories }: Prop
               {comparison.products.map((product) => (
                 <tr key={product} style={{ borderTop: '1px solid var(--color-line)' }}>
                   <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{product}</td>
-                  {sides.map((s) => (
-                    <td key={s.category} style={td}>
+                  {sides.map((s, i) => (
+                    <td key={`${i}-${s.category}`} style={td}>
                       <StatText stat={s.byProduct[product]} />
                     </td>
                   ))}
@@ -131,8 +131,8 @@ export function EventComparison({ purchases, categories, eventCategories }: Prop
               ))}
               <tr style={{ borderTop: '2px solid var(--color-line)', fontWeight: 700 }}>
                 <td style={{ ...td, textAlign: 'left' }}>합계</td>
-                {sides.map((s) => (
-                  <td key={s.category} style={td}>
+                {sides.map((s, i) => (
+                  <td key={`${i}-${s.category}`} style={td}>
                     <StatText stat={s.total} />
                   </td>
                 ))}

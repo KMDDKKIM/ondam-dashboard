@@ -274,6 +274,46 @@ describe('updateNonCoveredPurchase', () => {
     expect(purchaseUpdate.payload).toMatchObject({ happy_call_date: '2026-09-25', duration_days: 30 });
   });
 
+  it('환자 이름을 고치면 연결된 열린 콜의 이름도 바꾸고, 끝난 콜은 건드리지 않는다', async () => {
+    const { client, calls } = fakeClient((call) => {
+      if (call.table === 'happy_call_manual_entries' && call.op === 'select') {
+        return OK([
+          { id: 'e1', call_date: '2026-09-22', note: '공진단 수령 후속 1차', done: true, attempts: 1 },
+          { id: 'e2', call_date: '2026-10-06', note: '공진단 수령 후속 2차', done: false, attempts: 0 },
+          { id: 'e3', call_date: '2026-10-18', note: '공진단 수령 후속 3차(종료 임박)', done: false, attempts: 0 },
+        ]);
+      }
+      return OK([{ id: 'x' }]);
+    });
+    await updateNonCoveredPurchase(client, purchase({ happyCallDate: '2026-09-25' }), { ...patch, patientName: '홍길순' });
+    const purchaseUpdate = calls.find((c) => c.table === 'non_covered_purchases' && c.op === 'update')!;
+    expect(purchaseUpdate.payload).toMatchObject({ patient_name: '홍길순' });
+    const rename = calls.find(
+      (c) => c.table === 'happy_call_manual_entries' && c.op === 'update' && (c.payload as { patient_name?: string }).patient_name
+    )!;
+    expect(rename.payload).toEqual({ patient_name: '홍길순' });
+    // 끝난 콜도 id 목록에는 들어가지만 done=false 조건으로 걸러진다(통화 기록의 이름은 그대로)
+    expect(rename.filters).toContainEqual(['done', false]);
+    expect(rename.filters).toContainEqual(['id in', ['e1', 'e2', 'e3']]);
+  });
+
+  it('환자 이름이 그대로면 콜 이름을 다시 쓰지 않는다', async () => {
+    const { client, calls } = fakeClient((call) => {
+      if (call.table === 'happy_call_manual_entries' && call.op === 'select') {
+        return OK([{ id: 'e1', call_date: '2026-09-22', note: '공진단 수령 후속 1차', done: false, attempts: 0 }]);
+      }
+      return OK([{ id: 'x' }]);
+    });
+    await updateNonCoveredPurchase(client, purchase({ happyCallEntryId2: null, happyCallEntryId3: null }), {
+      ...patch,
+      happyCallDate: '2026-09-21',
+      durationDays: null,
+    });
+    expect(
+      calls.some((c) => c.op === 'update' && c.table === 'happy_call_manual_entries' && 'patient_name' in (c.payload as object))
+    ).toBe(false);
+  });
+
   it('처방일수를 지우면 열린 2·3차 콜을 지우고 연결을 비운다', async () => {
     const { client, calls } = fakeClient((call) => {
       if (call.table === 'happy_call_manual_entries' && call.op === 'select') {
