@@ -6,6 +6,8 @@ export const CSV_BOM = '﻿';
 // 엑셀이 수식으로 읽는 첫 글자. 탭·줄바꿈으로 시작하는 칸도 같은 위험이 있어 함께 막는다.
 const FORMULA_START = /^[=+\-@\t\r]/;
 
+const PLAIN_NUMBER = /^-?\d+([.,]\d+)?$/;
+
 export type CsvValue = string | number | boolean | null | undefined | Array<string | number>;
 
 /** 칸 하나를 CSV 글자로. 숫자는 그대로(음수 금액이 수식으로 오인되지 않게), 글자만 수식 주입을 막는다. */
@@ -18,7 +20,8 @@ export function csvCell(value: CsvValue): string {
   }
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   text = Array.isArray(value) ? value.join('; ') : value;
-  if (FORMULA_START.test(text)) text = `'${text}`;
+  // 글자로 저장된 음수 금액(-5000) 같은 평범한 숫자는 수식이 아니므로 그대로 둔다.
+  if (FORMULA_START.test(text) && !PLAIN_NUMBER.test(text)) text = `'${text}`;
   if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 }

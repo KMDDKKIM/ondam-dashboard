@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Todo } from '@/lib/types';
 import { todayKst } from '@/lib/kst';
+import { fetchAllPages } from '@/lib/fetchAllPages';
 import { completedWindowStart } from '@/lib/todoVisibility';
 
 interface TodoRow {
@@ -27,21 +28,14 @@ function rowToTodo(row: TodoRow): Todo {
   };
 }
 
-const PAGE_SIZE = 1000;
-
-// Supabase는 한 번에 1000행까지만 주므로, 다 받을 때까지 이어서 읽는다.
-async function fetchAllRows(
-  run: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+// Supabase는 한 번에 주는 행 수에 상한이 있으므로, 전체 개수(count)만큼 다 받을 때까지 이어서 읽는다.
+function fetchAllRows(
+  run: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown; count: number | null }>,
 ): Promise<TodoRow[]> {
-  const rows: TodoRow[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await run(from, from + PAGE_SIZE - 1);
-    if (error) throw error;
-    const page = (data ?? []) as TodoRow[];
-    rows.push(...page);
-    if (page.length < PAGE_SIZE) break;
-  }
-  return rows;
+  return fetchAllPages<TodoRow>(async (from, to) => {
+    const { data, error, count } = await run(from, to);
+    return { data: data as TodoRow[] | null, error, count };
+  });
 }
 
 // 오늘 화면에 보여줄 후보: 안 끝난 것은 예정일과 상관없이 전부, 끝난 것은 최근 7일치만.
@@ -50,12 +44,12 @@ export async function listTodos(supabase: SupabaseClient, today: string = todayK
   const since = completedWindowStart(today);
   const [open, done] = await Promise.all([
     fetchAllRows((a, b) =>
-      supabase.from('todos').select('*').eq('done', false).order('due_date', { ascending: true }).order('id').range(a, b),
+      supabase.from('todos').select('*', { count: 'exact' }).eq('done', false).order('due_date', { ascending: true }).order('id').range(a, b),
     ),
     fetchAllRows((a, b) =>
       supabase
         .from('todos')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('done', true)
         .gte('done_at', since)
         .order('due_date', { ascending: true })

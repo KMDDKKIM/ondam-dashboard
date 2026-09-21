@@ -21,13 +21,22 @@ describe('csvCell', () => {
   it('수식 주입: = + - @ 로 시작하는 글자 앞에 작은따옴표를 붙인다', () => {
     expect(csvCell('=SUM(A1:A2)')).toBe("'=SUM(A1:A2)");
     expect(csvCell('+1')).toBe("'+1");
-    expect(csvCell('-1')).toBe("'-1");
+    expect(csvCell('-1+2')).toBe("'-1+2");
+    expect(csvCell('-cmd')).toBe("'-cmd");
     expect(csvCell('@cmd')).toBe("'@cmd");
     expect(csvCell('\t=1')).toBe("'\t=1");
   });
 
   it('수식 글자에 쉼표가 있으면 작은따옴표를 붙인 뒤 따옴표로도 감싼다', () => {
     expect(csvCell('=A1,B1')).toBe('"\'=A1,B1"');
+  });
+
+  it('글자로 된 평범한 음수는 작은따옴표를 붙이지 않는다', () => {
+    expect(csvCell('-1')).toBe('-1');
+    expect(csvCell('-5000')).toBe('-5000');
+    expect(csvCell('-12.5')).toBe('-12.5');
+    expect(csvCell('-12,5')).toBe('"-12,5"');
+    expect(csvCell('+1')).toBe("'+1");
   });
 
   it('중간에 있는 = 는 건드리지 않는다', () => {

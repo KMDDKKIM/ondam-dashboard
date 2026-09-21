@@ -5,7 +5,7 @@
 
 ## 로컬 실행
 
-1. Supabase 프로젝트: 예약관리 앱(`kh-ondam-reservation`)과 같은 `hanyak-ondam` 프로젝트를 공유합니다(무료 티어 2개 제한 때문 — 별도 프로젝트를 새로 만들지 않습니다). 그 프로젝트의 SQL Editor에서 `supabase/schema.sql`을 실행합니다. 새 테이블을 추가할 때는 기존 테이블(`prescriptions`, `daily_records`, `reservations`, `monthly_goals`, `staff`)과 이름이 겹치지 않는지 먼저 확인하세요. 이미 운영 중인 DB에는 아래 「DB 마이그레이션」 순서대로 필요한 파일만 실행합니다.
+1. Supabase 프로젝트: 예약관리 앱(`kh-ondam-reservation`)과 같은 `hanyak-ondam` 프로젝트를 공유합니다(무료 티어 2개 제한 때문 — 별도 프로젝트를 새로 만들지 않습니다). 그 프로젝트의 SQL Editor에서 `supabase/schema.sql`을 실행한 뒤, 아래 「DB 마이그레이션」의 `supabase/migration_*.sql` 파일을 순서대로 모두 실행합니다(일부 표는 마이그레이션에만 있습니다). 새 테이블을 추가할 때는 기존 테이블(`prescriptions`, `daily_records`, `reservations`, `monthly_goals`, `staff`)과 이름이 겹치지 않는지 먼저 확인하세요.
 2. `.env.local.example`을 복사해 `.env.local`을 만들고 `hanyak-ondam`의 Project URL / anon public key를 채웁니다. 서버 전용 값(`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, 비대면진료용 두 값)은 이름에 `NEXT_PUBLIC_`을 붙이지 않고, 저장소에 올리지 않습니다. 배포할 때 넣을 값은 `docs/배포-안내.md`를 보세요.
 3. 대표원장 계정은 처음에 한 번만 직접 만듭니다. Supabase Auth에 계정을 만들고, `staff` 테이블에 같은 id로
    `role = 'owner'`, `status = 'approved'`, `grade = '대표원장'` 행을 추가합니다 (DB 제약상 owner 행은 등급이 반드시 대표원장이어야 합니다). 나머지 직원은 아래 「직원 가입 · 승인 · 삭제」로 들어옵니다.
@@ -61,13 +61,13 @@ TopBar의 💬 아이콘(안읽음 배지 포함) → `/chat`. 토픽방(업무 
 
 무료 요금제라 Supabase 자동 백업이 없습니다. 대표원장은 왼쪽 메뉴 「백업 내려받기」(`/backup`)에서 **주 1회 이상** CSV를 내려받아 안전한 곳(암호를 건 저장소 등)에 보관하세요.
 
-- 자료: 예약 명단(월), 일일 결산(월), 초진 해피콜, 비급여 구매(월), 상담 요약(원문 포함), 한약재 재고, 물품신청, 접수기록부(월).
+- 자료: 예약 명단(월), 일일 결산(월), 초진 해피콜, 비급여 구매(월), 상담 요약(월, 원문 포함), 한약재 재고, 물품신청, 접수기록부(월).
 - 엑셀에서 한글이 깨지지 않도록 UTF-8(BOM) CSV로 내려받습니다. 환자 이름·연락처가 들어 있으니 보관에 주의하세요. 주민등록번호(비대면진료 신청)는 백업에 포함하지 않습니다.
 - 대표원장만 사용할 수 있으며, 서버(`GET /api/export`)가 매번 대표원장 여부를 다시 확인합니다.
 
 ## DB 마이그레이션
 
-`supabase/schema.sql`은 전체 구조의 최신본입니다(새 DB는 이것만 실행). 이미 운영 중인 DB에는 아래 파일을 **위에서 아래 순서로**, 아직 실행하지 않은 것만 SQL Editor에서 실행하세요(모두 여러 번 실행해도 안전합니다). `migration_rls_approved_only.sql`이 먼저 있어야 이후 파일들이 쓰는 `is_approved_staff()`가 생기고, `migration_staff_grade.sql`은 상담 차팅 제한 파일보다 먼저여야 합니다.
+`supabase/schema.sql`만으로는 전체 구조가 만들어지지 않습니다. 접수기록부·한약 대기방·일일결산 환자 목록·내원 이력·비대면진료 신청 등 일부 표는 마이그레이션 파일에만 들어 있습니다. 그래서 새 DB는 **`schema.sql`을 먼저 실행한 뒤, 아래 `supabase/migration_*.sql` 전부를 위에서 아래 순서로** 실행하세요. 이미 운영 중인 DB에는 아직 실행하지 않은 것만 실행하면 됩니다(모두 여러 번 실행해도 안전합니다). `migration_rls_approved_only.sql`이 먼저 있어야 이후 파일들이 쓰는 `is_approved_staff()`가 생기고, `migration_staff_grade.sql`은 상담 차팅 제한 파일보다 먼저여야 합니다.
 
 1. `migration_supply_requests.sql`
 2. `migration_herb_inventory_delete.sql`
@@ -94,7 +94,7 @@ TopBar의 💬 아이콘(안읽음 배지 포함) → `/chat`. 토픽방(업무 
 23. `migration_herb_queue.sql`
 24. `migration_consult_summary_doctors_only.sql`
 
-새 마이그레이션 파일을 만들면 이 목록 맨 아래에 추가하고 `schema.sql`에도 같은 내용을 반영합니다.
+새 마이그레이션 파일을 만들면 이 목록 맨 아래에 추가하세요.
 
 ## 배포
 

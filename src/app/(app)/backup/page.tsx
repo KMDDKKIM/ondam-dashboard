@@ -41,9 +41,18 @@ export default function BackupPage() {
       const query = new URLSearchParams({ table });
       if (ds.monthly) query.set('month', month);
       const response = await fetch(`/api/export?${query.toString()}`);
+      // 세션이 끝나면 /api/export 가 /login 으로 넘어가 HTML 이 오는데, 그걸 CSV 로 저장하면 안 된다.
+      if (response.redirected) {
+        setError('로그인이 풀렸어요. 새로고침 후 다시 시도해 주세요.');
+        return;
+      }
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? '내려받기에 실패했습니다.');
+        return;
+      }
+      if (!response.headers.get('Content-Type')?.startsWith('text/csv')) {
+        setError('로그인이 풀렸어요. 새로고침 후 다시 시도해 주세요.');
         return;
       }
       const blob = await response.blob();

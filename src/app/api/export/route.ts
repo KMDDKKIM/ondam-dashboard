@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { requireOwner } from '@/lib/supabase/requireOwner';
 import { getDailyRecordByDate } from '@/lib/reservations/dailyRecords.server';
 import { buildCsv, type CsvValue } from '@/lib/csv';
-import { getExportDataset, parseMonth, type ExportDataset, type MonthRange } from '@/lib/backupExport';
+import { getExportDataset, parseMonth, type MonthRange, type TableDataset } from '@/lib/backupExport';
+import { fetchAllPages } from '@/lib/fetchAllPages';
 import { todayKst } from '@/lib/kst';
 
 // 대표원장 전용 백업(CSV 내려받기). GET /api/export?table=<자료 이름>&month=<YYYY-MM>
@@ -13,25 +14,18 @@ import { todayKst } from '@/lib/kst';
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 1000; // Supabase 한 번 조회 상한
-
 type Row = Record<string, unknown>;
 
-// 조회 상한(1000행)을 넘는 표도 빠짐없이 받도록 나눠서 읽는다.
-async function fetchAllRows(supabase: SupabaseClient, ds: ExportDataset, range: MonthRange | null): Promise<Row[]> {
+// 한 번에 주는 행 수 상한과 상관없이, 전체 개수(count)만큼 다 받을 때까지 나눠서 읽는다.
+function fetchAllRows(supabase: SupabaseClient, ds: TableDataset, range: MonthRange | null): Promise<Row[]> {
   const select = ds.columns.map((c) => c.key).join(',');
-  const rows: Row[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    let query = supabase.from(ds.table!).select(select);
+  return fetchAllPages<Row>(async (from, to) => {
+    let query = supabase.from(ds.table).select(select, { count: 'exact' });
     if (ds.monthColumn && range) query = query.gte(ds.monthColumn, range.from).lt(ds.monthColumn, range.to);
-    for (const col of ds.orderBy ?? []) query = query.order(col, { ascending: true });
-    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
-    if (error) throw error;
-    const page = (data ?? []) as unknown as Row[];
-    rows.push(...page);
-    if (page.length < PAGE_SIZE) break;
-  }
-  return rows;
+    for (const col of ds.orderBy) query = query.order(col, { ascending: true });
+    const { data, error, count } = await query.range(from, to);
+    return { data: data as unknown as Row[] | null, error, count };
+  });
 }
 
 async function loadStaffNames(supabase: SupabaseClient): Promise<Map<string, string>> {
@@ -136,7 +130,8 @@ export async function GET(request: NextRequest) {
     let rows: Row[];
     if (table === 'reservations') rows = await loadReservations(range!);
     else if (table === 'daily_closing') rows = await loadDailyClosing(supabase, range!);
-    else rows = await fetchAllRows(supabase, ds, range);
+    else if (ds.table) rows = await fetchAllRows(supabase, ds, range);
+    else throw new Error(`no loader for ${table}`);
 
     if (ds.columns.some((c) => c.staff)) {
       const names = await loadStaffNames(supabase);

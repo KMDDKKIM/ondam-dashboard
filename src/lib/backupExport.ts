@@ -11,18 +11,30 @@ export interface ExportColumn {
   staff?: boolean;
 }
 
-export interface ExportDataset {
+interface BaseDataset {
   label: string;
   /** 월을 골라야 하는 자료인지 */
   monthly: boolean;
-  /** 월 조건을 거는 날짜 열(monthly 이고 일반 조회일 때) */
-  monthColumn?: string;
-  /** 일반 조회 대상 테이블(직접 조회하는 자료만) */
-  table?: string;
   columns: ExportColumn[];
-  /** 정렬 열(직접 조회하는 자료만) */
-  orderBy?: string[];
 }
+
+/** 표를 직접 조회하는 자료 — 쪽을 나눠 읽을 때 순서가 흔들리지 않게 정렬 열이 반드시 있어야 한다. */
+export interface TableDataset extends BaseDataset {
+  table: string;
+  /** 정렬 열(마지막은 id 처럼 겹치지 않는 열) */
+  orderBy: string[];
+  /** 월 조건을 거는 날짜 열(monthly 일 때) */
+  monthColumn?: string;
+}
+
+/** 서버 도우미로 따로 읽는 자료(예약관리 앱 테이블 등) */
+export interface CustomDataset extends BaseDataset {
+  table?: undefined;
+  orderBy?: undefined;
+  monthColumn?: undefined;
+}
+
+export type ExportDataset = TableDataset | CustomDataset;
 
 export const EXPORT_DATASETS: Record<string, ExportDataset> = {
   // 예약관리 앱 소유 테이블 — dailyRecords.server.ts 의 서버 도우미로 읽는다(라우트에서 처리).
@@ -124,9 +136,11 @@ export const EXPORT_DATASETS: Record<string, ExportDataset> = {
   },
   consult_summaries: {
     label: '상담 요약',
-    monthly: false,
+    // 원문(전체 대화)이 들어 있어 전체를 한 번에 내려받으면 응답이 너무 커질 수 있다 — 상담일 기준 한 달씩.
+    monthly: true,
+    monthColumn: 'consult_date',
     table: 'consult_summaries',
-    orderBy: ['created_at', 'id'],
+    orderBy: ['consult_date', 'created_at', 'id'],
     columns: [
       { key: 'id', header: 'ID' },
       { key: 'consult_date', header: '상담일' },

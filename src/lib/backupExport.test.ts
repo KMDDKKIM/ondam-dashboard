@@ -37,6 +37,20 @@ describe('EXPORT_DATASETS', () => {
     }
   });
 
+  it('표를 직접 조회하는 자료에는 정렬 열이 있고 마지막은 id 다', () => {
+    for (const ds of Object.values(EXPORT_DATASETS)) {
+      if (!ds.table) continue;
+      expect(ds.orderBy.length).toBeGreaterThan(0);
+      expect(ds.orderBy[ds.orderBy.length - 1]).toBe('id');
+    }
+  });
+
+  it('상담 요약은 상담일 기준 월별 자료다(원문이 커서 전체 내려받기 금지)', () => {
+    const ds = EXPORT_DATASETS.consult_summaries;
+    expect(ds.monthly).toBe(true);
+    expect(ds.monthColumn).toBe('consult_date');
+  });
+
   it('월 조건이 필요한 직접 조회 자료에는 날짜 열이 있다', () => {
     for (const ds of Object.values(EXPORT_DATASETS)) {
       if (ds.monthly && ds.table) expect(ds.monthColumn).toBeTruthy();
