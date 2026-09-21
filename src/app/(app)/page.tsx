@@ -21,15 +21,12 @@ export default async function HomePage() {
     : { data: null };
   const isOwner = staff?.role === 'owner';
 
-  let summary;
-  let summaryError = '';
-  try {
-    summary = await getMonthlySummary();
-  } catch {
-    summaryError = '이번달 현황을 불러오지 못했습니다.';
-  }
-
-  const [missingClosing, zeroStock, supplyResult, remoteNew, herbWaiting] = await Promise.all([
+  // 이번 달 현황과 "오늘 확인할 것" 조회를 순서대로 기다리지 않고 한꺼번에 시작한다(화면이 뜨는 시간이 가장 느린 것 하나로 줄어든다).
+  const [summaryResult, missingClosing, zeroStock, supplyResult, remoteNew, herbWaiting] = await Promise.all([
+    getMonthlySummary().then(
+      (value) => ({ value, error: '' }),
+      () => ({ value: undefined, error: '이번달 현황을 불러오지 못했습니다.' })
+    ),
     fetchMissingClosingDates(supabase).catch(() => null),
     (async () => {
       try {
@@ -43,6 +40,8 @@ export default async function HomePage() {
     countNewRemoteRequests(supabase),
     countWaitingHerbQueue(supabase),
   ]);
+  const summary = summaryResult.value;
+  const summaryError = summaryResult.error;
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
