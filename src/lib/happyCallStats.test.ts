@@ -10,6 +10,7 @@ import {
   isTripleVisit,
   lastCompletedWeekRange,
   latestFullyMatureWeekStart,
+  maturedCohortRange,
 } from './happyCallStats';
 import type { HappyCallPatient } from './types';
 
@@ -218,5 +219,21 @@ describe('latestFullyMatureWeekStart', () => {
     expect(latestFullyMatureWeekStart('2026-09-21')).toBe('2026-08-24');
     expect(latestFullyMatureWeekStart('2026-09-26')).toBe('2026-08-24');
     expect(latestFullyMatureWeekStart('2026-09-27')).toBe('2026-08-31');
+  });
+});
+
+describe('maturedCohortRange', () => {
+  it('9/21을 고르면 8/24~8/30', () => {
+    expect(maturedCohortRange('2026-09-21')).toEqual({ start: '2026-08-24', end: '2026-08-30' });
+  });
+
+  it('같은 주(월~일) 안에서는 어느 날을 골라도 같은 범위', () => {
+    expect(maturedCohortRange('2026-09-27')).toEqual({ start: '2026-08-24', end: '2026-08-30' });
+    expect(maturedCohortRange('2026-09-24')).toEqual({ start: '2026-08-24', end: '2026-08-30' });
+    expect(maturedCohortRange('2026-09-28')).toEqual({ start: '2026-08-31', end: '2026-09-06' });
+  });
+
+  it('연초를 넘어가도 계산된다', () => {
+    expect(maturedCohortRange('2026-01-12')).toEqual({ start: '2025-12-15', end: '2025-12-21' });
   });
 });

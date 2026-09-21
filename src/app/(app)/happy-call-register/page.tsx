@@ -17,18 +17,16 @@ import { DoctorManager } from '@/components/happy-call/DoctorManager';
 import { DateCell } from '@/components/happy-call/DateCell';
 import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
-import { addDays, countUnreconciledRevisits, isUnreconciledRevisit } from '@/lib/happyCallStats';
+import { countUnreconciledRevisits, isUnreconciledRevisit, maturedCohortRange } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
-
-const MATURITY_DAYS = 21;
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const VISIT_KINDS = ['초진', '재초진'] as const;
 const PACKAGE_OPTIONS = ['성공', '실패', '비포함'] as const;
 
-const cellStyle = { border: '1px solid #ddd', padding: 4, fontSize: 13 };
-const selectStyle = { fontSize: 13, padding: 2, width: '100%' };
-const textInputStyle = { fontSize: 13, padding: 3, width: '100%', border: 'none', background: 'transparent' };
+const cellStyle = { border: '1px solid #ddd', padding: '1px 3px', fontSize: 13 };
+const selectStyle = { fontSize: 13, padding: 1, width: '100%' };
+const textInputStyle = { fontSize: 13, padding: '2px 3px', width: '100%', border: 'none', background: 'transparent' };
 
 // 맨 아래 등록 줄. 구분/진료의는 일부러 비워 둔다 — 기본값이 들어간 채 저장되는 일이 없도록
 // 이름 + 진료의 + 구분을 모두 골라야만 등록된다.
@@ -57,7 +55,8 @@ export default function HappyCallRegisterPage() {
   const [registeredOnDate, setRegisteredOnDate] = useState<HappyCallPatient[]>([]);
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
 
-  const highlightFirstVisitDate = highlightDate ? addDays(highlightDate, -MATURITY_DAYS) : null;
+  // 통계에서 고른 주를 기준으로 이탈·삼진이 집계된 초진 주(예: 9/21 → 8/24~8/30)를 노랗게 표시한다.
+  const highlightRange = highlightDate ? maturedCohortRange(highlightDate) : null;
   const today = todayKst();
   const unreconciledCount = useMemo(() => countUnreconciledRevisits(patients, today), [patients, today]);
   // 초진일 오래된 순(오름차순) — 새로 등록한 환자는 맨 아래 등록 줄 바로 위에 붙는다.
@@ -263,6 +262,12 @@ export default function HappyCallRegisterPage() {
           </div>
         )}
 
+        {highlightRange && (
+          <p style={{ marginTop: 16, fontSize: 12, color: '#7a5b00' }}>
+            <span style={{ display: 'inline-block', width: 12, height: 12, background: '#fff3cd', border: '1px solid #e6d28a', verticalAlign: '-2px', marginRight: 6 }} />
+            노란 줄 = 위에서 고른 주 기준으로 이탈·삼진이 집계되는 초진 {highlightRange.start.slice(5).replace('-', '/')} ~ {highlightRange.end.slice(5).replace('-', '/')}
+          </p>
+        )}
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
       <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1408, width: '100%', margin: '0 auto' }}>
         <colgroup>
@@ -298,7 +303,7 @@ export default function HappyCallRegisterPage() {
             <tr
               key={p.id}
               style={
-                highlightFirstVisitDate && p.firstVisitDate === highlightFirstVisitDate
+                highlightRange && p.firstVisitDate >= highlightRange.start && p.firstVisitDate <= highlightRange.end
                   ? { background: '#fff3cd' }
                   : undefined
               }
@@ -372,7 +377,7 @@ export default function HappyCallRegisterPage() {
                 <input defaultValue={p.memo ?? ''} title={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
-                <button type="button" onClick={() => handleDelete(p)} style={{ fontSize: 12, padding: '2px 6px', color: '#b3261e' }}>
+                <button type="button" onClick={() => handleDelete(p)} style={{ fontSize: 12, padding: '1px 5px', color: '#b3261e', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
                   삭제
                 </button>
               </td>

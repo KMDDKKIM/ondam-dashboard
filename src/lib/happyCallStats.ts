@@ -148,3 +148,14 @@ export function latestFullyMatureWeekStart(today: string): string {
   const w = getWeekRange(cutoff);
   return w.end <= cutoff ? w.start : addDays(w.start, -7);
 }
+
+/**
+ * 선택한 날짜가 속한 주 기준으로 "이탈·삼진이 이미 집계된" 초진 주(월~일)를 표에서 노랗게 표시하기 위한 범위.
+ * 선택한 주의 월요일보다 4주 전 월요일부터 일요일까지 — 예: 9/21(월)을 고르면 8/24~8/30.
+ * (그 주 환자 전원이 3주를 채운 뒤에 선택한 주가 시작된다.) 같은 주 안에서는 어느 날을 골라도 같은 범위다.
+ */
+export function maturedCohortRange(selectedDate: string): { start: string; end: string } {
+  const monday = getWeekRange(selectedDate).start;
+  const start = addDays(monday, -28);
+  return { start, end: addDays(start, 6) };
+}
