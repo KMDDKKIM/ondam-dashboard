@@ -62,19 +62,17 @@ export default async function HomePage() {
 
       <QuoteBanner />
 
-      {/* 한눈에: 왼쪽에는 이번 달 현황과 오늘 확인할 것, 오른쪽에는 오늘의 해피콜과 오늘 할 일 */}
-      <div className="home-grid">
-        <div className="home-col">
-          {summary ? (
-            <div style={{ marginBottom: 20 }}>
-              <MonthlyStatsPanel initial={summary} isOwner={isOwner} compact />
-            </div>
-          ) : (
-            <p className="error-text" style={{ marginBottom: 20 }}>
-              {summaryError}
-            </p>
-          )}
+      {/* 한눈에: 위에는 이번 달 현황을 전체 폭으로 가장 크게, 아래에는 같은 높이의 카드 3장(확인할 것 · 해피콜 · 할 일) */}
+      <div style={{ marginBottom: 20 }}>
+        {summary ? (
+          <MonthlyStatsPanel initial={summary} isOwner={isOwner} large />
+        ) : (
+          <p className="error-text">{summaryError}</p>
+        )}
+      </div>
 
+      <div className="home-bottom">
+        <div>
           <TodayStatus
             missingClosing={missingClosing}
             zeroStockCount={zeroStock}
@@ -83,9 +81,10 @@ export default async function HomePage() {
             herbWaiting={herbWaiting}
           />
         </div>
-
-        <div className="home-col">
+        <div>
           <TodayHappyCalls />
+        </div>
+        <div>
           <TodoChecklist />
         </div>
       </div>

@@ -227,20 +227,31 @@ a.card:hover {
   outline: none;
 }
 
-/* 홈("오늘") 2단 배치: 왼쪽 현황·확인할 것 / 오른쪽 해피콜·할 일. 좁은 화면에서는 한 단으로 쌓인다. */
-.home-grid {
+/* 홈("오늘") 배치: 위에 현황(전체 폭), 아래에 같은 높이 카드 3장. 좁은 화면에서는 아래 카드가 한 줄씩 쌓인다. */
+.home-bottom {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 
-.home-col {
+.home-bottom > div {
   min-width: 0;
+  display: flex;
 }
 
-@media (max-width: 1100px) {
-  .home-grid {
+.home-bottom > div > .card {
+  flex: 1;
+  margin-bottom: 0 !important;
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1200px) {
+  .home-bottom {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .home-bottom > div > .card {
+    max-height: none;
   }
 }

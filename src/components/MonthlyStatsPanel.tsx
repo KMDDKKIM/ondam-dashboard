@@ -10,6 +10,8 @@ interface MonthlyStatsPanelProps {
   isOwner: boolean;
   // 예약관리 화면처럼 좁은 자리에 얹을 때 — 카드/도넛을 작게 줄이고 한 줄에 몰아 넣는다.
   compact?: boolean;
+  /** 홈처럼 전체 폭으로 크게 보여 줄 때: 지표를 가로로 늘어놓고 글자와 도넛을 키운다. */
+  large?: boolean;
   // 총매출/일평균 환자수 옆에 나란히 붙는 추가 카드(예: 예약률, 부도취소율).
   extraTiles?: ReactNode;
 }
@@ -41,7 +43,8 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTiles }: MonthlyStatsPanelProps) {
+export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = false, extraTiles }: MonthlyStatsPanelProps) {
+  const row = compact || large; // 지표 카드와 도넛을 한 줄(가로)로 놓는 배치
   const [summary, setSummary] = useState(initial);
   const [month, setMonth] = useState(initial.month);
   const [loading, setLoading] = useState(false);
@@ -251,32 +254,34 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
       )}
 
       <div
-        style={compact ? { display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' } : undefined}
+        style={row ? { display: 'flex', gap: large ? 24 : 16, flexWrap: 'wrap', alignItems: 'center' } : undefined}
       >
         <div
           style={{
             display: 'flex',
-            gap: compact ? 8 : 16,
-            marginBottom: compact ? 0 : 20,
+            gap: large ? 12 : compact ? 8 : 16,
+            marginBottom: row ? 0 : 20,
             flexWrap: 'wrap',
-            flex: compact ? '1 1 360px' : undefined,
+            flex: large ? '1 1 460px' : row ? '1 1 360px' : undefined,
           }}
         >
           {extraTiles}
           <StatTile
             label="총매출"
-            compact={compact}
+            compact={compact && !large}
+            big={large}
             achieved={summary.totalRevenue}
             goal={summary.totalRevenueGoal}
             unit="원"
             pace={revenuePace(summary.totalRevenue, summary.totalRevenueGoal, summary.month, new Date())}
-            footer={<RevenueNotes summary={summary} compact={compact} />}
+            footer={<RevenueNotes summary={summary} compact={compact && !large} big={large} />}
           >
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
           </StatTile>
           <StatTile
             label="일평균 환자수"
-            compact={compact}
+            compact={compact && !large}
+            big={large}
             achieved={summary.avgDailyVisits}
             goal={summary.avgDailyVisitsGoal}
             unit="명"
@@ -284,7 +289,8 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
             {summary.avgDailyVisits != null ? `${summary.avgDailyVisits}명` : '데이터 없음'}
           </StatTile>
           {summary.averageTicket != null && (
-            <StatTile label="객단가" compact={compact} title="총진료비 ÷ 총 내원 인원">
+            <StatTile label="객단가" compact={compact && !large}
+            big={large} title="총진료비 ÷ 총 내원 인원">
               {summary.averageTicket.toLocaleString()}원
             </StatTile>
           )}
@@ -292,8 +298,8 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
 
         <div
           style={
-            compact
-              ? { display: 'flex', gap: 14, justifyContent: 'center', flex: '0 0 auto' }
+            row
+              ? { display: 'flex', gap: large ? 16 : 14, justifyContent: 'center', flex: '0 0 auto' }
               : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 12, justifyItems: 'center' }
           }
         >
@@ -314,7 +320,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
                 achieved={achieved}
                 goal={goal}
                 color={color}
-                size={compact ? 64 : 84}
+                size={large ? 92 : compact ? 64 : 84}
                 pace={pace?.status ?? null}
                 shortfall={pace ? shortfallCount(achieved, pace.expected) : 0}
               />
@@ -329,10 +335,10 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, extraTile
 
 // 총매출 아래 안내 — 기준일 없는 월말결산 경고, 목표 달성/남은 금액/필요 일평균/월말 예상/지난달 대비.
 // 매출·목표는 모든 직원에게 보인다(권한 구분 없음).
-function RevenueNotes({ summary, compact }: { summary: MonthlySummary; compact?: boolean }) {
+function RevenueNotes({ summary, compact, big }: { summary: MonthlySummary; compact?: boolean; big?: boolean }) {
   const { legacyOverride, motivation } = summary;
   if (!legacyOverride && motivation.lines.length === 0) return null;
-  const fontSize = compact ? 10 : 12;
+  const fontSize = big ? 13 : compact ? 10 : 12;
   return (
     <div style={{ marginTop: compact ? 4 : 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
       {legacyOverride && (
@@ -359,6 +365,7 @@ function RevenueNotes({ summary, compact }: { summary: MonthlySummary; compact?:
 export function StatTile({
   label,
   compact,
+  big,
   children,
   achieved = null,
   goal = null,
@@ -369,6 +376,8 @@ export function StatTile({
 }: {
   label: string;
   compact?: boolean;
+  /** 홈의 큰 현황: 숫자를 크게 */
+  big?: boolean;
   children: ReactNode;
   achieved?: number | null;
   goal?: number | null;
@@ -383,15 +392,15 @@ export function StatTile({
       className="card"
       title={title}
       style={{
-        flex: compact ? '1 1 100px' : '1 1 160px',
-        padding: compact ? '8px 12px' : '14px 16px',
+        flex: compact ? '1 1 100px' : big ? '1 1 140px' : '1 1 160px',
+        padding: compact ? '8px 12px' : big ? '16px 16px' : '14px 16px',
         background: 'var(--color-surface-2)',
       }}
     >
-      <div className="muted-text" style={{ marginBottom: compact ? 2 : 4, fontSize: compact ? 11 : undefined }}>
+      <div className="muted-text" style={{ marginBottom: compact ? 2 : 4, fontSize: compact ? 11 : big ? 14 : undefined }}>
         {label}
       </div>
-      <div style={{ fontWeight: 700, fontSize: compact ? 15 : 18 }}>{children}</div>
+      <div style={{ fontWeight: 700, fontSize: compact ? 15 : big ? 'clamp(20px, 1.75vw, 28px)' : 18, lineHeight: 1.2 }}>{children}</div>
       {goal != null && goal > 0 && (
         <div style={{ marginTop: compact ? 4 : 8 }}>
           <div
@@ -411,7 +420,7 @@ export function StatTile({
               }}
             />
           </div>
-          <div className="muted-text" style={{ marginTop: 3, fontSize: compact ? 10 : 12 }}>
+          <div className="muted-text" style={{ marginTop: 3, fontSize: compact ? 10 : big ? 13 : 12 }}>
             목표 {goal.toLocaleString()}
             {unit} · {percent != null ? `${percent}%` : '-'}
           </div>
