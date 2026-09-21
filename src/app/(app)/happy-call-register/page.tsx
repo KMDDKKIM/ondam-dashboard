@@ -13,6 +13,8 @@ import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
+import { DoctorManager } from '@/components/happy-call/DoctorManager';
+import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
 import { addDays, countUnreconciledRevisits, isUnreconciledRevisit } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 
@@ -41,7 +43,8 @@ function emptyDraft() {
 
 export default function HappyCallRegisterPage() {
   const [patients, setPatients] = useState<HappyCallPatient[]>([]);
-  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState(emptyDraft());
@@ -59,18 +62,24 @@ export default function HappyCallRegisterPage() {
     [patients, onlyUnreconciled, today]
   );
 
+  // 진료의 선택 칸·통계 필터·시트 붙여넣기는 (id, name) 목록을 받는다 — 활성 진료의를 그 모양으로 넘긴다.
+  const staffList = useMemo(() => doctorsAsStaffList(doctors), [doctors]);
   const supabase = createClient();
 
   async function load(forDate = candidateDate) {
     setLoading(true);
     try {
-      const [patientRows, staffResult, registered] = await Promise.all([
+      const [patientRows, doctorRows, registered, me] = await Promise.all([
         listHappyCallPatients(supabase),
-        supabase.from('staff').select('id, name, role').eq('status', 'approved'),
+        listDoctors(supabase),
         listHappyCallPatientsByFirstVisitDate(supabase, forDate),
+        supabase.auth.getUser().then(async ({ data }) =>
+          data.user ? (await supabase.from('staff').select('role').eq('id', data.user.id).maybeSingle()).data : null
+        ),
       ]);
       setPatients(patientRows);
-      setStaffList((staffResult.data ?? []) as Staff[]);
+      setDoctors(doctorRows);
+      setIsOwner(me?.role === 'owner');
       setRegisteredOnDate(registered);
     } catch {
       setError('불러오기에 실패했습니다.');
@@ -215,6 +224,8 @@ export default function HappyCallRegisterPage() {
           registered={registeredOnDate}
           onRegister={handleRegisterCandidate}
         />
+
+        <DoctorManager doctors={doctors} isOwner={isOwner} onChanged={() => load(candidateDate)} />
 
         <SheetPasteImport patients={patients} staffList={staffList} onDone={() => load(candidateDate)} />
 

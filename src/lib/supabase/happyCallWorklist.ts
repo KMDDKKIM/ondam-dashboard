@@ -287,12 +287,22 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
   return buildWorklist(items, today);
 }
 
-/** 직원 id -> 이름 (진료의/완료자 표시용). 퇴사해서 지워진 직원은 없다. */
+/**
+ * id -> 이름 (진료의/완료자 표시용). 직원 이름에 더해 진료의 목록(계정이 없는 진료의 포함)도 넣는다.
+ * doctors 테이블이 아직 없어도(마이그레이션 전) 직원 이름만으로 동작한다.
+ */
 export async function listStaffNames(supabase: SupabaseClient): Promise<Record<string, string>> {
   const { data, error } = await supabase.from('staff').select('id, name').eq('status', 'approved');
   if (error) throw error;
   const names: Record<string, string> = {};
   for (const row of (data ?? []) as { id: string; name: string }[]) names[row.id] = row.name;
+
+  const doctors = await supabase.from('doctors').select('id, name');
+  if (!doctors.error) {
+    for (const row of (doctors.data ?? []) as { id: string; name: string }[]) {
+      if (!(row.id in names)) names[row.id] = row.name;
+    }
+  }
   return names;
 }
 

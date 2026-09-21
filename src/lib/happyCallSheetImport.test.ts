@@ -107,6 +107,90 @@ describe('parseSheetPaste', () => {
   });
 });
 
+// 실제 구글시트에서 복사한 것과 같은 모양(머리글 없음, 맨 앞 빈 열, 사이사이 빈 칸, 맨 뒤 계산 칸)을 가상 데이터로 만든다.
+function sheetLine(o: {
+  name: string; doctor: string; type: string; acu?: string; memo?: string; call?: string;
+  first: string; r1?: string; r2?: string; r3?: string;
+}): string {
+  const cells = ['', o.name, o.doctor, o.type, '', o.acu ?? '', o.memo ?? '', '', '', '', '', '', o.call ?? '', '', '', '', '', '',
+    o.first, o.r1 ?? '', o.r2 ?? '', o.r3 ?? '', '', '', '', '',
+    '202634', o.doctor, o.type, '2', '2', '0', '0', 'N', '1', '1', '202609'];
+  return cells.join('\t');
+}
+
+describe('parseSheetPaste - 실제 시트 모양(머리글 없음)', () => {
+  it('맨 앞 빈 열과 사이 빈 칸을 건너뛰고 열 위치로 읽고, 뒤쪽 계산 칸은 무시한다', () => {
+    const text = sheetLine({
+      name: '홍길동', doctor: '박소은', type: '자보', acu: '비포함', memo: '목어깨 허리 / TA',
+      call: '컨디션 괜찮으셨다고 하세요', first: '2026. 8. 20', r1: '2026. 8. 21', r2: '2026. 8. 24',
+    });
+    const { rows, headerFound } = parseSheetPaste(text, TODAY);
+    expect(headerFound).toBe(false);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      patientName: '홍길동',
+      doctorName: '박소은',
+      patientType: '자보',
+      acupuncture: '비포함',
+      nextVisitNote: '목어깨 허리 / TA',
+      callLog: '컨디션 괜찮으셨다고 하세요',
+      firstVisitDate: '2026-08-20',
+      revisit1: '2026-08-21',
+      revisit2: '2026-08-24',
+      errors: [],
+    });
+  });
+
+  it('맨 앞 빈 열이 없어도(성함부터 복사) 같은 위치 관계로 읽는다', () => {
+    const text = sheetLine({ name: '성춘향', doctor: '김동규', type: '건보', first: '2026. 9. 3', r1: '2026. 9. 4' }).replace(/^\t/, '');
+    const { rows } = parseSheetPaste(text, TODAY);
+    expect(rows[0]).toMatchObject({ patientName: '성춘향', doctorName: '김동규', patientType: '건보', firstVisitDate: '2026-09-03', revisit1: '2026-09-04', errors: [] });
+  });
+
+  it('통화내역 "8/22 부재" 같은 글은 그대로 두고, 초진일만 있는 줄도 읽는다', () => {
+    const text = sheetLine({ name: '이몽룡', doctor: '김동규', type: '건보', acu: '실패', call: '8/22 부재', first: '2026. 8. 21' });
+    expect(parseSheetPaste(text, TODAY).rows[0]).toMatchObject({ callLog: '8/22 부재', acupuncture: '실패', revisit1: null, errors: [] });
+  });
+
+  it('구분이 "기타"면 오류가 아니라 고르도록 표시한다', () => {
+    const text = sheetLine({ name: '심청', doctor: '박소은', type: '기타', first: '2026. 9. 9' });
+    const row = parseSheetPaste(text, TODAY).rows[0];
+    expect(row.isOtherType).toBe(true);
+    expect(row.patientType).toBeNull();
+    expect(row.errors).toEqual([]);
+  });
+
+  it('초진일과 같거나 빠른 재내원 날짜는 등록하지 않고 알려 준다', () => {
+    const text = sheetLine({ name: '흥부', doctor: '김동규', type: '건보', first: '2026. 8. 21', r3: '2026. 8. 21' });
+    const row = parseSheetPaste(text, TODAY).rows[0];
+    expect(row.revisit3).toBeNull();
+    expect(row.notes[0]).toContain('재내원3');
+    expect(row.errors).toEqual([]);
+  });
+
+  it('셀 안 줄바꿈으로 줄이 쪼개져도(따옴표 없이) 원래 한 줄로 이어 붙인다', () => {
+    const whole = sheetLine({ name: '놀부', doctor: '김동규', type: '건보', acu: '비포함', memo: '복부랑 팔다리', call: '9/12 부재', first: '2026. 9. 11' });
+    const cells = whole.split('\t');
+    const memoIdx = cells.indexOf('복부랑 팔다리');
+    // 메모 칸 끝에서 줄바꿈 → 다음 줄은 (남은 빈 조각 + 뒤의 칸들)
+    const line1 = cells.slice(0, memoIdx + 1).join('\t');
+    const line2 = ['', ...cells.slice(memoIdx + 1)].join('\t');
+    const { rows } = parseSheetPaste(`${line1}\n${line2}`, TODAY);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ patientName: '놀부', callLog: '9/12 부재', firstVisitDate: '2026-09-11', errors: [] });
+  });
+
+  it('여러 줄을 붙여넣으면 줄마다 읽고, 새 환자 줄을 이어 붙이지 않는다', () => {
+    const text = [
+      sheetLine({ name: '가나다', doctor: '김동규', type: '건보', first: '2026. 9. 1' }),
+      sheetLine({ name: '라마바', doctor: '박소은', type: '비급여', first: '2026. 9. 2' }),
+    ].join('\n');
+    const { rows } = parseSheetPaste(text, TODAY);
+    expect(rows.map((r) => r.patientName)).toEqual(['가나다', '라마바']);
+    expect(rows.map((r) => r.doctorName)).toEqual(['김동규', '박소은']);
+  });
+});
+
 describe('classifyRows', () => {
   it('오류·이미 등록됨·붙여넣기 안 중복·등록 가능을 나눈다', () => {
     const text = [
