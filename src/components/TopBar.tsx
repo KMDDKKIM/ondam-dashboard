@@ -28,7 +28,7 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         flexWrap: 'wrap',
         gap: 10,
         padding: '12px 24px',
@@ -39,25 +39,6 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
         zIndex: 10,
       }}
     >
-      <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 30,
-            height: 30,
-            borderRadius: 9,
-            background: 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 13,
-          }}
-        >
-          경
-        </span>
-        <span style={{ fontWeight: 700, fontSize: 14 }}>경희온담한의원</span>
-      </Link>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <FavoriteIcons />
         <Link

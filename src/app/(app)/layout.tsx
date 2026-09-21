@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TopBar } from '@/components/TopBar';
+import { Sidebar } from '@/components/Sidebar';
 import { AppMain } from '@/components/AppMain';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
@@ -34,9 +35,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
-      <AppMain>{children}</AppMain>
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
+        <AppMain>{children}</AppMain>
+      </div>
     </div>
   );
 }

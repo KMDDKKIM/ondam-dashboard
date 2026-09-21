@@ -1,0 +1,37 @@
+import { describe, expect, it } from 'vitest';
+import { NAV_GROUPS, isActivePath, isWidePath, visibleGroups } from './navItems';
+
+describe('isActivePath', () => {
+  it('홈은 정확히 "/"일 때만 켜진다', () => {
+    expect(isActivePath('/', '/')).toBe(true);
+    expect(isActivePath('/reservations', '/')).toBe(false);
+  });
+
+  it('하위 화면도 그 메뉴로 보되, 이름이 비슷한 다른 메뉴와는 섞이지 않는다', () => {
+    expect(isActivePath('/herb-print/records', '/herb-print')).toBe(true);
+    expect(isActivePath('/herb-inventory', '/herb-print')).toBe(false);
+    expect(isActivePath('/happy-call-list', '/happy-call-register')).toBe(false);
+  });
+});
+
+describe('isWidePath', () => {
+  it('표가 넓은 화면만 true', () => {
+    expect(isWidePath('/reservations')).toBe(true);
+    expect(isWidePath('/herb-print/records')).toBe(true);
+    expect(isWidePath('/supply-requests')).toBe(false);
+  });
+});
+
+describe('visibleGroups', () => {
+  const hrefs = (owner: boolean) => visibleGroups(owner).flatMap((g) => g.items.map((i) => i.href));
+
+  it('직원 승인은 대표원장에게만 보인다', () => {
+    expect(hrefs(true)).toContain('/staff-approval');
+    expect(hrefs(false)).not.toContain('/staff-approval');
+  });
+
+  it('같은 주소가 두 번 들어가지 않는다', () => {
+    const all = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
+    expect(new Set(all).size).toBe(all.length);
+  });
+});
