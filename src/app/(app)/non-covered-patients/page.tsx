@@ -38,6 +38,8 @@ export default function NonCoveredPatientsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('전체');
   const [selectedMonth, setSelectedMonth] = useState(todayKst().slice(0, 7));
+  // 화면 나누기: 월별 현황·기록 / 월별 비교
+  const [view, setView] = useState<'status' | 'compare'>('status');
 
   const supabase = createClient();
   const currentMonth = todayKst().slice(0, 7);
@@ -134,71 +136,106 @@ export default function NonCoveredPatientsPage() {
 
   if (loading) return <p className="muted-text">불러오는 중...</p>;
 
+  const viewTab = (key: 'status' | 'compare', label: string) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => setView(key)}
+      aria-pressed={view === key}
+      style={{
+        padding: '9px 20px',
+        borderRadius: 999,
+        border: '1px solid var(--color-line)',
+        background: view === key ? 'var(--color-brand-b)' : 'var(--color-surface)',
+        color: view === key ? '#fff' : 'var(--color-ink)',
+        fontSize: 14,
+        fontWeight: 700,
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, marginBottom: 4 }}>비급여 현황</h1>
-          <p className="muted-text">비급여 구매를 구분(일반/이벤트)별로 한눈에 보고 기록하세요.</p>
-        </div>
-        <button
-          onClick={() => setShowProductManager((v) => !v)}
-          style={{ ...smallBtn, padding: '10px 14px', fontSize: 13, fontWeight: 600, marginRight: 8 }}
-        >
-          상품 목록 관리
-        </button>
-        <button className="btn-primary" onClick={() => setShowForm(true)}>
-          + 등록
-        </button>
+      <div style={{ marginBottom: 16 }}>
+        <h1 style={{ fontSize: 24, marginBottom: 4 }}>비급여 현황</h1>
+        <p className="muted-text">비급여 구매를 구분(일반/이벤트)별로 한눈에 보고 기록하세요.</p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }} role="tablist" aria-label="비급여 현황 화면">
+        {viewTab('status', '월별 현황 · 기록')}
+        {viewTab('compare', '월별 비교')}
       </div>
 
       {error && <p className="error-text" style={{ marginBottom: 16 }}>{error}</p>}
 
-      {showProductManager && (
-        <ProductManager supabase={supabase} products={products} onProductsChange={setProducts} onError={setError} />
-      )}
+      {view === 'compare' ? (
+        <>
+          <RevenueCharts purchases={purchases} currentMonth={currentMonth} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+          <MonthlyTrend purchases={purchases} currentMonth={currentMonth} />
+          {eventCategories.length > 0 && (
+            <EventComparison purchases={purchases} categories={categories} eventCategories={eventCategories} />
+          )}
+          {purchases.length === 0 && <p className="muted-text">아직 비급여 기록이 없어요. 「월별 현황 · 기록」에서 구매를 등록하면 여기에 그래프가 나타나요.</p>}
+        </>
+      ) : (
+        <>
+          {/* 맨 위: 월별 현황(달을 눌러 바꾸면 그 달의 상품별 매출이 나온다) */}
+          <MonthStats purchases={purchases} currentMonth={currentMonth} month={selectedMonth} onMonthChange={setSelectedMonth} />
 
-      {showForm && (
-        <PurchaseForm
-          products={products}
-          categories={categories}
-          defaultCategory={activeTab !== '전체' ? activeTab : GENERAL}
-          knownPatients={knownPatients}
-          submitting={submitting}
-          onSubmit={handleSubmit}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
+          {/* 아래: 구매 기록 입력과 목록 */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '28px 0 14px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: 18 }}>구매 기록</h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowProductManager((v) => !v)} style={{ ...smallBtn, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
+                상품 목록 관리
+              </button>
+              <button className="btn-primary" onClick={() => setShowForm(true)}>
+                + 등록
+              </button>
+            </div>
+          </div>
 
-      <RevenueCharts purchases={purchases} currentMonth={currentMonth} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
-      <MonthStats purchases={purchases} currentMonth={currentMonth} month={selectedMonth} onMonthChange={setSelectedMonth} />
-      <MonthlyTrend purchases={purchases} currentMonth={currentMonth} />
+          {showProductManager && (
+            <ProductManager supabase={supabase} products={products} onProductsChange={setProducts} onError={setError} />
+          )}
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {['전체', ...categories].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 999,
-              border: '1px solid var(--color-line)',
-              background: activeTab === tab ? 'var(--color-brand-b)' : 'var(--color-surface)',
-              color: activeTab === tab ? '#fff' : 'var(--color-ink)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            {tab}
-            {tab !== '전체' && countByCategory.has(tab) ? ` (${countByCategory.get(tab)})` : ''}
-          </button>
-        ))}
-      </div>
+          {showForm && (
+            <PurchaseForm
+              products={products}
+              categories={categories}
+              defaultCategory={activeTab !== '전체' ? activeTab : GENERAL}
+              knownPatients={knownPatients}
+              submitting={submitting}
+              onSubmit={handleSubmit}
+              onCancel={() => setShowForm(false)}
+            />
+          )}
 
-      <PurchaseTable rows={filtered} products={products} staffNames={staffNames} onSave={handleSave} onDelete={handleDelete} />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+            {['전체', ...categories].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 999,
+                  border: '1px solid var(--color-line)',
+                  background: activeTab === tab ? 'var(--color-brand-b)' : 'var(--color-surface)',
+                  color: activeTab === tab ? '#fff' : 'var(--color-ink)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {tab}
+                {tab !== '전체' && countByCategory.has(tab) ? ` (${countByCategory.get(tab)})` : ''}
+              </button>
+            ))}
+          </div>
 
-      {eventCategories.length > 0 && (
-        <EventComparison purchases={purchases} categories={categories} eventCategories={eventCategories} />
+          <PurchaseTable rows={filtered} products={products} staffNames={staffNames} onSave={handleSave} onDelete={handleDelete} />
+        </>
       )}
     </div>
   );

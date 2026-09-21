@@ -60,7 +60,28 @@ export function MonthStats({ purchases, currentMonth, month: controlledMonth, on
     <div className="card" style={{ padding: 20, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ fontWeight: 700 }}>월별 현황</div>
-        <select value={month} onChange={(e) => setMonth(e.target.value)} className="input-field" style={{ maxWidth: 160 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} role="group" aria-label="달 선택">
+          {months.slice(0, 6).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMonth(m)}
+              aria-pressed={month === m}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 999,
+                border: '1px solid var(--color-line)',
+                background: month === m ? 'var(--color-brand-b)' : 'var(--color-surface)',
+                color: month === m ? '#fff' : 'var(--color-ink)',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {monthLabel(m)}
+            </button>
+          ))}
+        </div>
+        <select value={month} onChange={(e) => setMonth(e.target.value)} className="input-field" style={{ maxWidth: 160 }} aria-label="다른 달 선택">
           {months.map((m) => (
             <option key={m} value={m}>
               {monthLabel(m)}
