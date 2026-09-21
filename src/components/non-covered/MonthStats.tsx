@@ -17,9 +17,6 @@ interface Props {
   purchases: NonCoveredPurchase[];
   /** 기본 선택 달 (YYYY-MM, 한국 기준 이번 달) */
   currentMonth: string;
-  /** 위 그래프와 함께 쓸 때: 부모가 고른 달을 그대로 보여 주고, 아래 목록에서 바꾸면 부모에게 알린다. */
-  month?: string;
-  onMonthChange?: (month: string) => void;
 }
 
 const th = { padding: '8px 10px', textAlign: 'right' } as const;
@@ -45,10 +42,8 @@ function CountAmount({ stat }: { stat: Stat }) {
   );
 }
 
-export function MonthStats({ purchases, currentMonth, month: controlledMonth, onMonthChange }: Props) {
-  const [ownMonth, setOwnMonth] = useState(currentMonth);
-  const month = controlledMonth ?? ownMonth;
-  const setMonth = (m: string) => (onMonthChange ? onMonthChange(m) : setOwnMonth(m));
+export function MonthStats({ purchases, currentMonth }: Props) {
+  const [month, setMonth] = useState(currentMonth);
 
   const months = useMemo(() => availableMonths(purchases, currentMonth), [purchases, currentMonth]);
   const rows = useMemo(() => filterByMonth(purchases, month), [purchases, month]);
@@ -60,28 +55,7 @@ export function MonthStats({ purchases, currentMonth, month: controlledMonth, on
     <div className="card" style={{ padding: 20, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ fontWeight: 700 }}>월별 현황</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} role="group" aria-label="달 선택">
-          {months.slice(0, 6).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMonth(m)}
-              aria-pressed={month === m}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 999,
-                border: '1px solid var(--color-line)',
-                background: month === m ? 'var(--color-brand-b)' : 'var(--color-surface)',
-                color: month === m ? '#fff' : 'var(--color-ink)',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              {monthLabel(m)}
-            </button>
-          ))}
-        </div>
-        <select value={month} onChange={(e) => setMonth(e.target.value)} className="input-field" style={{ maxWidth: 160 }} aria-label="다른 달 선택">
+        <select value={month} onChange={(e) => setMonth(e.target.value)} className="input-field" style={{ maxWidth: 160 }}>
           {months.map((m) => (
             <option key={m} value={m}>
               {monthLabel(m)}
