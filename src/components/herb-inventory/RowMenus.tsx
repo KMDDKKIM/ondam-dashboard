@@ -176,7 +176,11 @@ export function MorePopover({
           onChange={(e) => setText(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
+            // Enter는 blur에만 기대지 않고 바로 저장한다(blur가 안 오는 환경에서도 저장되도록).
+            if (e.key === 'Enter') {
+              void commit();
+              e.currentTarget.blur();
+            }
           }}
           className="input-field"
           style={{ width: 72, padding: '4px 8px', fontSize: 13 }}
