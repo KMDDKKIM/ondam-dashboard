@@ -32,4 +32,10 @@ describe('validateSignupInput', () => {
     expect(validateSignupInput({ name: '홍길동' }).ok).toBe(false);
     expect(validateSignupInput({ name: '홍길동', password: '12345678' }).ok).toBe(true);
   });
+
+  it('rejects whitespace-only and over-72-byte passwords (shared validator)', () => {
+    expect(validateSignupInput({ name: '홍길동', password: '        ' }).ok).toBe(false);
+    expect(validateSignupInput({ name: '홍길동', password: 'a'.repeat(73) }).ok).toBe(false);
+    expect(validateSignupInput({ name: '홍길동', password: 'a'.repeat(72) }).ok).toBe(true);
+  });
 });

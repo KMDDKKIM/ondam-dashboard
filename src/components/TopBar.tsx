@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { FavoriteIcons } from '@/components/FavoriteIcons';
@@ -83,10 +84,10 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
             </span>
           )}
         </button>
-        <span className="muted-text">
+        <Link href="/account" className="muted-text" title="내 계정" style={{ textDecoration: 'none' }}>
           {staffName ?? '로그인됨'}
           {staffGrade ? ` · ${staffGrade}` : ''}
-        </span>
+        </Link>
         <button
           onClick={handleLogout}
           style={{
