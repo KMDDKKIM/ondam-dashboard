@@ -82,8 +82,12 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
       const suggestion: VisitClassification = candidate.kind ?? classifyVisit(candidate.previousVisitDates, date);
       const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
-      const isRegistered = registered.some((p) =>
-        isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] })
+      // 차트번호·연락처 없이 이름만 등록해 둔 줄은, 그날 후보 중 같은 이름이 한 명뿐일 때 그 사람으로 본다.
+      const sameNameCandidates = (data?.candidates ?? []).filter((c) => c.patientName === candidate.patientName).length;
+      const isRegistered = registered.some(
+        (p) =>
+          isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] }) ||
+          (!p.chartNo && !p.phone && p.patientName === candidate.patientName && sameNameCandidates === 1)
       );
       return { candidate, suggestion, isRegistered, key: `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}` };
     });
@@ -96,11 +100,16 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   const revisitRows = rows.filter((r) => r.suggestion === '재진' && !r.candidate.possibleHomonym);
 
   // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
-  const expected = data?.closingFirstVisitCount ?? estimatedRows.length;
+  // 일일결산 기반이면 신규환자수(초진)에 재초진 후보를 더한다(신규환자수에는 재초진이 들어 있지 않다).
+  const revisitAfter3Months = rows.filter((r) => r.suggestion === '재초진').length;
+  const expected =
+    data?.closingFirstVisitCount != null
+      ? data.closingFirstVisitCount + (data.source === 'settlement' ? revisitAfter3Months : 0)
+      : estimatedRows.length;
   const expectedSource =
     data?.closingFirstVisitCount != null
       ? data.source === 'settlement'
-        ? '일일결산 신규환자수 기준'
+        ? `일일결산 신규환자수 ${data.closingFirstVisitCount}명 + 재초진 후보 ${revisitAfter3Months}명`
         : '마감 결산 기준'
       : '명단 기준 추정';
   const registeredCount = registered.length;
@@ -135,7 +144,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       </div>
       <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
         {data?.source === 'settlement'
-          ? '일일결산에 저장된 그날 실제 내원 환자에서 뽑았어요. 이전 내원 기록과 결산표의 신규환자수로 판단하며, 저장을 시작하기 전에 온 재초진 환자는 알아낼 수 없어요.'
+          ? '일일결산에 저장된 그날 실제 내원 환자에서 뽑았어요. 가져온 내원 이력·이전 결산 기록·차트번호로 판단해요(이력이 없는 기간의 내원은 알 수 없어요).'
           : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
         {' '}재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
       </p>
