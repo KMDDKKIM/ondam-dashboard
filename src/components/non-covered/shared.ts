@@ -35,3 +35,14 @@ export function monthLabel(month: string): string {
   const [y, m] = month.split('-');
   return `${y}년 ${Number(m)}월`;
 }
+
+/** "2026-09-21" → "26-09-21" (연도 앞 두 자리를 뺀다). 형식이 다르면 그대로. */
+export function shortDate(date: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(2) : date;
+}
+
+/** "2026-10-07" → "10/7" */
+export function monthDay(date: string): string {
+  const m = date.match(/^\d{4}-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[1])}/${Number(m[2])}` : date;
+}

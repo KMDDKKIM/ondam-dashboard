@@ -8,7 +8,7 @@ interface Props {
   onPick: (patient: KnownPatient) => void;
 }
 
-// 기존 구매 기록에서 이름/차트번호/연락처로 환자를 찾아 누르면 폼에 자동 입력한다.
+// 기존 구매 기록에서 이름/차트번호로 환자를 찾아 누르면 폼에 자동 입력한다.
 export function PatientSearch({ knownPatients, onPick }: Props) {
   const [search, setSearch] = useState('');
 
@@ -16,14 +16,14 @@ export function PatientSearch({ knownPatients, onPick }: Props) {
     const q = search.trim();
     if (!q) return [];
     return knownPatients
-      .filter((p) => p.patientName.includes(q) || p.chartNo.includes(q) || (p.phone ?? '').includes(q))
+      .filter((p) => p.patientName.includes(q) || p.chartNo.includes(q))
       .slice(0, 8);
   }, [search, knownPatients]);
 
   return (
     <div style={{ position: 'relative', marginBottom: 10 }}>
       <input
-        placeholder="환자 검색 (이름/차트번호/연락처) — 있으면 눌러서 자동 입력"
+        placeholder="환자 검색 (이름/차트번호) — 있으면 눌러서 자동 입력"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="input-field"
@@ -56,7 +56,6 @@ export function PatientSearch({ knownPatients, onPick }: Props) {
               <strong>{p.patientName}</strong>{' '}
               <span className="muted-text">
                 {p.chartNo}
-                {p.phone ? ` · ${p.phone}` : ''}
               </span>
             </button>
           ))}

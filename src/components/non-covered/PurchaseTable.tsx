@@ -6,7 +6,7 @@ import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
 import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
-import { GOAL_CATEGORY_LABEL, formatAmount } from './shared';
+import { GOAL_CATEGORY_LABEL, formatAmount, monthDay, shortDate } from './shared';
 
 interface Props {
   rows: NonCoveredPurchase[];
@@ -32,10 +32,10 @@ interface Draft {
   memo: string;
 }
 
-const HEADERS = ['구매일', '환자', '구분', '상품', '금액', '해피콜', '목표', '메모', '등록자', ''];
+const HEADERS = ['구매일', '환자', '차트', '구분', '상품', '금액', '해피콜', '목표', '메모', '등록자', ''];
 
-// 한눈에 읽히도록 글자 14px, 칸 여백 넉넉히. 짧은 값(구매일·금액·구분)은 줄바꿈하지 않는다.
-const cell = { padding: '12px 12px', verticalAlign: 'top' } as const;
+// 한 줄로 깔끔하게: 모든 칸을 줄바꿈 없이 한 줄에 보여 주고, 화면이 좁으면 표를 옆으로 밀어 본다.
+const cell = { padding: '12px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap' } as const;
 const nowrap = { whiteSpace: 'nowrap' } as const;
 
 function toDraft(p: NonCoveredPurchase): Draft {
@@ -135,9 +135,6 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
             <Field label="차트번호 *">
               <input value={d.chartNo} onChange={(e) => field('chartNo', e.target.value)} className="input-field" style={inputBig} />
             </Field>
-            <Field label="연락처">
-              <input value={d.phone} onChange={(e) => field('phone', e.target.value)} className="input-field" style={inputBig} />
-            </Field>
             <Field label="구분">
               <input value={d.category} onChange={(e) => field('category', e.target.value)} className="input-field" style={inputBig} />
             </Field>
@@ -219,46 +216,37 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
     const callDates = p.happyCallDate && p.durationDays ? computeHerbCallDates(p.happyCallDate, p.durationDays) : null;
     return (
       <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
-        <td style={{ ...cell, ...nowrap }}>{p.purchaseDate}</td>
-        <td style={cell}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>{p.patientName}</div>
-          <div className="muted-text" style={{ fontSize: 13, marginTop: 2, whiteSpace: 'nowrap' }}>
-            차트 {p.chartNo}
-          </div>
-          {p.phone && (
-            <div className="muted-text" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
-              {p.phone}
-            </div>
-          )}
+        <td style={cell}>{shortDate(p.purchaseDate)}</td>
+        <td style={{ ...cell, fontWeight: 700, fontSize: 15 }}>{p.patientName}</td>
+        <td style={cell} className="muted-text">
+          {p.chartNo}
         </td>
-        <td style={{ ...cell, ...nowrap }}>{p.category}</td>
+        <td style={cell}>{p.category}</td>
         <td style={{ ...cell, fontWeight: 600 }}>{p.productName}</td>
-        <td style={{ ...cell, ...nowrap, fontWeight: 700 }}>{p.amount != null ? formatAmount(p.amount) : <MissingAmountChip />}</td>
-        <td style={{ ...cell, fontSize: 13 }}>
-          {callDates ? (
+        <td style={{ ...cell, fontWeight: 700 }}>{p.amount != null ? formatAmount(p.amount) : <MissingAmountChip />}</td>
+        <td
+          style={cell}
+          title={callDates ? `해피콜 1차 ${callDates.callDate1} · 2차 ${callDates.callDate2} · 3차 ${callDates.callDate3}` : undefined}
+        >
+          {p.happyCallDate ? (
             <span>
-              수령 {p.happyCallDate} · 처방 {p.durationDays}일
-              <br />
-              <span className="muted-text">
-                1차 {callDates.callDate1.slice(5)} · 2차 {callDates.callDate2.slice(5)} · 3차 {callDates.callDate3.slice(5)}
-              </span>
+              수령 {monthDay(p.happyCallDate)}
+              {p.durationDays ? ` · ${p.durationDays}일` : ''}
             </span>
-          ) : p.happyCallDate ? (
-            <span>수령 {p.happyCallDate}</span>
           ) : (
             <span className="muted-text">-</span>
           )}
         </td>
-        <td style={{ ...cell, ...nowrap }} className="muted-text">
+        <td style={cell} className="muted-text">
           {p.goalCategory ? GOAL_CATEGORY_LABEL[p.goalCategory] : '-'}
         </td>
-        <td style={cell} className="muted-text">
+        <td style={{ ...cell, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }} className="muted-text" title={p.memo ?? ''}>
           {p.memo ?? ''}
         </td>
-        <td style={{ ...cell, ...nowrap, fontSize: 13 }} className="muted-text">
+        <td style={{ ...cell, fontSize: 13 }} className="muted-text">
           {creatorLabel(p.createdBy, staffNames)}
         </td>
-        <td style={{ ...cell, ...nowrap }}>
+        <td style={cell}>
           <button
             onClick={() => {
               setEditingId(p.id);
@@ -286,7 +274,7 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
           <option key={p.id} value={p.name} />
         ))}
       </datalist>
-      <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', fontSize: 14 }}>
+      <table style={{ width: '100%', minWidth: 1000, borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>
           <tr style={{ background: 'var(--color-surface-2)' }}>
             {HEADERS.map((h, i) => (

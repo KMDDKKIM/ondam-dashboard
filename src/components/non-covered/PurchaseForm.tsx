@@ -44,7 +44,6 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const today = todayKst();
   const [name, setName] = useState('');
   const [chartNo, setChartNo] = useState('');
-  const [phone, setPhone] = useState('');
   const [category, setCategory] = useState(defaultCategory);
   const [newCategory, setNewCategory] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
@@ -69,7 +68,6 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   function pickPatient(p: KnownPatient) {
     setName(p.patientName);
     setChartNo(p.chartNo);
-    setPhone(p.phone ?? '');
   }
 
   function handleProductChoice(value: string) {
@@ -87,7 +85,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     onSubmit({
       patientName: name.trim(),
       chartNo: chartNo.trim(),
-      phone: phone.trim() || null,
+      phone: null, // 비급여 현황에서는 연락처를 받지 않는다(해피콜 연락처는 차트번호로 찾는다)
       category: category.trim() || '일반',
       productName: productName.trim(),
       amount: amount ? Number(amount) : null,
@@ -119,9 +117,6 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
         </Field>
         <Field label="차트번호 *">
           <input value={chartNo} onChange={(e) => setChartNo(e.target.value)} className="input-field" style={inputBig} />
-        </Field>
-        <Field label="연락처">
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input-field" style={inputBig} />
         </Field>
       </div>
 

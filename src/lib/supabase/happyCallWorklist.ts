@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listFirstVisitCallCandidates } from './happyCallPatients';
+import { baseChartNo } from '@/lib/firstVisit';
 import {
   applyCallAction,
   buildWorklist,
@@ -160,24 +161,50 @@ interface ManualRow extends SimpleCallRow {
   phone?: string | null;
 }
 
-/** 비급여 구매에 적힌 연락처를 수동 콜(해피콜 행 id)에 이어 붙인다. 실패하면 그냥 "-"로 둔다. */
+function usablePhone(phone: string | null | undefined): string | null {
+  const p = (phone ?? '').trim();
+  // "010-" 처럼 앞자리만 적힌 번호는 걸 수 없으니 쓰지 않는다.
+  return p.replace(/\D/g, '').length >= 9 ? p : null;
+}
+
+/**
+ * 비급여 구매에서 만든 수동 콜(해피콜 행 id)의 연락처를 찾는다. 구매에 연락처가 적혀 있으면 그것을,
+ * 없으면(비급여 현황에는 연락처를 받지 않는다) 그 차트번호로 가져온 내원 이력(patient_visit_history)에서 찾는다.
+ * 어디에도 없으면 그냥 "-"로 둔다.
+ */
 async function phonesByManualEntryId(supabase: SupabaseClient, entryIds: string[]): Promise<Map<string, string>> {
   const phones = new Map<string, string>();
+  const chartByEntry = new Map<string, string>();
   const columns = ['happy_call_entry_id', 'happy_call_entry_id_2', 'happy_call_entry_id_3'] as const;
   for (let i = 0; i < entryIds.length; i += 50) {
     const chunk = entryIds.slice(i, i + 50);
     for (const column of columns) {
-      const { data, error } = await supabase
-        .from('non_covered_purchases')
-        .select(`phone, ${column}`)
-        .in(column, chunk)
-        .not('phone', 'is', null);
+      const { data, error } = await supabase.from('non_covered_purchases').select(`phone, chart_no, ${column}`).in(column, chunk);
       if (error || !data) continue;
       for (const row of data as unknown as Record<string, string | null>[]) {
         const entryId = row[column];
-        const phone = row.phone;
-        if (entryId && phone) phones.set(entryId, phone);
+        if (!entryId) continue;
+        const own = usablePhone(row.phone);
+        if (own) phones.set(entryId, own);
+        else if (row.chart_no) chartByEntry.set(entryId, row.chart_no);
       }
+    }
+  }
+
+  const wanted = [...new Set([...chartByEntry.values()].flatMap((c) => [c, baseChartNo(c)]))];
+  if (wanted.length > 0) {
+    const byChart = new Map<string, string>();
+    for (let i = 0; i < wanted.length; i += 100) {
+      const { data, error } = await supabase.from('patient_visit_history').select('chart_no, phone').in('chart_no', wanted.slice(i, i + 100));
+      if (error || !data) break;
+      for (const r of data as { chart_no: string; phone: string | null }[]) {
+        const p = usablePhone(r.phone);
+        if (p) byChart.set(r.chart_no, p);
+      }
+    }
+    for (const [entryId, chart] of chartByEntry) {
+      const found = byChart.get(chart) ?? byChart.get(baseChartNo(chart));
+      if (found && !phones.has(entryId)) phones.set(entryId, found);
     }
   }
   return phones;
