@@ -25,6 +25,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '진료',
     items: [
       { href: '/reservations', label: '예약관리', icon: '📅' },
+      { href: '/reception-log', label: '접수기록부', icon: '📒' },
       { href: '/happy-call-register', label: '초진환자 해피콜', icon: '📞' },
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
       { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },
