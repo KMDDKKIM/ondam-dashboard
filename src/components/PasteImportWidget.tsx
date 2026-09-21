@@ -8,6 +8,9 @@ import { parseSettlementVisits } from '@/lib/settlementVisits';
 import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
+import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
+import { nextBookingPrefill } from '@/lib/receptionLog';
+import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/sectionMessages';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
@@ -39,13 +42,22 @@ function InvalidCellsNotice({ cells }: { cells: string[] }) {
 
 // ── 월결산 ──────────────────────────────────────────────────────────
 // 월은 붙여넣은 결산표 제목("월말결산:2026-09")에서 읽어 오므로 따로 고르지 않는다.
-function MonthlySettlementSection() {
+function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [history, setHistory] = useState<MonthlyOverrideRow[]>([]);
   const supabase = createClient();
+
+  // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
+  useEffect(() => {
+    if (clearSignal > 0) {
+      setResult('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
+    }
+  }, [clearSignal]);
 
   async function loadHistory() {
     try {
@@ -95,9 +107,11 @@ function MonthlySettlementSection() {
         `${month} 매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
       );
       setText('');
+      onOutcome();
       await loadHistory();
     } catch {
       setError('저장에 실패했습니다.');
+      onOutcome();
     } finally {
       setSaving(false);
     }
@@ -154,13 +168,22 @@ function MonthlySettlementSection() {
 }
 
 // ── 예약 명단 ─────────────────────────────────────────────────────────
-function ReservationSection({ onSaved }: { onSaved: (dates: string[]) => void }) {
+function ReservationSection({ onSaved, clearSignal, onOutcome }: SectionSync & { onSaved: (dates: string[]) => void }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [history, setHistory] = useState<{ date: string; reservationCount: number; updatedAt: string }[]>([]);
   const supabase = createClient();
+
+  // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
+  useEffect(() => {
+    if (clearSignal > 0) {
+      setResult('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
+    }
+  }, [clearSignal]);
 
   async function loadHistory() {
     try {
@@ -211,9 +234,11 @@ function ReservationSection({ onSaved }: { onSaved: (dates: string[]) => void })
       const savedDates = body.savedDates as string[];
       setResult(`예약관리에 저장했어요: ${savedDates.join(', ')}`);
       setText('');
+      onOutcome();
       await loadHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : '저장에 실패했습니다.');
+      onOutcome();
     } finally {
       setSaving(false);
     }
@@ -326,7 +351,15 @@ interface ReservationSync {
   dates: string[];
 }
 
-function DailySettlementSection({ reservationSync }: { reservationSync: ReservationSync }) {
+// 칸마다 자기 최신 결과만 보이도록: 한 칸이 저장 결과(성공/실패)를 내면 onOutcome 으로 알리고,
+// 부모가 다른 칸들의 clearSignal 을 올리면 그 칸들은 예전 결과/오류 문구를 지운다.
+// (정상 이행+노쇼+취소 불일치 같은 입력 상태 경고는 결과 문구가 아니라 그대로 둔다.)
+interface SectionSync {
+  clearSignal: number;
+  onOutcome: () => void;
+}
+
+function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: SectionSync & { reservationSync: ReservationSync }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
@@ -334,7 +367,18 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
   const [history, setHistory] = useState<DailyRevenue[]>([]);
   const [closing, setClosing] = useState<ClosingFields>(EMPTY_CLOSING);
   const [copied, setCopied] = useState(false);
+  // 다음예약 접수 환자수를 접수기록부로 미리 채웠을 때의 인원(직접 고치면 사라진다).
+  const [receptionHint, setReceptionHint] = useState<number | null>(null);
   const supabase = createClient();
+
+  // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
+  useEffect(() => {
+    if (clearSignal > 0) {
+      setResult('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
+    }
+  }, [clearSignal]);
 
   async function loadHistory() {
     try {
@@ -373,6 +417,7 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
   useEffect(() => {
     if (!date) {
       setClosing(EMPTY_CLOSING);
+      setReceptionHint(null);
       return;
     }
     let syncOnly = false;
@@ -432,10 +477,12 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
       }
 
       let saved = null;
+      let savedKnown = true;
       try {
         saved = await getSavedDailyClosing(supabase, date);
       } catch {
         // 저장된 값이 없으면 명단에서 센 값을 쓴다.
+        savedKnown = false;
       }
       if (saved) {
         next.reservationCount = str(saved.reservationCount);
@@ -460,7 +507,21 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
       } catch {
         // 비급여 기록이 없어도 직접 입력하면 된다.
       }
-      if (!cancelled) setClosing(next);
+
+      // 다음예약 접수 환자수: 저장된 결산이 없고 칸이 비어 있을 때만, 접수기록부에서 "예약" 체크된 환자 수로 미리 채운다.
+      // 못 읽어도(표 없음·권한 없음 등) 조용히 건너뛴다 — 직접 입력하면 된다.
+      let hint: number | null = null;
+      if (savedKnown) {
+        try {
+          hint = nextBookingPrefill(await listReceptionRecords(supabase, date), { savedClosingExists: saved != null, currentValue: next.nextBookingCount });
+        } catch {
+          hint = null;
+        }
+        if (hint != null) next.nextBookingCount = String(hint);
+      }
+      if (cancelled) return;
+      setReceptionHint(hint);
+      setClosing(next);
     })();
     return () => {
       cancelled = true;
@@ -498,6 +559,7 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
     outcomeSum !== n('reservationCount');
 
   function setField(key: keyof ClosingFields, value: string) {
+    if (key === 'nextBookingCount') setReceptionHint(null);
     setClosing((prev) => ({ ...prev, [key]: value }));
     setCopied(false);
     setResult('');
@@ -508,6 +570,7 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
     if (text.trim() && !await confirmDialog('붙여넣은 결산표와 아래 입력칸을 모두 비울까요? (이미 저장한 기록은 그대로예요)')) return;
     setText('');
     setClosing(EMPTY_CLOSING);
+    setReceptionHint(null);
     setCopied(false);
     setError('');
     setResult('');
@@ -560,13 +623,15 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
           await replaceDailyVisits(supabase, date, visits, user?.id ?? null);
           visitsNote = ` 내원 환자 ${visits.length}명의 이름·차트번호도 저장했어요.`;
         } catch {
-          setError('결산은 저장했지만 내원 환자 명단을 저장하지 못했어요. 같은 결산표로 저장을 한 번 더 눌러 주세요.');
+          setError(VISITS_NOT_SAVED_ERROR);
         }
       }
       setResult(`${date} 일일 결산을 저장했어요. (매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''})${visitsNote}`);
+      onOutcome();
       await loadHistory();
     } catch {
       setError('저장에 실패했습니다.');
+      onOutcome();
     } finally {
       setSaving(false);
     }
@@ -600,7 +665,8 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
         onChange={(e) => {
           setText(e.target.value);
           setResult('');
-          setError('');
+          // 내원 환자 명단 저장 실패 안내는 일일결산을 다시 저장할 때까지 남긴다.
+          setError(errorAfterOtherSectionSaved);
           setCopied(false);
         }}
         placeholder="일일 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
@@ -652,6 +718,11 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
             <div>
               <label className="muted-text" style={label}>다음예약 접수 환자수</label>
               {numberInput('nextBookingCount')}
+              {receptionHint != null && (
+                <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                  접수기록부에서 {receptionHint}명 자동 입력 (예약 체크 기준)
+                </p>
+              )}
             </div>
           </div>
           {outcomeMismatch && (
@@ -792,13 +863,23 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
 // 맨 아래에 있어도 이번달 현황의 총매출·일평균 환자수를 가장 우선해서 결정한다.
 export function PasteImportWidget() {
   const [reservationSync, setReservationSync] = useState<ReservationSync>({ version: 0, dates: [] });
+  const [clearSignals, setClearSignals] = useState({ daily: 0, reservation: 0, monthly: 0 });
+  // from 이외 칸들의 신호를 올려 그 칸들의 예전 결과 문구를 지운다.
+  const outcomeFrom = (from: 'daily' | 'reservation' | 'monthly') => () =>
+    setClearSignals((prev) => ({
+      daily: from === 'daily' ? prev.daily : prev.daily + 1,
+      reservation: from === 'reservation' ? prev.reservation : prev.reservation + 1,
+      monthly: from === 'monthly' ? prev.monthly : prev.monthly + 1,
+    }));
   return (
     <div>
-      <DailySettlementSection reservationSync={reservationSync} />
+      <DailySettlementSection reservationSync={reservationSync} clearSignal={clearSignals.daily} onOutcome={outcomeFrom('daily')} />
       <ReservationSection
         onSaved={(dates) => setReservationSync((prev) => ({ version: prev.version + 1, dates }))}
+        clearSignal={clearSignals.reservation}
+        onOutcome={outcomeFrom('reservation')}
       />
-      <MonthlySettlementSection />
+      <MonthlySettlementSection clearSignal={clearSignals.monthly} onOutcome={outcomeFrom('monthly')} />
     </div>
   );
 }

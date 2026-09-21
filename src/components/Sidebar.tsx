@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isActivePath, isWidePath, visibleGroups } from '@/lib/navItems';
 import type { StaffGrade } from '@/lib/staffGrade';
 import { openChatWindow } from '@/lib/openChatWindow';
+import { shouldRefreshBadges, type SidebarBadges } from '@/lib/sidebarBadges';
 
 interface SidebarProps {
   isOwner: boolean;
@@ -20,6 +21,10 @@ interface SidebarProps {
   herbQueueCount?: number;
 }
 
+// 무거운 배지(오늘 걸 해피콜 수, 초진·재초진 등록 누락)는 메뉴가 뜬 뒤에 따로 읽는다.
+// 화면을 옮길 때마다 읽지 않도록 마지막으로 읽은 시각을 모듈에 둔다.
+let lastBadgeFetchAt: number | null = null;
+
 const STORAGE_KEY = 'ondam-sidebar';
 const OPEN_WIDTH = 216;
 const RAIL_WIDTH = 60;
@@ -28,6 +33,40 @@ const RAIL_WIDTH = 60;
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
 export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
   const pathname = usePathname();
+  const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null });
+  const inFlight = useRef(false);
+  const openCallCount = badges.openCalls ?? 0;
+  const firstVisitMissingCount = badges.missingFirstVisits ?? 0;
+
+  const refreshBadges = useCallback(async () => {
+    if (inFlight.current || !shouldRefreshBadges(lastBadgeFetchAt, Date.now())) return;
+    inFlight.current = true;
+    try {
+      const response = await fetch('/api/sidebar-badges');
+      if (!response.ok) return;
+      const body = (await response.json()) as SidebarBadges;
+      lastBadgeFetchAt = Date.now();
+      // 못 읽은 값(null)은 이전 값을 그대로 둔다.
+      setBadges((prev) => ({
+        openCalls: body.openCalls ?? prev.openCalls,
+        missingFirstVisits: body.missingFirstVisits ?? prev.missingFirstVisits,
+      }));
+    } catch {
+      // 배지를 못 읽어도 메뉴는 정상 동작한다.
+    } finally {
+      inFlight.current = false;
+    }
+  }, []);
+
+  // 화면을 옮길 때(60초에 한 번까지)와 창으로 돌아올 때 다시 읽는다.
+  useEffect(() => {
+    void refreshBadges();
+  }, [pathname, refreshBadges]);
+  useEffect(() => {
+    const onFocus = () => void refreshBadges();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshBadges]);
   const [pref, setPref] = useState<'open' | 'collapsed' | null>(null);
   const [narrow, setNarrow] = useState(false);
 
@@ -150,6 +189,12 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                     {item.href === '/herb-queue' && herbQueueCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`대기 중인 한약 처방 ${herbQueueCount}건`} />
                     )}
+                    {item.href === '/happy-call-list' && openCallCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`오늘 걸 해피콜 ${openCallCount}건`} />
+                    )}
+                    {item.href === '/happy-call-register' && firstVisitMissingCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`초진·재초진 등록 누락 ${firstVisitMissingCount}명`} />
+                    )}
                     {item.href === '/remote-consult-alerts' && remoteNewCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`처리 대기 비대면진료 신청 ${remoteNewCount}건`} />
                     )}
@@ -162,6 +207,16 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                       )}
                       {item.href === '/herb-queue' && herbQueueCount > 0 && (
                         <span className="side-badge">{herbQueueCount > 99 ? '99+' : herbQueueCount}</span>
+                      )}
+                      {item.href === '/happy-call-list' && openCallCount > 0 && (
+                        <span className="side-badge" title="오늘 걸 해피콜">
+                          {openCallCount > 99 ? '99+' : openCallCount}
+                        </span>
+                      )}
+                      {item.href === '/happy-call-register' && firstVisitMissingCount > 0 && (
+                        <span className="side-badge" title="오늘 초진·재초진 등록 누락">
+                          {firstVisitMissingCount > 99 ? '99+' : firstVisitMissingCount}
+                        </span>
                       )}
                       {item.href === '/remote-consult-alerts' && remoteNewCount > 0 && (
                         <span className="side-badge">{remoteNewCount > 99 ? '99+' : remoteNewCount}</span>

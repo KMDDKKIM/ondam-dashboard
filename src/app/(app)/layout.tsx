@@ -31,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const staffGrade = isStaffGrade(rawGrade) ? rawGrade : null;
 
   // 왼쪽 메뉴의 숫자 표시들은 서로 상관없으니 한꺼번에 읽는다(하나씩 기다리면 화면마다 그만큼 느려진다).
+  // (해피콜 콜 수·초진 등록 누락처럼 무거운 배지는 여기서 기다리지 않고, 메뉴가 뜬 뒤 /api/sidebar-badges 로 따로 읽는다.)
   const [unreadCount, closingMissing, remoteNewCount, herbQueueCount] = await Promise.all([
     // 채팅 목록을 못 가져와도 나머지 화면은 정상적으로 보여준다.
     listRoomsWithUnread(supabase).then(totalUnreadCount, () => 0),

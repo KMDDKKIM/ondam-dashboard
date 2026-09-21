@@ -1,13 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  classifyVisit,
-  isSamePatient,
-  type FirstVisitCandidateDto,
-  type FirstVisitCandidatesResult,
-  type VisitClassification,
-} from '@/lib/firstVisit';
+import type { FirstVisitCandidateDto, FirstVisitCandidatesResult, VisitClassification } from '@/lib/firstVisit';
+import { candidateSuggestion, reconcileFirstVisits, matchRegisteredCandidates } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
@@ -78,43 +73,32 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   }, [load]);
 
   const rows = useMemo(() => {
-    return (data?.candidates ?? []).map((candidate) => {
+    // 등록 여부는 홈/메뉴 배지와 같은 함수로 정한다(등록 환자 한 명은 후보 한 명에게만 짝지어진다).
+    const match = matchRegisteredCandidates(
+      data?.candidates ?? [],
+      registered.map((p) => ({ patientName: p.patientName, chartNo: p.chartNo, phone: p.phone }))
+    );
+    return (data?.candidates ?? []).map((rawCandidate) => {
+      // 이름이 같은 등록 환자가 있지만 같은 사람인지 확인할 수 없는 접수 후보는 "동명이인 가능"으로 보여 준다.
+      const candidate = match.possibleHomonym.has(rawCandidate) ? { ...rawCandidate, possibleHomonym: true } : rawCandidate;
       // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
-      const suggestion: VisitClassification = candidate.kind ?? classifyVisit(candidate.previousVisitDates, date);
-      const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
-      // 차트번호·연락처 없이 이름만 등록해 둔 줄은, 그날 후보 중 같은 이름이 한 명뿐일 때 그 사람으로 본다.
-      const sameNameCandidates = (data?.candidates ?? []).filter((c) => c.patientName === candidate.patientName).length;
-      const isRegistered = registered.some(
-        (p) =>
-          isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] }) ||
-          (!p.chartNo && !p.phone && p.patientName === candidate.patientName && sameNameCandidates === 1)
-      );
-      return { candidate, suggestion, isRegistered, key: `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}` };
+      const suggestion: VisitClassification = candidateSuggestion(candidate, date);
+      const key = candidate.fromReception
+        ? `reception|${candidate.receptionId ?? candidate.patientName}`
+        : `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}`;
+      return { candidate, suggestion, isRegistered: match.registered.has(rawCandidate), key };
     });
   }, [data, date, registered]);
 
   // 초진/재초진으로 추정된 사람 + "동명이인 가능"이라 재진으로 단정할 수 없는 사람은 목록에 남긴다.
-  const estimatedRows = rows.filter((r) => r.suggestion !== '재진');
   const listRows = rows.filter((r) => r.suggestion !== '재진' || r.candidate.possibleHomonym);
   const pending = listRows.filter((r) => !r.isRegistered);
   const revisitRows = rows.filter((r) => r.suggestion === '재진' && !r.candidate.possibleHomonym);
 
-  // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
-  // 일일결산 기반이면 신규환자수(초진)에 재초진 후보를 더한다(신규환자수에는 재초진이 들어 있지 않다).
-  // (오늘 새로 만든 재등록 차트의 재초진은 신규환자수에 이미 들어 있으니 더하지 않는다.)
-  const revisitAfter3Months = rows.filter((r) => r.suggestion === '재초진' && !r.candidate.countedInNewCount).length;
-  const expected =
-    data?.closingFirstVisitCount != null
-      ? data.closingFirstVisitCount + (data.source === 'settlement' ? revisitAfter3Months : 0)
-      : estimatedRows.length;
-  const expectedSource =
-    data?.closingFirstVisitCount != null
-      ? data.source === 'settlement'
-        ? `일일결산 신규환자수 ${data.closingFirstVisitCount}명 + 재초진 후보 ${revisitAfter3Months}명`
-        : '마감 결산 기준'
-      : '명단 기준 추정';
-  const registeredCount = registered.length;
-  const missing = Math.max(expected - registeredCount, 0);
+  // 대조 규칙은 홈/메뉴 배지와 같은 함수(firstVisitReconcile.ts)를 쓴다.
+  const { expected, expectedSource, registered: registeredCount, missing, receptionMore } = data
+    ? reconcileFirstVisits(data, registered.length, date)
+    : { expected: 0, expectedSource: '', registered: registered.length, missing: 0, receptionMore: 0 };
   const label = date === today ? '오늘' : date;
 
   async function register(row: (typeof rows)[number], visitKind: '초진' | '재초진') {
@@ -137,7 +121,13 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   return (
     <div className="card" style={{ padding: 12, marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-        <strong>{data?.source === 'settlement' ? '그날 내원 환자 중 초진·재초진 후보' : '예약 명단의 초진·재초진 후보'}</strong>
+        <strong>
+          {data?.source === 'settlement'
+            ? '그날 내원 환자 중 초진·재초진 후보'
+            : data?.source === 'reception'
+              ? '접수기록부의 초진·재초진 후보'
+              : '예약 명단의 초진·재초진 후보'}
+        </strong>
         <input type="date" value={date} onChange={(e) => e.target.value && onDateChange(e.target.value)} style={{ fontSize: 12, padding: 3 }} />
         <button type="button" onClick={load} style={{ fontSize: 12, padding: '3px 10px' }}>
           새로고침
@@ -146,11 +136,18 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
         {data?.source === 'settlement'
           ? '일일결산에 저장된 그날 실제 내원 환자에서 뽑았어요. 가져온 내원 이력·이전 결산 기록·차트번호로 판단해요(이력이 없는 기간의 내원은 알 수 없어요).'
-          : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
-        {' '}재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
+          : data?.source === 'reception'
+            ? '접수기록부에 초)·재초)로 적힌 환자예요. 차트번호·연락처는 접수기록부에 없어서 이름만 등록돼요.'
+            : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
+        {' '}접수기록부에 초)·재초)로 적힌 환자도 함께 보여요(같은 사람은 한 번만). 재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
       </p>
 
       {error && <p style={{ color: 'red', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
+      {data?.receptionUnavailable && (
+        <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          접수기록부를 읽지 못했어요 — 접수기록부에서 온 후보는 빠져 있어요. 새로고침해 보세요.
+        </p>
+      )}
 
       {loading ? (
         <p className="muted-text">불러오는 중...</p>
@@ -172,6 +169,11 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
             {label} 초진/재초진 {expected}명 중 {registeredCount}명 등록 — {missing > 0 ? `${missing}명 누락` : '누락 없음'}
             <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>({expectedSource})</span>
           </div>
+          {receptionMore > 0 && (
+            <p className="muted-text" style={{ fontSize: 12, margin: '-4px 0 10px' }}>
+              접수기록부 기준으로 {receptionMore}명 더 있어요
+            </p>
+          )}
 
           {pending.length === 0 ? (
             <p className="muted-text" style={{ margin: 0 }}>
