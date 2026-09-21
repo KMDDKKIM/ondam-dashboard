@@ -53,6 +53,11 @@ function phoneSet(person: PersonKey): Set<string> {
   return set;
 }
 
+/** 재등록 차트("006366-1")는 같은 환자의 두 번째 차트라서, 같은 사람인지 볼 때는 "-숫자"를 떼고 본다. */
+export function baseChartNo(chartNo: string): string {
+  return chartNo.trim().replace(/-\d+$/, '');
+}
+
 function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
   return Boolean((a.chartNo ?? '').trim() && (b.chartNo ?? '').trim());
 }
@@ -63,7 +68,7 @@ function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
  * 번호가 한쪽이라도 없으면 같은 사람으로 보지 않는다 — 동명이인 때문에 진짜 초진이 가려지면 안 되므로.
  */
 export function isSamePatient(a: PersonKey, b: PersonKey): boolean {
-  if (bothHaveChart(a, b)) return (a.chartNo ?? '').trim() === (b.chartNo ?? '').trim();
+  if (bothHaveChart(a, b)) return baseChartNo(a.chartNo ?? '') === baseChartNo(b.chartNo ?? '');
   if (!a.name.trim() || a.name.trim() !== b.name.trim()) return false;
   const phonesA = phoneSet(a);
   const phonesB = phoneSet(b);
@@ -165,8 +170,51 @@ export function likelyNewChartNos(chartNos: string[], newPatientCount: number | 
   return new Set(sorted.slice(0, newPatientCount));
 }
 
+export interface SettlementClassifyInput {
+  chartNo: string;
+  /** 이 환자의 이전 내원일(일일결산 기록 + 예약 기록 + 가져온 내원 이력) */
+  previousVisitDates: string[];
+  date: string;
+  /** 결산표 신규환자수 기준으로 새 차트로 보이는 차트번호들(판단할 수 없으면 null) */
+  newChartNos: Set<string> | null;
+  /** 내원일 이전에 이미 있던 차트 중 가장 큰 차트번호(모르면 null) */
+  maxKnownChart: number | null;
+  /** 가져온 내원 이력표에서 이 차트의 등록일이 내원일과 같다 */
+  registeredOnDate: boolean;
+  /** 최근 3개월 내원 기록을 빠짐없이 가지고 있어서, 기록이 없으면 "3개월 안에 안 왔다"고 볼 수 있다 */
+  windowCovered: boolean;
+}
+
+/**
+ * 일일결산 명단의 후보를 초진/재초진/재진으로 가른다(이유도 함께).
+ * 이전 내원 기록이 있으면 그것으로(마지막 내원 3개월 이상 전이면 재초진), 기록이 없으면 차트번호로 본다:
+ * 새 차트(등록일이 내원일이거나, 기존 차트보다 번호가 큼)는 초진, 예전 차트인데 3개월 기록이 없으면 재초진.
+ */
+export function classifySettlementCandidate(input: SettlementClassifyInput): { kind: VisitClassification; reason: string } {
+  const { chartNo, previousVisitDates, date, newChartNos, maxKnownChart, registeredOnDate, windowCovered } = input;
+  const byHistory = classifyVisit(previousVisitDates, date);
+  if (byHistory === '재진') return { kind: '재진', reason: '최근 3개월 안에 내원한 기록이 있어요' };
+  if (byHistory === '재초진') return { kind: '재초진', reason: '마지막 내원이 3개월 이상 전이에요' };
+
+  if (registeredOnDate) return { kind: '초진(추정)', reason: '차트 등록일이 내원일이에요' };
+  const base = baseChartNo(chartNo);
+  const chartNumber = /^\d+$/.test(base) ? Number(base) : null;
+  if (chartNumber !== null && maxKnownChart !== null && chartNumber > maxKnownChart) {
+    return { kind: '초진(추정)', reason: '기존 차트보다 번호가 큰 새 차트예요' };
+  }
+  if (newChartNos?.has(chartNo)) return { kind: '초진(추정)', reason: '신규환자수 기준 새 차트예요' };
+  if (windowCovered && chartNumber !== null) {
+    return { kind: '재초진', reason: '예전 차트인데 최근 3개월 내원 기록이 없어요' };
+  }
+  if (newChartNos !== null) return { kind: '재진', reason: '새 차트가 아니고 이전 기록도 없어요(이전 내원 이력을 가져오면 더 정확해져요)' };
+  return { kind: '초진(추정)', reason: '이전 내원 기록이 없어요' };
+}
+
 /** GET /api/first-visit-candidates 응답의 후보 한 명. */
 export interface FirstVisitCandidateDto extends VisitCandidate {
+  /** 일일결산 기반일 때 서버가 정한 판정과 그 이유(예약 명단 기반이면 없음 — 화면이 이전 내원일로 판정) */
+  kind?: VisitClassification;
+  kindReason?: string;
   /** 그날 신규환자수 기준으로 차트번호가 새 차트로 보이는가(일일결산 기반일 때만, 판단할 수 없으면 null) */
   likelyNewChart?: boolean | null;
   /** 이 환자의 이전 내원일(예약 명단에서 "내원"으로 표시된 날, 오래된 순, 중복 없음) */

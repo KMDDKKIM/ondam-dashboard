@@ -10,6 +10,8 @@ import {
   type ReservationLike,
   dedupeSettlementVisits,
   likelyNewChartNos,
+  baseChartNo,
+  classifySettlementCandidate,
 } from './firstVisit';
 
 describe('addMonthsKst', () => {
@@ -192,5 +194,46 @@ describe('likelyNewChartNos', () => {
     expect(likelyNewChartNos(['1', '2'], null)).toBeNull();
     expect(likelyNewChartNos(['A-1', '2'], 1)).toBeNull();
     expect(likelyNewChartNos([], 1)).toBeNull();
+  });
+});
+
+describe('baseChartNo / 재등록 차트', () => {
+  it('"-1" 재등록 차트는 같은 환자로 본다', () => {
+    expect(baseChartNo('006366-1')).toBe('006366');
+    expect(baseChartNo('006366')).toBe('006366');
+    expect(isSamePatient({ name: '가', chartNo: '006366', phones: [] }, { name: '가', chartNo: '006366-1', phones: [] })).toBe(true);
+    expect(isSamePatient({ name: '가', chartNo: '006366', phones: [] }, { name: '가', chartNo: '006367', phones: [] })).toBe(false);
+  });
+});
+
+describe('classifySettlementCandidate', () => {
+  const base = { chartNo: '004001', previousVisitDates: [] as string[], date: '2026-09-22', newChartNos: null, maxKnownChart: 6544, registeredOnDate: false, windowCovered: true };
+
+  it('이전 내원 기록이 3개월 안이면 재진, 3개월 이상 전이면 재초진', () => {
+    expect(classifySettlementCandidate({ ...base, previousVisitDates: ['2026-08-01'] }).kind).toBe('재진');
+    expect(classifySettlementCandidate({ ...base, previousVisitDates: ['2026-05-01'] }).kind).toBe('재초진');
+  });
+
+  it('기록이 없어도 차트 등록일이 내원일이거나 기존 차트보다 번호가 크면 초진', () => {
+    expect(classifySettlementCandidate({ ...base, chartNo: '006543', registeredOnDate: true }).kind).toBe('초진(추정)');
+    expect(classifySettlementCandidate({ ...base, chartNo: '006545' }).kind).toBe('초진(추정)');
+  });
+
+  it('예전 차트인데 3개월 기록을 다 가지고 있는데도 내원 기록이 없으면 재초진', () => {
+    const r = classifySettlementCandidate({ ...base, chartNo: '004001' });
+    expect(r.kind).toBe('재초진');
+  });
+
+  it('3개월 기록이 완전하지 않으면 재초진이라고 단정하지 않는다', () => {
+    expect(classifySettlementCandidate({ ...base, windowCovered: false }).kind).toBe('초진(추정)');
+    expect(classifySettlementCandidate({ ...base, windowCovered: false, newChartNos: new Set(['006543']) }).kind).toBe('재진');
+  });
+
+  it('신규환자수 기준 새 차트도 초진', () => {
+    expect(classifySettlementCandidate({ ...base, chartNo: '006543', newChartNos: new Set(['006543']), windowCovered: false, maxKnownChart: null }).kind).toBe('초진(추정)');
+  });
+
+  it('재등록 차트(-1)는 원래 차트로 이력을 본다', () => {
+    expect(classifySettlementCandidate({ ...base, chartNo: '006366-1', previousVisitDates: ['2026-09-01'] }).kind).toBe('재진');
   });
 });

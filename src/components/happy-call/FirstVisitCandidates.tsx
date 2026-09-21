@@ -79,9 +79,8 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   const rows = useMemo(() => {
     return (data?.candidates ?? []).map((candidate) => {
-      let suggestion: VisitClassification = classifyVisit(candidate.previousVisitDates, date);
-      // 일일결산 기반: 이전 기록이 없어도 신규환자수로 볼 때 새 차트가 아니면 초진이 아니다(저장을 시작하기 전에 온 재진 환자).
-      if (data?.source === 'settlement' && suggestion === '초진(추정)' && candidate.likelyNewChart === false) suggestion = '재진';
+      // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
+      const suggestion: VisitClassification = candidate.kind ?? classifyVisit(candidate.previousVisitDates, date);
       const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
       const isRegistered = registered.some((p) =>
         isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] })
@@ -192,6 +191,11 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
                       {data?.source !== 'settlement' && <td style={cell}>{row.candidate.timeLabel || '-'}</td>}
                       <td style={cell}>
                         {row.suggestion}
+                        {row.candidate.kindReason && (
+                          <span className="muted-text" style={{ fontSize: 11, marginLeft: 6 }}>
+                            · {row.candidate.kindReason}
+                          </span>
+                        )}
                         {row.candidate.likelyNewChart && (
                           <span
                             style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 999, background: '#e8f5ec', color: '#1b7a3a', fontSize: 11, fontWeight: 700 }}

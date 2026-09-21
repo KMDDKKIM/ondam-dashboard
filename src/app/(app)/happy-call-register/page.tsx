@@ -14,6 +14,7 @@ import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
 import { DoctorManager } from '@/components/happy-call/DoctorManager';
+import { VisitHistoryImport } from '@/components/happy-call/VisitHistoryImport';
 import { DateCell } from '@/components/happy-call/DateCell';
 import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
@@ -231,6 +232,8 @@ export default function HappyCallRegisterPage() {
         />
 
         <DoctorManager doctors={doctors} isOwner={isOwner} onChanged={() => load(candidateDate)} />
+
+        <VisitHistoryImport onDone={() => load(candidateDate)} />
 
         <SheetPasteImport patients={patients} staffList={staffList} onDone={() => load(candidateDate)} />
 

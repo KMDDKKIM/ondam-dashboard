@@ -1,6 +1,10 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { diffDaysKst } from '@/lib/kst';
 import {
+  addMonthsKst,
+  baseChartNo,
+  classifySettlementCandidate,
   dedupeSettlementVisits,
   dedupeVisitCandidates,
   hasPossibleHomonym,
@@ -127,6 +131,70 @@ async function fetchPriorDailyVisits(candidates: VisitCandidate[], beforeDate: s
   return out;
 }
 
+
+interface BaselineRow {
+  chart_no: string;
+  patient_name: string;
+  registered_date: string | null;
+  first_visit: string | null;
+  last_visit: string | null;
+}
+
+interface BaselineInfo {
+  /** 후보들의 가져온 내원 이력(재등록 차트 포함) */
+  rows: BaselineRow[];
+  /** 그날 이전에 이미 있던 차트 중 가장 큰 번호(일일결산 기록·이력표 등록일 기준) */
+  maxKnownChart: number | null;
+  /** 최근 3개월 내원 기록을 빠짐없이 가지고 있는가 */
+  windowCovered: boolean;
+}
+
+function numericChart(chartNo: string): number | null {
+  const base = baseChartNo(chartNo);
+  return /^\d+$/.test(base) ? Number(base) : null;
+}
+
+// 가져온 내원 이력(patient_visit_history). 표가 없거나 비어 있으면(SQL 실행 전·아직 안 가져옴) 없는 것으로 본다.
+async function loadBaseline(candidates: VisitCandidate[], date: string): Promise<BaselineInfo> {
+  const empty: BaselineInfo = { rows: [], maxKnownChart: null, windowCovered: false };
+  try {
+    const variants = [...new Set(candidates.map((c) => baseChartNo(c.chartNo)).filter(Boolean))].flatMap((b) => [b, `${b}-1`, `${b}-2`]);
+    const rows: BaselineRow[] = [];
+    for (let i = 0; i < variants.length; i += IN_CHUNK) {
+      const { data, error } = await supabase
+        .from('patient_visit_history')
+        .select('chart_no, patient_name, registered_date, first_visit, last_visit')
+        .in('chart_no', variants.slice(i, i + IN_CHUNK));
+      if (error) return empty;
+      rows.push(...((data ?? []) as BaselineRow[]));
+    }
+
+    const periodStartRes = await supabase.from('patient_visit_history').select('period_start').not('period_start', 'is', null).order('period_start', { ascending: true }).limit(1);
+    const periodEndRes = await supabase.from('patient_visit_history').select('period_end').not('period_end', 'is', null).order('period_end', { ascending: false }).limit(1);
+    const periodStart = (periodStartRes.data?.[0] as { period_start: string } | undefined)?.period_start ?? null;
+    const periodEnd = (periodEndRes.data?.[0] as { period_end: string } | undefined)?.period_end ?? null;
+    if (!periodStart || !periodEnd) return empty;
+
+    const registeredBefore = await supabase.from('patient_visit_history').select('chart_no').lt('registered_date', date).order('chart_no', { ascending: false }).limit(30);
+    const visitsBefore = await supabase.from('daily_visits').select('chart_no, visit_date').lt('visit_date', date).order('chart_no', { ascending: false }).limit(30);
+    const latestVisit = await supabase.from('daily_visits').select('visit_date').lt('visit_date', date).order('visit_date', { ascending: false }).limit(1);
+
+    const charts = [
+      ...((registeredBefore.data ?? []) as { chart_no: string }[]).map((r) => numericChart(r.chart_no)),
+      ...((visitsBefore.data ?? []) as { chart_no: string }[]).map((r) => numericChart(r.chart_no)),
+    ].filter((n): n is number => n !== null);
+    const maxKnownChart = charts.length > 0 ? Math.max(...charts) : null;
+
+    // 이력표 기간이 "내원일 3개월 전"부터 시작하고, 내원일 직전까지 기록이 이어져 있어야 "기록이 없다 = 3개월 안에 안 왔다"고 볼 수 있다.
+    const latestRecorded = [periodEnd, (latestVisit.data?.[0] as { visit_date: string } | undefined)?.visit_date ?? ''].sort().pop() ?? periodEnd;
+    const windowCovered = periodStart <= addMonthsKst(date, -3) && diffDaysKst(latestRecorded, date) <= 4;
+
+    return { rows, maxKnownChart, windowCovered };
+  } catch {
+    return empty;
+  }
+}
+
 async function newPatientCountOn(date: string): Promise<number | null> {
   const { data, error } = await supabase.from('daily_revenue').select('new_patient_count').eq('date', date).maybeSingle();
   if (error) return null;
@@ -142,13 +210,20 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
   const candidates = dedupeSettlementVisits(
     visits.map((v) => ({ patientName: v.patient_name, chartNo: v.chart_no, doctorName: v.doctor_name }))
   );
-  const [priorDaily, priorReservation, newCount, record] = await Promise.all([
+  const [priorDaily, priorReservation, newCount, record, baseline] = await Promise.all([
     fetchPriorDailyVisits(candidates, date),
     loadReservationPrior(candidates, date),
     newPatientCountOn(date),
     getDailyRecordByDate(date),
+    loadBaseline(candidates, date),
   ]);
-  const prior = [...priorDaily, ...priorReservation];
+  // 가져온 이력표의 "기간 중 처음/마지막 내원일"도 이전 내원일로 쓴다(내원일 이전 것만).
+  const priorBaseline = baseline.rows.flatMap((r): PriorVisitRow[] =>
+    [r.first_visit, r.last_visit]
+      .filter((d): d is string => !!d && d < date)
+      .map((d) => ({ date: d, patientName: r.patient_name, chartNo: r.chart_no, phone: '', mobile: '' }))
+  );
+  const prior = [...priorDaily, ...priorReservation, ...priorBaseline];
 
   // 연락처/예약 시간: 그날 예약 명단이 있으면 거기서, 없으면 예전 예약 기록에서 같은 차트번호의 번호를 빌린다.
   const phoneByChart = new Map<string, string>();
@@ -182,11 +257,23 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
         phone: c.chartNo ? (phoneByChart.get(c.chartNo) ?? '') : '',
         timeLabel: c.chartNo ? (timeByChart.get(c.chartNo) ?? '') : '',
       };
+      const previousVisitDates = previousVisitDatesFor(withContact, prior, date);
+      const { kind, reason } = classifySettlementCandidate({
+        chartNo: c.chartNo,
+        previousVisitDates,
+        date,
+        newChartNos: newCharts,
+        maxKnownChart: baseline.maxKnownChart,
+        registeredOnDate: baseline.rows.some((r) => r.chart_no === c.chartNo && r.registered_date === date),
+        windowCovered: baseline.windowCovered,
+      });
       return {
         ...withContact,
-        previousVisitDates: previousVisitDatesFor(withContact, prior, date),
+        previousVisitDates,
         possibleHomonym: hasPossibleHomonym(withContact, prior, date),
         likelyNewChart: newCharts ? newCharts.has(c.chartNo) : null,
+        kind,
+        kindReason: reason,
       };
     }),
   };
