@@ -8,6 +8,11 @@ export function todayKst(now: Date = new Date()): string {
   return new Date(now.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** 지금(또는 주어진 시각)의 한국 달 YYYY-MM. */
+export function currentMonthKst(now: Date = new Date()): string {
+  return todayKst(now).slice(0, 7);
+}
+
 /** 날짜 문자열(YYYY-MM-DD)에 n일을 더한다(음수 가능). 주말/공휴일 보정 없음. */
 export function addDaysKst(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { canUseConsultChart, isStaffGrade } from '@/lib/staffGrade';
+import { DAILY_SUMMARY_LIMIT, MAX_TRANSCRIPT_CHARS, kstMidnightIso } from '@/lib/consultLimits';
 
 const SYSTEM_PROMPT = `당신은 한의원 진료 상담 녹음 스크립트를 차팅(진료 기록)으로 정리하는 보조원입니다.
 아래 형식의 한국어 차팅을 작성하세요. 각 항목은 스크립트에 실제로 언급된 내용만 담고, 언급이 없으면
@@ -40,16 +41,39 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: 'ANTHROPIC_API_KEY가 설정되지 않았습니다. 관리자에게 문의하세요.' },
-      { status: 500 }
-    );
+    console.error('[consult-summary] ANTHROPIC_API_KEY is not set');
+    return NextResponse.json({ error: '요약 기능이 아직 준비되지 않았습니다. 관리자에게 문의하세요.' }, { status: 500 });
   }
 
   const body = await request.json().catch(() => null);
   const transcript = body && typeof body.transcript === 'string' ? body.transcript.trim() : '';
   if (!transcript) {
     return NextResponse.json({ error: '붙여넣은 상담 내용이 없습니다.' }, { status: 400 });
+  }
+  if (transcript.length > MAX_TRANSCRIPT_CHARS) {
+    return NextResponse.json(
+      {
+        error: `상담 내용이 너무 깁니다. ${MAX_TRANSCRIPT_CHARS.toLocaleString('ko-KR')}자 이하로 나누어 넣어주세요. (현재 ${transcript.length.toLocaleString('ko-KR')}자)`,
+      },
+      { status: 400 }
+    );
+  }
+
+  // 직원 한 명이 하루(한국 시간 0시부터)에 저장한 차팅이 한도에 이르면 더 만들지 못하게 한다(AI 사용 비용 보호).
+  const { count, error: countError } = await supabase
+    .from('consult_summaries')
+    .select('id', { count: 'exact', head: true })
+    .eq('created_by', user.id)
+    .gte('created_at', kstMidnightIso());
+  if (countError) {
+    console.error('[consult-summary] daily count failed', countError);
+    return NextResponse.json({ error: '사용 횟수를 확인하지 못했습니다. 잠시 뒤 다시 시도해주세요.' }, { status: 500 });
+  }
+  if ((count ?? 0) >= DAILY_SUMMARY_LIMIT) {
+    return NextResponse.json(
+      { error: `하루에 만들 수 있는 차팅(${DAILY_SUMMARY_LIMIT}건)을 모두 사용했어요. 내일 다시 이용해주세요.` },
+      { status: 429 }
+    );
   }
 
   try {
@@ -66,11 +90,13 @@ export async function POST(request: NextRequest) {
       .join('\n')
       .trim();
     if (!summary) {
-      return NextResponse.json({ error: '요약 결과가 비어 있습니다.' }, { status: 500 });
+      console.error('[consult-summary] empty summary from upstream');
+      return NextResponse.json({ error: '요약 결과가 비어 있습니다. 다시 시도해주세요.' }, { status: 500 });
     }
     return NextResponse.json({ summary });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '요약 중 오류가 발생했습니다.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 외부 AI 서비스가 돌려준 오류 문구는 화면에 그대로 보여주지 않는다(서버 로그에만 남긴다).
+    console.error('[consult-summary] upstream error', err);
+    return NextResponse.json({ error: '요약 중 오류가 발생했습니다. 잠시 뒤 다시 시도해주세요.' }, { status: 500 });
   }
 }

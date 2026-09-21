@@ -6,3 +6,4 @@ dev.log
 tsconfig.tsbuildinfo
 .vercel
 .worktrees/
+.superpowers/

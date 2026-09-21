@@ -37,6 +37,11 @@ describe('visibleGroups', () => {
     expect(hrefs(false)).not.toContain('/staff-approval');
   });
 
+  it('백업 내려받기는 대표원장에게만 보인다', () => {
+    expect(hrefs(true)).toContain('/backup');
+    expect(hrefs(false)).not.toContain('/backup');
+  });
+
   it('상담 녹음 차팅은 대표원장·부원장에게만 보인다', () => {
     const visible = (owner: boolean, grade: Parameters<typeof visibleGroups>[1]) =>
       visibleGroups(owner, grade).flatMap((g) => g.items.map((i) => i.href));

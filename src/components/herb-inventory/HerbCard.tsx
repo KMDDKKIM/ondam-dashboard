@@ -144,6 +144,7 @@ export default function HerbCard({ item, onSaveThreshold, onAdjust, onDelete }: 
           style={{ width: 70, padding: '4px 8px', fontSize: 13 }}
         />
         봉지
+        <span style={{ fontSize: 11 }}>(0 또는 빈칸 = 알림 없음)</span>
       </label>
       {thresholdError && (
         <p className="error-text" style={{ fontSize: 12, marginBottom: 4 }}>

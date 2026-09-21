@@ -4,38 +4,70 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { listTodos, createTodo, setTodoDone, deleteTodo } from '@/lib/supabase/todos';
 import { visibleTodos } from '@/lib/todoVisibility';
+import { todayKst } from '@/lib/kst';
 import type { Staff, Todo } from '@/lib/types';
 
-function todayISO(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+// 목록 보기 기준: '' = 전체, 'me' = 내 것, 그 외 = 그 직원 id. 처음 화면은 '전체 보기'이고(담당자 없는 할 일이 숨지 않게), 고른 값은 이 브라우저에 기억한다.
+const FILTER_KEY = 'todoChecklist.assigneeFilter';
+const MINE = 'me';
+
+function readSavedFilter(): string | null {
+  try {
+    return window.localStorage.getItem(FILTER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveFilter(value: string) {
+  try {
+    window.localStorage.setItem(FILTER_KEY, value);
+  } catch {
+    // 저장이 막힌 브라우저에서는 기억만 못 할 뿐 화면은 그대로 동작한다.
+  }
+}
+
+function TodoSkeleton() {
+  return (
+    <div className="card" style={{ padding: 20 }} aria-busy="true" aria-label="할 일 불러오는 중">
+      <div className="skeleton" style={{ height: 18, width: 110, marginBottom: 16 }} />
+      {[0, 1, 2].map((i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--color-line)' }}>
+          <div className="skeleton" style={{ height: 14, width: 14 }} />
+          <div className="skeleton" style={{ height: 14, flex: 1, maxWidth: 260 - i * 40 }} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function TodoChecklist() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const [newText, setNewText] = useState('');
-  const [newDueDate, setNewDueDate] = useState(todayISO());
+  const [newDueDate, setNewDueDate] = useState(todayKst());
   const [newAssignee, setNewAssignee] = useState('');
 
   const supabase = createClient();
-  const today = todayISO();
+  const today = todayKst();
 
+  // 처음 한 번만 자리표시(스켈레톤)를 보이고, 다시 불러올 때는 화면을 그대로 둔다.
   async function load() {
-    setLoading(true);
     setError('');
     try {
-      const [todoRows, staffResult] = await Promise.all([
+      const [todoRows, staffResult, userResult] = await Promise.all([
         listTodos(supabase),
         supabase.from('staff').select('id, name, role').eq('status', 'approved'),
+        supabase.auth.getUser(),
       ]);
       setTodos(todoRows);
       setStaffList((staffResult.data ?? []) as Staff[]);
+      setMyId(userResult.data.user?.id ?? null);
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
@@ -44,6 +76,8 @@ export function TodoChecklist() {
   }
 
   useEffect(() => {
+    const saved = readSavedFilter();
+    if (saved !== null) setAssigneeFilter(saved);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -96,10 +130,20 @@ export function TodoChecklist() {
     }
   }
 
-  const visible = visibleTodos(todos, today, assigneeFilter || null);
-  const doneCount = visible.filter((t) => t.done).length;
+  function changeFilter(value: string) {
+    setAssigneeFilter(value);
+    saveFilter(value);
+  }
 
-  if (loading) return null;
+  // '내 것'인데 내 계정을 아직 못 알아냈으면(또는 저장된 직원이 이제 없으면) 전체로 보여준다.
+  const filterId = assigneeFilter === MINE ? myId : staffList.some((s) => s.id === assigneeFilter) ? assigneeFilter : null;
+  const selectValue = assigneeFilter === MINE || staffList.some((s) => s.id === assigneeFilter) ? assigneeFilter : '';
+  const visible = visibleTodos(todos, today, filterId);
+  const doneCount = visible.filter((t) => t.done).length;
+  // 특정 사람(내 것 포함)만 보고 있을 때, 담당자가 없어서 목록에서 빠진 할 일 수.
+  const hiddenUnassigned = filterId ? visibleTodos(todos, today, null).filter((t) => !t.assigneeStaffId).length : 0;
+
+  if (loading) return <TodoSkeleton />;
 
   return (
     <div className="card" style={{ padding: 20 }}>
@@ -110,11 +154,12 @@ export function TodoChecklist() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <select
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
+            value={selectValue}
+            onChange={(e) => changeFilter(e.target.value)}
             className="input-field"
             style={{ padding: '4px 8px', fontSize: 12, width: 120 }}
           >
+            <option value={MINE}>내 것</option>
             <option value="">전체 보기</option>
             {staffList.map((s) => (
               <option key={s.id} value={s.id}>
@@ -127,6 +172,12 @@ export function TodoChecklist() {
           </span>
         </div>
       </div>
+
+      {hiddenUnassigned > 0 && (
+        <p className="muted-text" style={{ fontSize: 12, marginBottom: 8 }}>
+          담당자 없는 할 일 {hiddenUnassigned}건은 전체 보기에서 볼 수 있어요
+        </p>
+      )}
 
       {error && <p className="error-text" style={{ marginBottom: 8 }}>{error}</p>}
 

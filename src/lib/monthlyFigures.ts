@@ -1,4 +1,4 @@
-import { diffDaysKst } from './kst';
+import { currentMonthKst, diffDaysKst, todayKst } from './kst';
 
 // 일일결산 한 줄(날짜별). 내원 수를 안 넣은 옛 기록은 visitCount가 null이다.
 export interface VisitFigure {
@@ -174,11 +174,12 @@ export function goalPace(
 ): { status: Pace; expected: number } | null {
   if (achieved == null || goal == null || goal <= 0) return null;
 
-  const todayMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  if (month !== todayMonth) return null;
+  // 서버(UTC)에서 먼저 그려질 때도 한국 날짜 기준으로 같은 값이 나오게 한다.
+  if (month !== currentMonthKst(today)) return null;
 
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const daysPassed = today.getDate() - 1;
+  const [y, m, d] = todayKst(today).split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const daysPassed = d - 1;
   if (daysPassed <= 0) return null;
 
   const expected = goal * (daysPassed / daysInMonth);

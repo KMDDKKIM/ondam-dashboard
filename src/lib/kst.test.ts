@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { todayKst, addDaysKst, diffDaysKst, kstDateOf, kstTimeOf } from './kst';
+import { currentMonthKst, todayKst, addDaysKst, diffDaysKst, kstDateOf, kstTimeOf } from './kst';
 
 describe('todayKst', () => {
   it('uses the Seoul date, not the UTC date', () => {
@@ -50,5 +50,13 @@ describe('kstDateOf / kstTimeOf', () => {
     expect(kstTimeOf('2026-09-20T16:30:00Z')).toBe('01:30');
     expect(kstDateOf('2026-09-20T05:00:00+00:00')).toBe('2026-09-20');
     expect(kstTimeOf('2026-09-20T05:00:00+00:00')).toBe('14:00');
+  });
+});
+
+describe('currentMonthKst', () => {
+  it('uses the Seoul month, not the UTC month', () => {
+    // 2026-09-30 16:00 UTC = 2026-10-01 01:00 KST
+    expect(currentMonthKst(new Date('2026-09-30T16:00:00Z'))).toBe('2026-10');
+    expect(currentMonthKst(new Date('2026-09-30T14:59:59Z'))).toBe('2026-09');
   });
 });

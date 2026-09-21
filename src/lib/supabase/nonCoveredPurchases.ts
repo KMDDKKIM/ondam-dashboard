@@ -4,6 +4,7 @@ import {
   createManualEntry,
   getManualEntryStates,
   removeOpenManualEntries,
+  renameOpenManualEntries,
   updateUntouchedManualEntry,
 } from './happyCallQueue';
 import { addDays } from '@/lib/happyCallStats';
@@ -304,6 +305,14 @@ export async function updateNonCoveredPurchase(
       ops.flatMap((op) => (op.type === 'remove' ? [op.id] : [])),
       { onlyUntouched: true }
     );
+    // 환자 이름을 고쳤으면 아직 열린 기존 콜(이미 시도한 콜 포함)에도 새 이름을 반영한다. 끝난 콜은 그대로 둔다.
+    if (patch.patientName !== existing.patientName) {
+      await renameOpenManualEntries(
+        supabase,
+        CALL_SLOTS.flatMap((slot) => (nextIds[slot] && !createdIds.includes(nextIds[slot] as string) ? [nextIds[slot] as string] : [])),
+        patch.patientName
+      );
+    }
   } catch {
     throw new HappyCallSyncError('구매 기록은 저장했지만 해피콜 일정을 다 맞추지 못했어요. 해피콜 목록을 확인해 주세요.');
   }

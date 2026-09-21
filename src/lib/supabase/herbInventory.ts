@@ -51,6 +51,8 @@ export async function deleteHerbInventoryItem(supabase: SupabaseClient, id: stri
 
 export interface HerbStockChange {
   herbId: string;
+  /** 오류 문구에 약재 이름이 나오도록 함께 보낸다(DB 함수는 herb_id 로 찾고, 이름은 문구에만 쓴다). */
+  name?: string;
   changeType: 'use' | 'restock';
   amount: number; // 1 이상의 정수(봉지)
   note?: string | null;
@@ -72,6 +74,7 @@ export async function applyHerbStockChanges(
   const { data, error } = await supabase.rpc('apply_herb_stock_changes', {
     p_changes: changes.map((c) => ({
       herb_id: c.herbId,
+      name: c.name,
       change_type: c.changeType,
       amount: c.amount,
       note: c.note ?? null,
@@ -105,7 +108,7 @@ export async function setHerbLowStockThreshold(
 ): Promise<void> {
   const { data, error } = await supabase
     .from('herb_inventory')
-    .update({ low_stock_threshold: threshold })
+    .update({ low_stock_threshold: threshold, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select('id');
   if (error) throw error;

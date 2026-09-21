@@ -1,9 +1,8 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { computeMonthFigures, revenueMotivation, type DailyFigure, type MonthlyOverrideFigure } from '@/lib/monthlyFigures';
-import { addDaysKst, todayKst } from '@/lib/kst';
+import { addDaysKst, currentMonthKst, todayKst } from '@/lib/kst';
 import { computeReservationRates } from '@/lib/reservationRates';
-import { getWeekRange } from '@/lib/reservations/dashboardStats';
 
 export interface MonthlySummary {
   month: string;
@@ -38,7 +37,7 @@ interface DailyRecordRow {
 
 // 서버 시간대와 상관없이 한국 기준 이번 달.
 function currentMonth(): string {
-  return todayKst().slice(0, 7);
+  return currentMonthKst();
 }
 
 function previousMonthOf(month: string): string {
@@ -225,15 +224,16 @@ export async function getWeeklyRates(today: Date = new Date()): Promise<{
   noShowRate: number | null;
 }> {
   const admin = createAdminClient();
-  const { start } = getWeekRange(today);
-  const p = (n: number) => String(n).padStart(2, '0');
-  const iso = (d: Date) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  // 서버 시간대(Vercel 은 UTC)와 상관없이 한국 날짜로: 이번 주 월요일 ~ 오늘.
+  const todayStr = todayKst(today);
+  const dow = new Date(`${todayStr}T00:00:00Z`).getUTCDay(); // 0 = 일요일
+  const weekStart = addDaysKst(todayStr, dow === 0 ? -6 : 1 - dow);
 
   const { data, error } = await admin
     .from('daily_revenue')
     .select('visit_count, excluded_count, reservation_count, kept_count, noshow_count, cancel_count')
-    .gte('date', iso(start))
-    .lte('date', iso(today));
+    .gte('date', weekStart)
+    .lte('date', todayStr);
   if (error) throw error;
 
   const n = (v: unknown) => (v != null ? Number(v) : null);
