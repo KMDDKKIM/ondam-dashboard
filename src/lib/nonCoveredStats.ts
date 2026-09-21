@@ -255,3 +255,78 @@ export function compareCategories(
   const names = new Set<string>([...Object.keys(sideA?.byProduct ?? {}), ...Object.keys(sideB?.byProduct ?? {})]);
   return { window, products: Array.from(names).sort((x, y) => x.localeCompare(y)), a: sideA, b: sideB };
 }
+
+// --- 월별 매출 그래프 / 달끼리 비교 ---
+
+export interface MonthRevenue {
+  month: string;
+  /** 금액이 입력된 구매의 합계(매출) */
+  total: number;
+  count: number;
+  missingAmount: number;
+}
+
+/** endMonth 까지 최근 n개월의 월별 매출. 오래된 달이 앞(그래프 왼쪽 → 오른쪽 순서). */
+export function monthlyRevenue(rows: readonly StatRow[], endMonth: string, n: number): MonthRevenue[] {
+  return recentMonths(endMonth, n)
+    .reverse()
+    .map((month) => {
+      const stat = makeStat(rows.filter((r) => monthOf(r.purchaseDate) === month));
+      return { month, total: stat.total, count: stat.count, missingAmount: stat.missingAmount };
+    });
+}
+
+export interface ProductMonthComparison {
+  product: string;
+  a: Stat;
+  b: Stat;
+  /** a - b (매출 차이). 두 달 모두 금액이 하나도 없으면 0 */
+  diff: number;
+}
+
+/** 두 달의 상품별 매출 비교. 두 달 중 매출이 큰 쪽 기준으로 큰 상품이 위. */
+export function compareMonthsByProduct(rows: readonly StatRow[], monthA: string, monthB: string): ProductMonthComparison[] {
+  const rowsA = rows.filter((r) => monthOf(r.purchaseDate) === monthA);
+  const rowsB = rows.filter((r) => monthOf(r.purchaseDate) === monthB);
+  const names = new Set<string>([...rowsA.map((r) => r.productName), ...rowsB.map((r) => r.productName)]);
+  return Array.from(names)
+    .map((product) => {
+      const a = makeStat(rowsA.filter((r) => r.productName === product));
+      const b = makeStat(rowsB.filter((r) => r.productName === product));
+      return { product, a, b, diff: a.total - b.total };
+    })
+    .sort((x, y) => Math.max(y.a.total, y.b.total) - Math.max(x.a.total, x.b.total) || x.product.localeCompare(y.product));
+}
+
+/** 그래프 세로축 눈금: 0부터 max 이상을 덮는 "둥근" 값 count+1개. max 가 0이면 [0, 1]. */
+export function niceTicks(max: number, count = 4): number[] {
+  if (!(max > 0)) return [0, 1];
+  const rough = max / count;
+  const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / pow;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * pow;
+  const ticks: number[] = [];
+  for (let v = 0; v < max + step; v += step) {
+    ticks.push(v);
+    if (v >= max) break;
+  }
+  return ticks;
+}
+
+/** 금액을 짧게: 12,340,000 → "1,234만", 350,000 → "35만", 8,000 → "8천", 0 → "0". */
+export function shortWon(n: number): string {
+  if (n === 0) return '0';
+  const man = n / 10000;
+  if (Math.abs(man) >= 1) return `${Math.round(man).toLocaleString('ko-KR')}만`;
+  return `${Math.round(n / 1000)}천`;
+}
+
+/** "▲ 12만원 (+25%)" / "▼ …" / "변화 없음". before 가 0이면 퍼센트는 생략한다. */
+export function changeText(after: number, before: number): string {
+  const diff = after - before;
+  if (diff === 0) return '변화 없음';
+  const sign = diff > 0 ? '▲' : '▼';
+  const abs = Math.abs(diff).toLocaleString('ko-KR');
+  const pct = before > 0 ? ` (${diff > 0 ? '+' : '-'}${Math.round((Math.abs(diff) / before) * 100)}%)` : '';
+  return `${sign} ${abs}원${pct}`;
+}

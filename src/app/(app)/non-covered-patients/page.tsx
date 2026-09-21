@@ -18,6 +18,7 @@ import { orderCategories } from '@/lib/nonCoveredStats';
 import type { NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 import { EventComparison } from '@/components/non-covered/EventComparison';
 import { MonthStats } from '@/components/non-covered/MonthStats';
+import { RevenueCharts } from '@/components/non-covered/RevenueCharts';
 import { MonthlyTrend } from '@/components/non-covered/MonthlyTrend';
 import { ProductManager } from '@/components/non-covered/ProductManager';
 import { PurchaseForm, type PurchaseFormValues } from '@/components/non-covered/PurchaseForm';
@@ -36,6 +37,7 @@ export default function NonCoveredPatientsPage() {
   const [showProductManager, setShowProductManager] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('전체');
+  const [selectedMonth, setSelectedMonth] = useState(todayKst().slice(0, 7));
 
   const supabase = createClient();
   const currentMonth = todayKst().slice(0, 7);
@@ -168,7 +170,8 @@ export default function NonCoveredPatientsPage() {
         />
       )}
 
-      <MonthStats purchases={purchases} currentMonth={currentMonth} />
+      <RevenueCharts purchases={purchases} currentMonth={currentMonth} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth} />
+      <MonthStats purchases={purchases} currentMonth={currentMonth} month={selectedMonth} onMonthChange={setSelectedMonth} />
       <MonthlyTrend purchases={purchases} currentMonth={currentMonth} />
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>

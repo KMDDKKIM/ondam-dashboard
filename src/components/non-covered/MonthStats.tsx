@@ -17,6 +17,9 @@ interface Props {
   purchases: NonCoveredPurchase[];
   /** 기본 선택 달 (YYYY-MM, 한국 기준 이번 달) */
   currentMonth: string;
+  /** 위 그래프와 함께 쓸 때: 부모가 고른 달을 그대로 보여 주고, 아래 목록에서 바꾸면 부모에게 알린다. */
+  month?: string;
+  onMonthChange?: (month: string) => void;
 }
 
 const th = { padding: '8px 10px', textAlign: 'right' } as const;
@@ -42,8 +45,10 @@ function CountAmount({ stat }: { stat: Stat }) {
   );
 }
 
-export function MonthStats({ purchases, currentMonth }: Props) {
-  const [month, setMonth] = useState(currentMonth);
+export function MonthStats({ purchases, currentMonth, month: controlledMonth, onMonthChange }: Props) {
+  const [ownMonth, setOwnMonth] = useState(currentMonth);
+  const month = controlledMonth ?? ownMonth;
+  const setMonth = (m: string) => (onMonthChange ? onMonthChange(m) : setOwnMonth(m));
 
   const months = useMemo(() => availableMonths(purchases, currentMonth), [purchases, currentMonth]);
   const rows = useMemo(() => filterByMonth(purchases, month), [purchases, month]);

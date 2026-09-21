@@ -9,6 +9,11 @@ import {
   filterByMonth,
   makeStat,
   monthlyTable,
+  monthlyRevenue,
+  compareMonthsByProduct,
+  niceTicks,
+  shortWon,
+  changeText,
   orderCategories,
   productStats,
   recentMonths,
@@ -156,5 +161,50 @@ describe('comparison', () => {
     expect(cmp.window).toEqual({ from: '2026-09-01', to: '2026-09-30' });
     expect(cmp.a!.total.count).toBe(3);
     expect(cmp.b!.total.count).toBe(3);
+  });
+});
+
+describe('월별 매출 그래프 / 달 비교', () => {
+  const row = (purchaseDate: string, productName: string, amount: number | null) => ({ purchaseDate, productName, amount, category: '일반' });
+  const rows = [
+    row('2026-09-03', '일반한약', 350000),
+    row('2026-09-10', '공진단', 1200000),
+    row('2026-09-12', '경옥고', null),
+    row('2026-08-20', '일반한약', 300000),
+    row('2026-07-02', '린다이어트', 90000),
+  ];
+
+  it('monthlyRevenue: 최근 n개월을 오래된 달부터, 금액 미입력은 합계에서 빼고 따로 센다', () => {
+    const r = monthlyRevenue(rows, '2026-09', 4);
+    expect(r.map((m) => m.month)).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
+    expect(r[0]).toEqual({ month: '2026-06', total: 0, count: 0, missingAmount: 0 });
+    expect(r[3]).toEqual({ month: '2026-09', total: 1550000, count: 3, missingAmount: 1 });
+  });
+
+  it('compareMonthsByProduct: 두 달의 상품을 합쳐 큰 상품 순, 차이는 A-B', () => {
+    const c = compareMonthsByProduct(rows, '2026-09', '2026-08');
+    expect(c.map((p) => p.product)).toEqual(['공진단', '일반한약', '경옥고']);
+    const herb = c.find((p) => p.product === '일반한약')!;
+    expect(herb.a.total).toBe(350000);
+    expect(herb.b.total).toBe(300000);
+    expect(herb.diff).toBe(50000);
+    expect(c.find((p) => p.product === '공진단')!.b.count).toBe(0);
+  });
+
+  it('niceTicks: 0부터 최대값을 덮는 둥근 눈금', () => {
+    expect(niceTicks(1550000)).toEqual([0, 500000, 1000000, 1500000, 2000000]);
+    expect(niceTicks(0)).toEqual([0, 1]);
+    expect(niceTicks(87)).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it('shortWon / changeText', () => {
+    expect(shortWon(12340000)).toBe('1,234만');
+    expect(shortWon(350000)).toBe('35만');
+    expect(shortWon(8000)).toBe('8천');
+    expect(shortWon(0)).toBe('0');
+    expect(changeText(350000, 300000)).toBe('▲ 50,000원 (+17%)');
+    expect(changeText(100000, 250000)).toBe('▼ 150,000원 (-60%)');
+    expect(changeText(5, 5)).toBe('변화 없음');
+    expect(changeText(1000, 0)).toBe('▲ 1,000원');
   });
 });
