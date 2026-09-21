@@ -29,8 +29,9 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   // /api/signup은 아직 계정이 없는 사람이 부르는 가입 신청 API라 세션 없이 열어둔다.
-  // 다른 API는 여기 넣지 않는다(기본은 로그인 필요).
-  const publicPaths = ['/login', '/signup', '/api/signup'];
+  // /api/remote-consult/ingest 는 구글 시트(Apps Script)가 부르는 곳이라 세션이 없고, 대신
+  // 라우트 안에서 공유 비밀값(x-ingest-secret)으로 막는다. 다른 API는 여기 넣지 않는다(기본은 로그인 필요).
+  const publicPaths = ['/login', '/signup', '/api/signup', '/api/remote-consult/ingest'];
 
   if (!user) {
     if (!publicPaths.includes(pathname)) {

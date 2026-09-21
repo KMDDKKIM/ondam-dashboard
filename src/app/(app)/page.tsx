@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
 import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countOpenSupplyRequests } from '@/lib/supabase/supplyCounts';
+import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 
 // 도구 이동은 왼쪽 메뉴가 맡는다. 홈은 "오늘" 화면 — 확인할 것, 이번 달 현황, 오늘의 해피콜과 할 일.
 export default async function HomePage() {
@@ -27,7 +28,7 @@ export default async function HomePage() {
     summaryError = '이번달 현황을 불러오지 못했습니다.';
   }
 
-  const [missingClosing, zeroStock, supplyResult] = await Promise.all([
+  const [missingClosing, zeroStock, supplyResult, remoteNew] = await Promise.all([
     fetchMissingClosingDates(supabase).catch(() => null),
     (async () => {
       try {
@@ -38,6 +39,7 @@ export default async function HomePage() {
       }
     })(),
     countOpenSupplyRequests(supabase),
+    countNewRemoteRequests(supabase),
   ]);
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', {
@@ -62,6 +64,7 @@ export default async function HomePage() {
         missingClosing={missingClosing}
         zeroStockCount={zeroStock}
         supply={supplyResult.error ? null : supplyResult}
+        remoteNew={remoteNew}
       />
 
       {summary ? (

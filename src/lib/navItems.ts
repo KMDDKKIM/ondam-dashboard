@@ -27,6 +27,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/reservations', label: '예약관리', icon: '📅' },
       { href: '/happy-call-register', label: '초진환자 해피콜', icon: '📞' },
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
+      { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },
       { href: '/consult-summary', label: '상담 녹음 차팅', icon: '🩺' },
       { href: '/treatment-timer', label: '치료실 타이머', icon: '⏱️' },
     ],
@@ -54,7 +55,6 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '준비 중',
     items: [
       { href: '/event-patients', label: '이벤트 환자 목록', icon: '🎁', soon: true },
-      { href: '/remote-consult-alerts', label: '비대면진료 알람', icon: '🔔', soon: true },
     ],
   },
 ];
