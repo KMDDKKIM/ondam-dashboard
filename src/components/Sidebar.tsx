@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isActivePath, isWidePath, visibleGroups } from '@/lib/navItems';
 import type { StaffGrade } from '@/lib/staffGrade';
+import { openChatWindow } from '@/lib/openChatWindow';
 
 interface SidebarProps {
   isOwner: boolean;
@@ -125,6 +126,16 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                   href={item.href}
                   title={item.label}
                   aria-current={active ? 'page' : undefined}
+                  onClick={
+                    item.href === '/chat'
+                      ? (event) => {
+                          // 일반 클릭은 팝업으로, Ctrl/⌘/Shift 클릭은 브라우저 기본 동작(새 탭)을 그대로 둔다.
+                          if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+                          event.preventDefault();
+                          openChatWindow();
+                        }
+                      : undefined
+                  }
                   className={`side-link${active ? ' active' : ''}${item.soon ? ' soon' : ''}`}
                   style={{ justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '8px 0' : '8px 10px' }}
                 >
