@@ -208,3 +208,21 @@ a.card:hover {
 .status-row:hover {
   background: var(--color-surface-2);
 }
+
+/* 초진환자 해피콜 표의 날짜 칸 — 평소엔 짧은 글자(또는 빈칸), 누르면 날짜 선택 */
+.date-cell {
+  min-height: 22px;
+  padding: 2px 3px;
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.date-cell:hover,
+.date-cell:focus-visible {
+  background: rgba(44, 143, 214, 0.12);
+  outline: none;
+}

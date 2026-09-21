@@ -14,6 +14,8 @@ import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
 import { DoctorManager } from '@/components/happy-call/DoctorManager';
+import { DateCell } from '@/components/happy-call/DateCell';
+import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
 import { addDays, countUnreconciledRevisits, isUnreconciledRevisit } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
@@ -37,6 +39,7 @@ function emptyDraft() {
     patientType: '' as HappyCallPatient['patientType'] | '',
     visitKind: '초진' as HappyCallPatient['visitKind'],
     phone: '',
+    chartNo: '',
     firstVisitDate: todayKst(),
   };
 }
@@ -57,10 +60,12 @@ export default function HappyCallRegisterPage() {
   const highlightFirstVisitDate = highlightDate ? addDays(highlightDate, -MATURITY_DAYS) : null;
   const today = todayKst();
   const unreconciledCount = useMemo(() => countUnreconciledRevisits(patients, today), [patients, today]);
+  // 초진일 오래된 순(오름차순) — 새로 등록한 환자는 맨 아래 등록 줄 바로 위에 붙는다.
   const visiblePatients = useMemo(
-    () => (onlyUnreconciled ? patients.filter((p) => isUnreconciledRevisit(p, today)) : patients),
+    () => (onlyUnreconciled ? patients.filter((p) => isUnreconciledRevisit(p, today)) : [...patients]).sort(compareByFirstVisitAsc),
     [patients, onlyUnreconciled, today]
   );
+  const todayYear = Number(today.slice(0, 4));
 
   // 진료의 선택 칸·통계 필터·시트 붙여넣기는 (id, name) 목록을 받는다 — 활성 진료의를 그 모양으로 넘긴다.
   const staffList = useMemo(() => doctorsAsStaffList(doctors), [doctors]);
@@ -141,6 +146,7 @@ export default function HappyCallRegisterPage() {
         createdBy: user?.id ?? null,
         visitKind: draft.visitKind,
         phone: draft.phone,
+        chartNo: draft.chartNo,
       });
       setDraft(emptyDraft());
       setError('');
@@ -258,31 +264,31 @@ export default function HappyCallRegisterPage() {
         )}
 
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 2000, width: '100%', margin: '0 auto' }}>
+      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1372, width: '100%', margin: '0 auto' }}>
         <colgroup>
-          <col style={{ width: 110 }} />
-          <col style={{ width: 85 }} />
-          <col style={{ width: 70 }} />
-          <col style={{ width: 75 }} />
-          <col style={{ width: 120 }} />
           <col style={{ width: 80 }} />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 170 }} />
-          <col style={{ width: 170 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 95 }} />
-          <col style={{ width: 140 }} />
+          <col style={{ width: 66 }} />
+          <col style={{ width: 104 }} />
+          <col style={{ width: 66 }} />
           <col style={{ width: 60 }} />
+          <col style={{ width: 66 }} />
+          <col style={{ width: 80 }} />
+          <col style={{ width: 150 }} />
+          <col style={{ width: 150 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 58 }} />
+          <col style={{ width: 100 }} />
+          <col style={{ width: 44 }} />
         </colgroup>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
-            {['성함', '진료의', '구분', '초진/재초진', '연락처', '차트번호', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모', ''].map((h, i) => (
-              <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left' }}>
+            {['성함', '차트번호', '연락처', '진료의', '구분', '초진/재초진', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모', ''].map((h, i) => (
+              <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left', fontSize: 12, lineHeight: 1.25 }}>
                 {h}
               </th>
             ))}
@@ -300,6 +306,12 @@ export default function HappyCallRegisterPage() {
             >
               <td style={cellStyle}>
                 <input defaultValue={p.patientName} onBlur={(e) => handleNameUpdate(p.id, e.target.value)} style={textInputStyle} />
+              </td>
+              <td style={cellStyle}>
+                <input defaultValue={p.chartNo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'chartNo', e.target.value)} style={textInputStyle} />
+              </td>
+              <td style={cellStyle}>
+                <input defaultValue={p.phone ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'phone', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
                 <select value={p.doctorStaffId ?? ''} onChange={(e) => handleDoctorUpdate(p.id, e.target.value)} style={selectStyle}>
@@ -334,12 +346,6 @@ export default function HappyCallRegisterPage() {
                 </select>
               </td>
               <td style={cellStyle}>
-                <input defaultValue={p.phone ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'phone', e.target.value)} style={textInputStyle} />
-              </td>
-              <td style={cellStyle}>
-                <input defaultValue={p.chartNo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'chartNo', e.target.value)} style={textInputStyle} />
-              </td>
-              <td style={cellStyle}>
                 <select value={p.acupunctureSuccess ?? ''} onChange={(e) => handleSuccessUpdate(p.id, e.target.value as '성공' | '실패' | '비포함' | '')} style={selectStyle}>
                   <option value=""></option>
                   {PACKAGE_OPTIONS.map((o) => (
@@ -350,26 +356,21 @@ export default function HappyCallRegisterPage() {
                 </select>
               </td>
               <td style={cellStyle}>
-                <input defaultValue={p.nextVisitNote ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'nextVisitNote', e.target.value)} style={textInputStyle} />
+                <input defaultValue={p.nextVisitNote ?? ''} title={p.nextVisitNote ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'nextVisitNote', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
-                <input defaultValue={p.callLog ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'callLog', e.target.value)} style={textInputStyle} />
+                <input defaultValue={p.callLog ?? ''} title={p.callLog ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'callLog', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
-                <input type="date" defaultValue={p.firstVisitDate} onBlur={(e) => handleDateUpdate(p.id, e.target.value)} style={textInputStyle} />
+                <DateCell value={p.firstVisitDate} todayYear={todayYear} onCommit={(v) => handleDateUpdate(p.id, v)} />
               </td>
-              {(['revisit1', 'revisit2', 'revisit3'] as const).map((field) => (
+              {(['revisit1', 'revisit2', 'revisit3', 'jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
                 <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={textInputStyle} />
-                </td>
-              ))}
-              {(['jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
-                <td key={field} style={cellStyle}>
-                  <input type="date" defaultValue={p[field] ?? ''} onBlur={(e) => handleFieldUpdate(p.id, field, e.target.value)} style={textInputStyle} />
+                  <DateCell value={p[field] ?? null} todayYear={todayYear} onCommit={(v) => handleFieldUpdate(p.id, field, v)} />
                 </td>
               ))}
               <td style={cellStyle}>
-                <input defaultValue={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={textInputStyle} />
+                <input defaultValue={p.memo ?? ''} title={p.memo ?? ''} onBlur={(e) => handleFieldUpdate(p.id, 'memo', e.target.value)} style={textInputStyle} />
               </td>
               <td style={cellStyle}>
                 <button type="button" onClick={() => handleDelete(p)} style={{ fontSize: 12, padding: '2px 6px', color: '#b3261e' }}>
@@ -389,6 +390,28 @@ export default function HappyCallRegisterPage() {
                   if (e.key === 'Enter') commitDraft();
                 }}
                 placeholder="+ 환자 이름"
+                style={textInputStyle}
+              />
+            </td>
+            <td style={cellStyle}>
+              <input
+                value={draft.chartNo}
+                onChange={(e) => setDraft((d) => ({ ...d, chartNo: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitDraft();
+                }}
+                placeholder="차트번호"
+                style={textInputStyle}
+              />
+            </td>
+            <td style={cellStyle}>
+              <input
+                value={draft.phone}
+                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitDraft();
+                }}
+                placeholder="연락처"
                 style={textInputStyle}
               />
             </td>
@@ -433,18 +456,7 @@ export default function HappyCallRegisterPage() {
                 ))}
               </select>
             </td>
-            <td style={cellStyle}>
-              <input
-                value={draft.phone}
-                onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitDraft();
-                }}
-                placeholder="연락처(선택)"
-                style={textInputStyle}
-              />
-            </td>
-            <td style={cellStyle} colSpan={4} className="muted-text">
+            <td style={cellStyle} colSpan={3} className="muted-text">
               <button
                 type="button"
                 onClick={commitDraft}
@@ -456,12 +468,7 @@ export default function HappyCallRegisterPage() {
               {draftHint}
             </td>
             <td style={cellStyle}>
-              <input
-                type="date"
-                value={draft.firstVisitDate}
-                onChange={(e) => setDraft((d) => ({ ...d, firstVisitDate: e.target.value }))}
-                style={textInputStyle}
-              />
+              <DateCell value={draft.firstVisitDate} todayYear={todayYear} onCommit={(v) => setDraft((d) => ({ ...d, firstVisitDate: v || todayKst() }))} />
             </td>
             <td style={cellStyle} colSpan={8}></td>
           </tr>
