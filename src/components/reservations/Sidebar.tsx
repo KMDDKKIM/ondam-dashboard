@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
+import { currentMonthKst } from '@/lib/kst';
+import { groupRecordsByMonth, isMonthOpen, monthOf } from '@/lib/reservations/monthGroups';
 
 interface SidebarProps {
   records: DailyRecordSummary[];
@@ -21,6 +23,16 @@ export function Sidebar({
   addDateError,
 }: SidebarProps) {
   const [dateInput, setDateInput] = useState('');
+  // 직원이 직접 펼치거나 접은 달(이 화면 상태로만 기억). 없으면 이번 달과 고른 날짜의 달만 펼친다.
+  const [monthOverride, setMonthOverride] = useState<Record<string, boolean>>({});
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate);
+  // 접힌 달의 날짜를 고르면(다른 곳에서 바뀐 경우 포함) 그 달을 펼친다.
+  if (prevSelectedDate !== selectedDate) {
+    setPrevSelectedDate(selectedDate);
+    if (selectedDate) setMonthOverride((prev) => ({ ...prev, [monthOf(selectedDate)]: true }));
+  }
+  const currentMonth = currentMonthKst();
+  const groups = groupRecordsByMonth(records);
 
   function handleAddDateClick() {
     if (!dateInput) return;
@@ -59,29 +71,56 @@ export function Sidebar({
         </p>
       )}
 
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {records.map((record) => (
-          <li key={record.date}>
+      {groups.map((group) => {
+        const open = isMonthOpen(group.month, currentMonth, selectedDate, monthOverride);
+        return (
+          <div key={group.month} style={{ marginBottom: 4 }}>
             <button
-              onClick={() => onSelectDate(record.date)}
+              type="button"
+              onClick={() => setMonthOverride((prev) => ({ ...prev, [group.month]: !open }))}
+              aria-expanded={open}
               style={{
                 width: '100%',
                 textAlign: 'left',
-                padding: 6,
+                padding: '4px 6px',
                 fontSize: 12,
-                background: record.date === selectedDate ? 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))' : 'transparent',
-                color: record.date === selectedDate ? '#fff' : 'var(--color-ink)',
-                fontWeight: record.date === selectedDate ? 700 : 400,
+                fontWeight: 700,
+                background: 'transparent',
+                color: 'var(--color-ink)',
                 border: 'none',
-                borderRadius: 4,
+                cursor: 'pointer',
               }}
             >
-              {record.date}
-              {record.reservationRowCount > 0 ? ` (예약 ${record.reservationRowCount}명)` : ''}
+              {open ? '▾' : '▸'} {group.month} ({group.records.length}일)
             </button>
-          </li>
-        ))}
-      </ul>
+            {open && (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {group.records.map((record) => (
+                  <li key={record.date}>
+                    <button
+                      onClick={() => onSelectDate(record.date)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: 6,
+                        fontSize: 12,
+                        background: record.date === selectedDate ? 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))' : 'transparent',
+                        color: record.date === selectedDate ? '#fff' : 'var(--color-ink)',
+                        fontWeight: record.date === selectedDate ? 700 : 400,
+                        border: 'none',
+                        borderRadius: 4,
+                      }}
+                    >
+                      {record.date}
+                      {record.reservationRowCount > 0 ? ` (예약 ${record.reservationRowCount}명)` : ''}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
     </aside>
   );
 }

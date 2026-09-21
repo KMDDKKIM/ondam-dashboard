@@ -280,6 +280,19 @@ async function fillPhonesFromHistory(supabase: SupabaseClient, items: WorklistIt
  * 하나라도 실패하면 throw 한다 — 호출한 화면이 오류를 보여 줘야 하며 "대상 없음"으로 보이면 안 된다.
  */
 export async function loadWorklist(supabase: SupabaseClient, today: string): Promise<Worklist> {
+  return buildWorklist(await loadWorklistItems(supabase, today, true), today);
+}
+
+/**
+ * 홈·메뉴 배지용: 목록과 같은 정의(buildWorklist 의 open = 예정일 ≤ 오늘인 미완료 콜)로 세되,
+ * 연락처 찾기(내원 이력 조회)는 건너뛰어 가볍게 읽는다. 하나라도 읽기에 실패하면 throw 한다.
+ */
+export async function countOpenCalls(supabase: SupabaseClient, today: string): Promise<{ open: number; overdue: number }> {
+  const { open } = buildWorklist(await loadWorklistItems(supabase, today, false), today);
+  return { open: open.length, overdue: open.filter((i) => i.dueDate < today).length };
+}
+
+async function loadWorklistItems(supabase: SupabaseClient, today: string, withPhones: boolean): Promise<WorklistItem[]> {
   // 오늘 0시(한국)부터 기록된 결과를 "오늘 처리한 콜"로 본다.
   const since = new Date(`${today}T00:00:00+09:00`).toISOString();
 
@@ -312,10 +325,12 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
   if (manual.error) throw manual.error;
 
   const manualRows = (manual.data ?? []) as ManualRow[];
-  const phones = await phonesByManualEntryId(
-    supabase,
-    manualRows.map((m) => m.id)
-  );
+  const phones = withPhones
+    ? await phonesByManualEntryId(
+        supabase,
+        manualRows.map((m) => m.id)
+      )
+    : new Map<string, string>();
 
   const items: WorklistItem[] = [
     ...patients.map((p): WorklistItem => {
@@ -383,7 +398,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
     ),
   ];
 
-  return buildWorklist(await fillPhonesFromHistory(supabase, items), today);
+  return withPhones ? fillPhonesFromHistory(supabase, items) : items;
 }
 
 /**

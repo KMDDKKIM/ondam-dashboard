@@ -18,6 +18,10 @@ interface SidebarProps {
   remoteNewCount?: number;
   /** 원장님 처리를 기다리는 한약 처방 신청 건수 — 한약 대기방 메뉴에 숫자 배지를 붙인다. */
   herbQueueCount?: number;
+  /** 오늘 걸 해피콜(예정일 ≤ 오늘인 미완료) 건수 — 해피콜 목록 메뉴에 숫자 배지를 붙인다. */
+  openCallCount?: number;
+  /** 오늘 초진·재초진 등록 누락 인원 — 초진환자 해피콜 메뉴에 숫자 배지를 붙인다. */
+  firstVisitMissingCount?: number;
 }
 
 const STORAGE_KEY = 'ondam-sidebar';
@@ -26,7 +30,7 @@ const RAIL_WIDTH = 60;
 
 // 도구를 묶어 항상 보여 주는 왼쪽 메뉴. 표가 넓은 화면이나 좁은 창에서는 처음에 아이콘만
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
-export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
+export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0, openCallCount = 0, firstVisitMissingCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const [pref, setPref] = useState<'open' | 'collapsed' | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -150,6 +154,12 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                     {item.href === '/herb-queue' && herbQueueCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`대기 중인 한약 처방 ${herbQueueCount}건`} />
                     )}
+                    {item.href === '/happy-call-list' && openCallCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`오늘 걸 해피콜 ${openCallCount}건`} />
+                    )}
+                    {item.href === '/happy-call-register' && firstVisitMissingCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`초진·재초진 등록 누락 ${firstVisitMissingCount}명`} />
+                    )}
                     {item.href === '/remote-consult-alerts' && remoteNewCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`처리 대기 비대면진료 신청 ${remoteNewCount}건`} />
                     )}
@@ -162,6 +172,16 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                       )}
                       {item.href === '/herb-queue' && herbQueueCount > 0 && (
                         <span className="side-badge">{herbQueueCount > 99 ? '99+' : herbQueueCount}</span>
+                      )}
+                      {item.href === '/happy-call-list' && openCallCount > 0 && (
+                        <span className="side-badge" title="오늘 걸 해피콜">
+                          {openCallCount > 99 ? '99+' : openCallCount}
+                        </span>
+                      )}
+                      {item.href === '/happy-call-register' && firstVisitMissingCount > 0 && (
+                        <span className="side-badge" title="오늘 초진·재초진 등록 누락">
+                          {firstVisitMissingCount > 99 ? '99+' : firstVisitMissingCount}
+                        </span>
                       )}
                       {item.href === '/remote-consult-alerts' && remoteNewCount > 0 && (
                         <span className="side-badge">{remoteNewCount > 99 ? '99+' : remoteNewCount}</span>

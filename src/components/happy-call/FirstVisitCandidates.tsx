@@ -1,13 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  classifyVisit,
-  isSamePatient,
-  type FirstVisitCandidateDto,
-  type FirstVisitCandidatesResult,
-  type VisitClassification,
-} from '@/lib/firstVisit';
+import { isSamePatient, type FirstVisitCandidateDto, type FirstVisitCandidatesResult, type VisitClassification } from '@/lib/firstVisit';
+import { candidateSuggestion, reconcileFirstVisits } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
@@ -80,7 +75,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   const rows = useMemo(() => {
     return (data?.candidates ?? []).map((candidate) => {
       // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
-      const suggestion: VisitClassification = candidate.kind ?? classifyVisit(candidate.previousVisitDates, date);
+      const suggestion: VisitClassification = candidateSuggestion(candidate, date);
       const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
       // 차트번호·연락처 없이 이름만 등록해 둔 줄은, 그날 후보 중 같은 이름이 한 명뿐일 때 그 사람으로 본다.
       const sameNameCandidates = (data?.candidates ?? []).filter((c) => c.patientName === candidate.patientName).length;
@@ -94,27 +89,14 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   }, [data, date, registered]);
 
   // 초진/재초진으로 추정된 사람 + "동명이인 가능"이라 재진으로 단정할 수 없는 사람은 목록에 남긴다.
-  const estimatedRows = rows.filter((r) => r.suggestion !== '재진');
   const listRows = rows.filter((r) => r.suggestion !== '재진' || r.candidate.possibleHomonym);
   const pending = listRows.filter((r) => !r.isRegistered);
   const revisitRows = rows.filter((r) => r.suggestion === '재진' && !r.candidate.possibleHomonym);
 
-  // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
-  // 일일결산 기반이면 신규환자수(초진)에 재초진 후보를 더한다(신규환자수에는 재초진이 들어 있지 않다).
-  // (오늘 새로 만든 재등록 차트의 재초진은 신규환자수에 이미 들어 있으니 더하지 않는다.)
-  const revisitAfter3Months = rows.filter((r) => r.suggestion === '재초진' && !r.candidate.countedInNewCount).length;
-  const expected =
-    data?.closingFirstVisitCount != null
-      ? data.closingFirstVisitCount + (data.source === 'settlement' ? revisitAfter3Months : 0)
-      : estimatedRows.length;
-  const expectedSource =
-    data?.closingFirstVisitCount != null
-      ? data.source === 'settlement'
-        ? `일일결산 신규환자수 ${data.closingFirstVisitCount}명 + 재초진 후보 ${revisitAfter3Months}명`
-        : '마감 결산 기준'
-      : '명단 기준 추정';
-  const registeredCount = registered.length;
-  const missing = Math.max(expected - registeredCount, 0);
+  // 대조 규칙은 홈/메뉴 배지와 같은 함수(firstVisitReconcile.ts)를 쓴다.
+  const { expected, expectedSource, registered: registeredCount, missing } = data
+    ? reconcileFirstVisits(data, registered.length, date)
+    : { expected: 0, expectedSource: '', registered: registered.length, missing: 0 };
   const label = date === today ? '오늘' : date;
 
   async function register(row: (typeof rows)[number], visitKind: '초진' | '재초진') {

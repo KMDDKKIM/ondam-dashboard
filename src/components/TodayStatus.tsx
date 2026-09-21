@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatMonthDay } from '@/lib/closingChecks';
+import { callsRow, firstVisitRow, herbStockRow, reservationRow, type FirstVisitMissingProp, type TodayRow } from '@/lib/todayChecks';
 
 export interface TodayStatusProps {
   /** 어제 마감이 없으면 [어제 날짜], 있으면 [] . null 이면 조회 실패. */
@@ -12,20 +13,31 @@ export interface TodayStatusProps {
   remoteNew: number | null;
   /** 원장님 처리를 기다리는 한약 처방 신청 수. null 이면 조회 실패. */
   herbWaiting?: number | null;
+  /** 등록된 한약재 전체 개수. 0이면 "재고 0 없음(정상)" 대신 "등록된 약재가 없어요". null 이면 조회 실패. */
+  herbTotal?: number | null;
+  /** 오늘 저장된 예약 명단 인원. null 이면 조회 실패. */
+  todayReservations?: number | null;
+  /** 오늘 초진·재초진 등록 누락. null 이면 조회 실패, 비교할 결산이 없으면 항목을 감춘다, 생략하면 항목 없음. */
+  firstVisitMissing?: FirstVisitMissingProp | null;
+  /** 오늘 걸 해피콜(예정일 ≤ 오늘인 미완료)과 그중 연체 수. null 이면 조회 실패, 생략하면 항목 없음. */
+  calls?: { open: number; overdue: number } | null;
 }
 
-interface Row {
-  key: string;
-  icon: string;
-  text: string;
-  state: 'todo' | 'ok' | 'unknown';
-  badge: string;
-  href: string;
-}
+type Row = TodayRow;
 
 // 홈 맨 위 "오늘 해야 할 일" — 직원이 놓치기 쉬운 것(어제 결산, 재고 0, 물품 대기)만 한눈에.
 // 해야 할 것은 빨간 배지, 끝난 것은 초록 체크, 조회에 실패한 것은 회색 "확인 불가"로 보여 준다.
-export function TodayStatus({ missingClosing, zeroStockCount, supply, remoteNew, herbWaiting = 0 }: TodayStatusProps) {
+export function TodayStatus({
+  missingClosing,
+  zeroStockCount,
+  supply,
+  remoteNew,
+  herbWaiting = 0,
+  herbTotal,
+  todayReservations,
+  firstVisitMissing,
+  calls,
+}: TodayStatusProps) {
   const rows: Row[] = [];
 
   if (missingClosing == null) {
@@ -43,13 +55,13 @@ export function TodayStatus({ missingClosing, zeroStockCount, supply, remoteNew,
     rows.push({ key: 'closing', icon: '📥', text: '어제 결산 입력 완료', state: 'ok', badge: '완료', href: '/paste-import' });
   }
 
-  if (zeroStockCount == null) {
-    rows.push({ key: 'stock', icon: '🌿', text: '한약재 재고', state: 'unknown', badge: '확인 불가', href: '/herb-inventory' });
-  } else if (zeroStockCount > 0) {
-    rows.push({ key: 'stock', icon: '🌿', text: `재고가 0인 약재 ${zeroStockCount}개`, state: 'todo', badge: '확인하기', href: '/herb-inventory' });
-  } else {
-    rows.push({ key: 'stock', icon: '🌿', text: '재고가 0인 약재 없음', state: 'ok', badge: '정상', href: '/herb-inventory' });
-  }
+  if (todayReservations !== undefined) rows.push(reservationRow(todayReservations));
+  const firstVisit = firstVisitRow(firstVisitMissing);
+  if (firstVisit) rows.push(firstVisit);
+  const callRow = callsRow(calls);
+  if (callRow) rows.push(callRow);
+
+  rows.push(herbStockRow(zeroStockCount, herbTotal));
 
   if (supply == null) {
     rows.push({ key: 'supply', icon: '📦', text: '물품신청', state: 'unknown', badge: '확인 불가', href: '/supply-requests' });

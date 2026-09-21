@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { listTodos, createTodo, setTodoDone, deleteTodo } from '@/lib/supabase/todos';
 import { visibleTodos } from '@/lib/todoVisibility';
 import { todayKst } from '@/lib/kst';
+import { confirmDialog } from '@/lib/confirmDialog';
 import type { Staff, Todo } from '@/lib/types';
 
 // 목록 보기 기준: '' = 전체, 'me' = 내 것, 그 외 = 그 직원 id. 처음 화면은 '전체 보기'이고(담당자 없는 할 일이 숨지 않게), 고른 값은 이 브라우저에 기억한다.
@@ -98,7 +99,10 @@ export function TodoChecklist() {
     }
   }
 
-  async function remove(id: string) {
+  async function remove(todo: Todo) {
+    const id = todo.id;
+    // 실수로 × 를 눌러도 바로 지워지지 않게 먼저 물어본다.
+    if (!(await confirmDialog(`"${todo.text}" 을(를) 삭제할까요?`, { confirmLabel: '삭제' }))) return;
     setTodos((prev) => prev.filter((t) => t.id !== id));
     try {
       await deleteTodo(supabase, id);
@@ -218,7 +222,7 @@ export function TodoChecklist() {
                 </span>
               )}
               <button
-                onClick={() => remove(todo.id)}
+                onClick={() => remove(todo)}
                 style={{ border: 'none', background: 'transparent', color: 'var(--color-muted)', fontSize: 14 }}
                 aria-label="삭제"
               >
