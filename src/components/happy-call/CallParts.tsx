@@ -73,10 +73,33 @@ export function OverdueBadge({ dueDate, today }: { dueDate: string; today: strin
   );
 }
 
-/** 전화 걸기(tel:) 링크 + 번호 복사 버튼. 번호가 없으면 "-". */
-export function PhoneCell({ phone }: { phone: string | null }) {
+/**
+ * 전화 걸기(tel:) 링크 + 번호 복사 버튼. 번호가 없으면 "-".
+ * 이름으로 내원 이력에서 찾은 번호(source='name')는 추정이라 작게 표시하고,
+ * 동명이인이라 고르지 않은 경우(ambiguous)에는 안내 문구를 붙인다.
+ */
+export function PhoneCell({
+  phone,
+  source,
+  ambiguous,
+}: {
+  phone: string | null;
+  source?: 'chart' | 'name' | null;
+  ambiguous?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
-  if (!phone) return <span className="muted-text">-</span>;
+  if (!phone) {
+    return (
+      <span className="muted-text">
+        -
+        {ambiguous && (
+          <span title="같은 이름이 여러 명이라 번호를 자동으로 고르지 않았어요" style={{ marginLeft: 6, fontSize: 11 }}>
+            ⓘ 동명이인
+          </span>
+        )}
+      </span>
+    );
+  }
 
   async function copy() {
     try {
@@ -96,6 +119,11 @@ export function PhoneCell({ phone }: { phone: string | null }) {
       <button type="button" onClick={copy} style={{ ...smallButton, padding: '2px 6px', fontSize: 11 }}>
         {copied ? '복사됨' : '복사'}
       </button>
+      {source === 'name' && (
+        <span className="muted-text" style={{ fontSize: 11 }}>
+          내원 이력에서 찾음
+        </span>
+      )}
     </span>
   );
 }

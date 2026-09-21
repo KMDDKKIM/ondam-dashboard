@@ -76,7 +76,7 @@ export function TodayHappyCalls() {
                     ''
                   )}
                   <span style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
-                    <PhoneCell phone={row.phone} />
+                    <PhoneCell phone={row.phone} source={row.phoneSource} ambiguous={row.phoneAmbiguous} />
                   </span>
                 </span>
                 <span className="muted-text" style={{ fontSize: 12, paddingTop: 3, color: row.dueDate < today ? 'var(--color-error)' : undefined }}>
