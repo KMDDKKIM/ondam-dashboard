@@ -264,17 +264,17 @@ export default function HappyCallRegisterPage() {
         )}
 
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1372, width: '100%', margin: '0 auto' }}>
+      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1466, width: '100%', margin: '0 auto' }}>
         <colgroup>
           <col style={{ width: 80 }} />
           <col style={{ width: 66 }} />
-          <col style={{ width: 104 }} />
+          <col style={{ width: 100 }} />
           <col style={{ width: 66 }} />
           <col style={{ width: 60 }} />
-          <col style={{ width: 66 }} />
-          <col style={{ width: 80 }} />
-          <col style={{ width: 150 }} />
-          <col style={{ width: 150 }} />
+          <col style={{ width: 62 }} />
+          <col style={{ width: 74 }} />
+          <col style={{ width: 210 }} />
+          <col style={{ width: 210 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
@@ -282,7 +282,7 @@ export default function HappyCallRegisterPage() {
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
-          <col style={{ width: 100 }} />
+          <col style={{ width: 88 }} />
           <col style={{ width: 44 }} />
         </colgroup>
         <thead>

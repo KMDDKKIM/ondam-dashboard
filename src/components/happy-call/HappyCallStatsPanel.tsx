@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { addDays, computeFirstVisitStats, computeWeeklyTrend, getWeekRange, lastCompletedWeekRange } from '@/lib/happyCallStats';
+import { addDays, computeFirstVisitStats, computeWeeklyTrend, getWeekRange, lastCompletedWeekRange, latestFullyMatureWeekStart } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
@@ -19,6 +19,14 @@ function formatPercent(rate: number): string {
 
 function formatMaturityGatedPercent(rate: number, matureCount: number): string {
   return matureCount === 0 ? '-' : formatPercent(rate);
+}
+
+// 이탈률·삼진율은 3주가 지난 환자만 센다. 일부만 지났으면 "100% (2/20명)"처럼 몇 명 기준인지 함께 보여 준다.
+function formatMatureBased(rate: number, stats: { patientCount: number; matureCount: number }): string {
+  if (stats.matureCount === 0) return '-';
+  return stats.matureCount < stats.patientCount
+    ? `${formatPercent(rate)} (${stats.matureCount}/${stats.patientCount}명)`
+    : formatPercent(rate);
 }
 
 const cellStyle = { border: '1px solid #eee', padding: '3px 6px', fontSize: 11 };
@@ -69,6 +77,20 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
   );
   const doctorStats = useMemo(() => computeFirstVisitStats(doctorPatients, today), [doctorPatients, today]);
 
+  // 진료의별 비교 — 선택한 주·구분 필터 기준으로 진료의 전원을 나란히.
+  const perDoctor = useMemo(
+    () =>
+      staffList.map((s) => ({
+        id: s.id,
+        name: s.name,
+        stats: computeFirstVisitStats(
+          weekPatients.filter((p) => p.doctorStaffId === s.id),
+          today
+        ),
+      })),
+    [staffList, weekPatients, today]
+  );
+
   const byPatientType = useMemo(() => {
     const types: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
     return types.map((type) => ({
@@ -112,6 +134,14 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
         </button>
         <button type="button" onClick={() => setReferenceDate(today)} style={weekButtonStyle}>
           이번주
+        </button>
+        <button
+          type="button"
+          onClick={() => setReferenceDate(latestFullyMatureWeekStart(today))}
+          style={weekButtonStyle}
+          title="이탈률·삼진율이 그 주 환자 전원 기준으로 나오는 가장 최근 주"
+        >
+          이탈·삼진 집계되는 주
         </button>
         <div style={{ display: 'flex', gap: 4 }}>
           {TYPE_FILTERS.map((t) => (
@@ -175,6 +205,34 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
           </table>
         </div>
 
+        <div className="card" style={{ ...cardStyle, flex: '2 1 420px' }}>
+          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+            진료의별 비교 ({start.slice(5)} ~ {end.slice(5)} 주)
+          </div>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={cellStyle}>진료의</th>
+                <th style={cellStyle}>초진수</th>
+                <th style={cellStyle}>재진율</th>
+                <th style={cellStyle}>이탈률</th>
+                <th style={cellStyle}>삼진율</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...perDoctor, { id: 'all', name: '전체', stats: clinicStats }].map(({ id, name, stats }) => (
+                <tr key={id} style={id === 'all' ? { fontWeight: 700, background: '#fafafa' } : undefined}>
+                  <td style={cellStyle}>{name}</td>
+                  <td style={cellStyle}>{stats.patientCount}</td>
+                  <td style={cellStyle}>{stats.patientCount === 0 ? '-' : formatPercent(stats.revisitRate)}</td>
+                  <td style={cellStyle}>{formatMatureBased(stats.dropoutRate, stats)}</td>
+                  <td style={cellStyle}>{formatMatureBased(stats.tripleVisitRate, stats)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <div className="card" style={cardStyle}>
           <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>주별 추이 ({doctorLabel})</div>
           <div style={{ overflowX: 'auto' }}>
@@ -199,7 +257,19 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
                 <tr>
                   <td style={cellStyle}>재진율</td>
                   {weeklyTrend.map((point) => (
-                    <td key={point.start} style={cellStyle}>{formatPercent(point.stats.revisitRate)}</td>
+                    <td key={point.start} style={cellStyle}>{point.stats.patientCount === 0 ? '-' : formatPercent(point.stats.revisitRate)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td style={cellStyle}>이탈률</td>
+                  {weeklyTrend.map((point) => (
+                    <td key={point.start} style={cellStyle}>{formatMatureBased(point.stats.dropoutRate, point.stats)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <td style={cellStyle}>삼진율</td>
+                  {weeklyTrend.map((point) => (
+                    <td key={point.start} style={cellStyle}>{formatMatureBased(point.stats.tripleVisitRate, point.stats)}</td>
                   ))}
                 </tr>
               </tbody>

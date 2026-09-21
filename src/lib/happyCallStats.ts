@@ -138,3 +138,13 @@ export function getWeekRange(dateStr: string): { start: string; end: string } {
     end: sunday.toISOString().slice(0, 10),
   };
 }
+
+/**
+ * 이탈률·삼진율이 그 주 환자 전원 기준으로 나오는 가장 최근 주(월요일 날짜).
+ * 주의 마지막 날(일요일)로부터 21일이 지나야 그 주 환자 모두가 성숙한다.
+ */
+export function latestFullyMatureWeekStart(today: string): string {
+  const cutoff = addDays(today, -MATURITY_DAYS);
+  const w = getWeekRange(cutoff);
+  return w.end <= cutoff ? w.start : addDays(w.start, -7);
+}

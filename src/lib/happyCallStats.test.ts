@@ -9,6 +9,7 @@ import {
   isUnreconciledRevisit,
   isTripleVisit,
   lastCompletedWeekRange,
+  latestFullyMatureWeekStart,
 } from './happyCallStats';
 import type { HappyCallPatient } from './types';
 
@@ -210,5 +211,14 @@ describe('lastCompletedWeekRange', () => {
   });
   it('returns the previous week midweek', () => {
     expect(lastCompletedWeekRange('2026-09-23')).toEqual({ start: '2026-09-14', end: '2026-09-20' });
+  });
+});
+
+describe('latestFullyMatureWeekStart', () => {
+  it('주의 마지막 날로부터 21일이 지난 가장 최근 주의 월요일', () => {
+    // 2026-09-21(월): 8/24~8/30 주는 9/20 부터 성숙, 8/31~9/6 주는 9/27 부터
+    expect(latestFullyMatureWeekStart('2026-09-21')).toBe('2026-08-24');
+    expect(latestFullyMatureWeekStart('2026-09-26')).toBe('2026-08-24');
+    expect(latestFullyMatureWeekStart('2026-09-27')).toBe('2026-08-31');
   });
 });
