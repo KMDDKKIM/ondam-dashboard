@@ -84,7 +84,7 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
       const response = await fetch(`/api/first-visit-candidates?date=${encodeURIComponent(date)}`);
       if (response.ok) {
         const body = (await response.json()) as FirstVisitCandidatesResult;
-        loaded = body.candidates;
+        loaded = body.candidates.filter((c) => !c.fromReception); // 예약 시트의 초진 표시는 예약 명단 기준만
       }
     } catch {
       // 아래에서 안내

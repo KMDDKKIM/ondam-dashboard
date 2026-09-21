@@ -8,6 +8,8 @@ import { parseSettlementVisits } from '@/lib/settlementVisits';
 import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
+import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
+import { nextBookingPrefill } from '@/lib/receptionLog';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
@@ -362,6 +364,8 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   const [history, setHistory] = useState<DailyRevenue[]>([]);
   const [closing, setClosing] = useState<ClosingFields>(EMPTY_CLOSING);
   const [copied, setCopied] = useState(false);
+  // 다음예약 접수 환자수를 접수기록부로 미리 채웠을 때의 인원(직접 고치면 사라진다).
+  const [receptionHint, setReceptionHint] = useState<number | null>(null);
   const supabase = createClient();
 
   // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
@@ -409,6 +413,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   useEffect(() => {
     if (!date) {
       setClosing(EMPTY_CLOSING);
+      setReceptionHint(null);
       return;
     }
     let syncOnly = false;
@@ -468,10 +473,12 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       }
 
       let saved = null;
+      let savedKnown = true;
       try {
         saved = await getSavedDailyClosing(supabase, date);
       } catch {
         // 저장된 값이 없으면 명단에서 센 값을 쓴다.
+        savedKnown = false;
       }
       if (saved) {
         next.reservationCount = str(saved.reservationCount);
@@ -496,7 +503,21 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       } catch {
         // 비급여 기록이 없어도 직접 입력하면 된다.
       }
-      if (!cancelled) setClosing(next);
+
+      // 다음예약 접수 환자수: 저장된 결산이 없고 칸이 비어 있을 때만, 접수기록부에서 "예약" 체크된 환자 수로 미리 채운다.
+      // 못 읽어도(표 없음·권한 없음 등) 조용히 건너뛴다 — 직접 입력하면 된다.
+      let hint: number | null = null;
+      if (savedKnown) {
+        try {
+          hint = nextBookingPrefill(await listReceptionRecords(supabase, date), { savedClosingExists: saved != null, currentValue: next.nextBookingCount });
+        } catch {
+          hint = null;
+        }
+        if (hint != null) next.nextBookingCount = String(hint);
+      }
+      if (cancelled) return;
+      setReceptionHint(hint);
+      setClosing(next);
     })();
     return () => {
       cancelled = true;
@@ -534,6 +555,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     outcomeSum !== n('reservationCount');
 
   function setField(key: keyof ClosingFields, value: string) {
+    if (key === 'nextBookingCount') setReceptionHint(null);
     setClosing((prev) => ({ ...prev, [key]: value }));
     setCopied(false);
     setResult('');
@@ -544,6 +566,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     if (text.trim() && !await confirmDialog('붙여넣은 결산표와 아래 입력칸을 모두 비울까요? (이미 저장한 기록은 그대로예요)')) return;
     setText('');
     setClosing(EMPTY_CLOSING);
+    setReceptionHint(null);
     setCopied(false);
     setError('');
     setResult('');
@@ -690,6 +713,11 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             <div>
               <label className="muted-text" style={label}>다음예약 접수 환자수</label>
               {numberInput('nextBookingCount')}
+              {receptionHint != null && (
+                <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                  접수기록부에서 {receptionHint}명 자동 입력 (예약 체크 기준)
+                </p>
+              )}
             </div>
           </div>
           {outcomeMismatch && (

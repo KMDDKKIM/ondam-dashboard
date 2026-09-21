@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isSamePatient, type FirstVisitCandidateDto, type FirstVisitCandidatesResult, type VisitClassification } from '@/lib/firstVisit';
-import { candidateSuggestion, reconcileFirstVisits } from '@/lib/firstVisitReconcile';
+import type { FirstVisitCandidateDto, FirstVisitCandidatesResult, VisitClassification } from '@/lib/firstVisit';
+import { candidateSuggestion, reconcileFirstVisits, registeredCandidates } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
@@ -73,18 +73,18 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   }, [load]);
 
   const rows = useMemo(() => {
+    // 등록 여부는 홈/메뉴 배지와 같은 함수로 정한다(등록 환자 한 명은 후보 한 명에게만 짝지어진다).
+    const registeredSet = registeredCandidates(
+      data?.candidates ?? [],
+      registered.map((p) => ({ patientName: p.patientName, chartNo: p.chartNo, phone: p.phone }))
+    );
     return (data?.candidates ?? []).map((candidate) => {
       // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
       const suggestion: VisitClassification = candidateSuggestion(candidate, date);
-      const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
-      // 차트번호·연락처 없이 이름만 등록해 둔 줄은, 그날 후보 중 같은 이름이 한 명뿐일 때 그 사람으로 본다.
-      const sameNameCandidates = (data?.candidates ?? []).filter((c) => c.patientName === candidate.patientName).length;
-      const isRegistered = registered.some(
-        (p) =>
-          isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] }) ||
-          (!p.chartNo && !p.phone && p.patientName === candidate.patientName && sameNameCandidates === 1)
-      );
-      return { candidate, suggestion, isRegistered, key: `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}` };
+      const key = candidate.fromReception
+        ? `reception|${candidate.receptionId ?? candidate.patientName}`
+        : `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}`;
+      return { candidate, suggestion, isRegistered: registeredSet.has(candidate), key };
     });
   }, [data, date, registered]);
 
@@ -94,9 +94,9 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   const revisitRows = rows.filter((r) => r.suggestion === '재진' && !r.candidate.possibleHomonym);
 
   // 대조 규칙은 홈/메뉴 배지와 같은 함수(firstVisitReconcile.ts)를 쓴다.
-  const { expected, expectedSource, registered: registeredCount, missing } = data
-    ? reconcileFirstVisits(data, registered.length, date)
-    : { expected: 0, expectedSource: '', registered: registered.length, missing: 0 };
+  const { expected, expectedSource, registered: registeredCount, missing, receptionMore } = data
+    ? reconcileFirstVisits(data, registered.length, date, registered)
+    : { expected: 0, expectedSource: '', registered: registered.length, missing: 0, receptionMore: 0 };
   const label = date === today ? '오늘' : date;
 
   async function register(row: (typeof rows)[number], visitKind: '초진' | '재초진') {
@@ -119,7 +119,13 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   return (
     <div className="card" style={{ padding: 12, marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-        <strong>{data?.source === 'settlement' ? '그날 내원 환자 중 초진·재초진 후보' : '예약 명단의 초진·재초진 후보'}</strong>
+        <strong>
+          {data?.source === 'settlement'
+            ? '그날 내원 환자 중 초진·재초진 후보'
+            : data?.source === 'reception'
+              ? '접수기록부의 초진·재초진 후보'
+              : '예약 명단의 초진·재초진 후보'}
+        </strong>
         <input type="date" value={date} onChange={(e) => e.target.value && onDateChange(e.target.value)} style={{ fontSize: 12, padding: 3 }} />
         <button type="button" onClick={load} style={{ fontSize: 12, padding: '3px 10px' }}>
           새로고침
@@ -128,8 +134,10 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
         {data?.source === 'settlement'
           ? '일일결산에 저장된 그날 실제 내원 환자에서 뽑았어요. 가져온 내원 이력·이전 결산 기록·차트번호로 판단해요(이력이 없는 기간의 내원은 알 수 없어요).'
-          : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
-        {' '}재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
+          : data?.source === 'reception'
+            ? '접수기록부에 초)·재초)로 적힌 환자예요. 차트번호·연락처는 접수기록부에 없어서 이름만 등록돼요.'
+            : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
+        {' '}접수기록부에 초)·재초)로 적힌 환자도 함께 보여요(같은 사람은 한 번만). 재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
       </p>
 
       {error && <p style={{ color: 'red', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
@@ -154,6 +162,11 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
             {label} 초진/재초진 {expected}명 중 {registeredCount}명 등록 — {missing > 0 ? `${missing}명 누락` : '누락 없음'}
             <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>({expectedSource})</span>
           </div>
+          {receptionMore > 0 && (
+            <p className="muted-text" style={{ fontSize: 12, margin: '-4px 0 10px' }}>
+              접수기록부 기준으로 {receptionMore}명 더 있어요
+            </p>
+          )}
 
           {pending.length === 0 ? (
             <p className="muted-text" style={{ margin: 0 }}>

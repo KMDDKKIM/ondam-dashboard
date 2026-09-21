@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatFee, formatLogHeader, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
+import { countReservedRecords, formatFee, formatLogHeader, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
 
 function rec(o: Partial<ReceptionRecord>): ReceptionRecord {
   return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, note: null, ...o };
@@ -70,5 +70,26 @@ describe('생년월일 입력', () => {
     expect(normalizeBirth(' 44.6.30 ')).toBe('44.6.30');
     expect(normalizeBirth('1944-06-30')).toBe('1944-06-30');
     expect(normalizeBirth('  ')).toBeNull();
+  });
+});
+
+describe('다음예약 접수 환자수 미리 채우기', () => {
+  const records = [rec({ reserved: true }), rec({ reserved: false }), rec({ reserved: true })];
+  const fresh = { savedClosingExists: false, currentValue: '' };
+
+  it('예약 체크된 줄 수를 센다', () => {
+    expect(countReservedRecords(records)).toBe(2);
+    expect(countReservedRecords([])).toBe(0);
+  });
+  it('저장된 결산도 손으로 넣은 값도 없을 때만 채운다', () => {
+    expect(nextBookingPrefill(records, fresh)).toBe(2);
+    expect(nextBookingPrefill(records, { savedClosingExists: true, currentValue: '' })).toBeNull();
+    expect(nextBookingPrefill(records, { savedClosingExists: false, currentValue: '5' })).toBeNull();
+    expect(nextBookingPrefill(records, { savedClosingExists: false, currentValue: '0' })).toBeNull();
+    expect(nextBookingPrefill(records, { savedClosingExists: false, currentValue: '  ' })).toBe(2);
+  });
+  it('체크가 없거나 기록이 없으면 채우지 않는다', () => {
+    expect(nextBookingPrefill([rec({}), rec({})], fresh)).toBeNull();
+    expect(nextBookingPrefill([], fresh)).toBeNull();
   });
 });

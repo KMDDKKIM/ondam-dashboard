@@ -9,12 +9,16 @@ import {
   dedupeVisitCandidates,
   hasPossibleHomonym,
   likelyNewChartNos,
+  mergeReceptionCandidates,
   previousVisitDatesFor,
   type FirstVisitCandidatesResult,
+  type ReceptionVisitRow,
   type PriorVisitRow,
   type VisitCandidate,
 } from '@/lib/firstVisit';
 import { getDailyRecordByDate } from './dailyRecords.server';
+import { createClient } from '@/lib/supabase/server';
+import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
 
 // 예약관리 테이블(daily_records/reservations)은 다른 앱 소유라 RLS가 로그인 사용자를 막아 둔다.
 // 그래서 브라우저가 아니라 이 서버 함수(admin 클라이언트)로만 읽고, 호출하는 API 라우트가
@@ -285,7 +289,7 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
  * 일일결산의 내원 환자 명단이 저장돼 있으면 그것을, 없으면 그 날짜 예약 명단(취소 제외, 중복 예약은 하나)을 쓴다.
  * 이전 내원 = 그 날짜보다 앞선 기록에서 같은 사람의 내원. 같은 사람 판단은 firstVisit.ts 의 isSamePatient(차트번호, 없으면 이름+전화).
  */
-export async function getFirstVisitCandidates(date: string): Promise<FirstVisitCandidatesResult> {
+async function getBaseCandidates(date: string): Promise<FirstVisitCandidatesResult> {
   const visits = await fetchDailyVisitsOn(date);
   if (visits.length > 0) return getCandidatesFromSettlement(date, visits);
 
@@ -305,5 +309,40 @@ export async function getFirstVisitCandidates(date: string): Promise<FirstVisitC
       previousVisitDates: previousVisitDatesFor(c, prior, date),
       possibleHomonym: hasPossibleHomonym(c, prior, date),
     })),
+  };
+}
+
+/**
+ * 접수기록부(reception_records)는 로그인 사용자의 RLS(승인된 직원만 읽기)로 열려 있어서, 위의 admin 클라이언트가 아니라
+ * 요청의 로그인 세션을 쓰는 서버 클라이언트로 읽는다. 읽지 못해도(표 없음·권한 없음·네트워크) 조용히 건너뛴다 — 후보 목록 자체는 막지 않는다.
+ */
+async function loadReceptionRows(date: string): Promise<ReceptionVisitRow[]> {
+  try {
+    const supabase = await createClient();
+    const records = await listReceptionRecords(supabase, date);
+    return records.map((r) => ({ id: r.id, patientName: r.patientName, visitKind: r.visitKind, birthDate: r.birthDate }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 그 날짜의 후보(초진·재초진 판정 대상)와 각자의 이전 내원일을 돌려준다.
+ * 일일결산의 내원 환자 명단이 저장돼 있으면 그것을, 없으면 그 날짜 예약 명단(취소 제외, 중복 예약은 하나)을 쓴다.
+ * 이전 내원 = 그 날짜보다 앞선 기록에서 같은 사람의 내원. 같은 사람 판단은 firstVisit.ts 의 isSamePatient(차트번호, 없으면 이름+전화).
+ * 접수기록부에서 초/재초로 적힌 사람은 mergeReceptionCandidates 로 합친다(같은 사람은 한 명, 이름만 같은 다른 사람은 동명이인 가능으로 표시).
+ */
+export async function getFirstVisitCandidates(date: string): Promise<FirstVisitCandidatesResult> {
+  const [base, receptionRows] = await Promise.all([getBaseCandidates(date), loadReceptionRows(date)]);
+  const merged = mergeReceptionCandidates(base.candidates, receptionRows, date);
+  const hasReception = merged.receptionFirstCount + merged.receptionRevisitCount > 0;
+  return {
+    ...base,
+    // 결산·예약 명단이 없어도 접수기록부에 초/재초가 있으면 그것으로 후보를 보여 준다.
+    source: !base.hasRecord && hasReception ? 'reception' : base.source,
+    hasRecord: base.hasRecord || hasReception,
+    candidates: merged.candidates,
+    receptionFirstCount: merged.receptionFirstCount,
+    receptionRevisitCount: merged.receptionRevisitCount,
   };
 }

@@ -242,17 +242,94 @@ export interface FirstVisitCandidateDto extends VisitCandidate {
   previousVisitDates: string[];
   /** 이름이 같은 이전 기록이 있지만 번호를 확인할 수 없어 같은 사람인지 모름(이전 내원으로 세지 않음) */
   possibleHomonym: boolean;
+  /** 접수기록부에서 초/재초로 적혀서 추가된 후보(결산·예약 명단에는 없는 사람). 차트번호·연락처가 없을 수 있다. */
+  fromReception?: boolean;
+  /** fromReception 일 때 접수기록부 행 id(목록 키용) */
+  receptionId?: string;
 }
 
 export interface FirstVisitCandidatesResult {
   date: string;
-  /** 후보를 어디서 뽑았나 — settlement: 일일결산의 내원 환자 명단, reservation: 예약 명단 */
-  source?: 'settlement' | 'reservation';
+  /** 후보를 어디서 뽑았나 — settlement: 일일결산의 내원 환자 명단, reservation: 예약 명단, reception: 접수기록부만 있음 */
+  source?: 'settlement' | 'reservation' | 'reception';
   /** 그 날짜의 명단(일일결산 환자 목록 또는 예약 명단)이 저장되어 있는지 */
   hasRecord: boolean;
   /** daily_records.first_visit_count — 마감 결산에 적힌 초진 수(없으면 null) */
   closingFirstVisitCount: number | null;
   candidates: FirstVisitCandidateDto[];
+  /** 접수기록부에 초로 적힌 사람 수 / 재초로 적힌 사람 수(결산 명단과 겹치는 사람 포함, 같은 사람의 중복 줄은 하나) */
+  receptionFirstCount?: number;
+  receptionRevisitCount?: number;
+}
+
+/** 접수기록부 한 줄에서 후보 만들기에 필요한 것만. */
+export interface ReceptionVisitRow {
+  id: string;
+  patientName: string;
+  visitKind: '초' | '재초' | '재진';
+  birthDate: string | null;
+}
+
+export interface ReceptionMerge {
+  candidates: FirstVisitCandidateDto[];
+  receptionFirstCount: number;
+  receptionRevisitCount: number;
+}
+
+/**
+ * 접수기록부의 초/재초 줄을 후보 목록에 합친다(재진 줄은 무시).
+ * - 접수기록부에는 차트번호가 없어서 이름(공백 제거, 정확히 같음)으로 같은 사람을 찾는다.
+ * - 이미 후보(초진·재초진)인 사람과 이름이 같으면 한 명으로 본다(줄을 더하지 않음). 이름이 같은 후보가 여러 명이면 접수 줄 하나가 후보 하나씩만 가져간다.
+ * - 이름은 같지만 짝지을 후보가 없으면(결산에서 재진으로 분류됐거나, 이미 다른 접수 줄과 짝지어짐) 다른 사람일 수 있으니
+ *   "동명이인 가능"으로 표시해 남긴다 — 새 환자가 같은 이름의 사람 뒤에 가려지면 안 된다.
+ * - 접수기록부 안에서 이름과 생년월일이 모두 같은 줄은 중복 입력으로 보고 하나만 쓴다.
+ *   생년월일이 다르거나 비어 있는 같은 이름 둘은 각각 남기고 동명이인 가능으로 표시한다.
+ */
+export function mergeReceptionCandidates(base: FirstVisitCandidateDto[], rows: ReceptionVisitRow[], date: string): ReceptionMerge {
+  const kept: (ReceptionVisitRow & { name: string })[] = [];
+  for (const row of rows) {
+    if (row.visitKind === '재진') continue;
+    const name = row.patientName.trim();
+    if (!name) continue;
+    const birth = (row.birthDate ?? '').trim();
+    if (birth && kept.some((k) => k.name === name && (k.birthDate ?? '').trim() === birth)) continue;
+    kept.push({ ...row, name });
+  }
+
+  const consumed = new Set<FirstVisitCandidateDto>();
+  const added: FirstVisitCandidateDto[] = [];
+  for (const row of kept) {
+    const match = base.find(
+      (c) => !consumed.has(c) && c.patientName.trim() === row.name && (c.kind ?? classifyVisit(c.previousVisitDates, date)) !== '재진'
+    );
+    if (match) {
+      consumed.add(match);
+      continue;
+    }
+    const sameNameInBase = base.some((c) => c.patientName.trim() === row.name);
+    const sameNameInReception = kept.filter((k) => k.name === row.name).length > 1;
+    const revisit = row.visitKind === '재초';
+    added.push({
+      patientName: row.name,
+      chartNo: '',
+      phone: '',
+      doctorName: '',
+      timeLabel: '',
+      previousVisitDates: [],
+      possibleHomonym: sameNameInBase || sameNameInReception,
+      kind: revisit ? '재초진' : '초진(추정)',
+      kindReason: `접수기록부에서 ${revisit ? '재초진' : '초진'}으로 적혔어요`,
+      countedInNewCount: false,
+      likelyNewChart: null,
+      fromReception: true,
+      receptionId: row.id,
+    });
+  }
+  return {
+    candidates: [...base, ...added],
+    receptionFirstCount: kept.filter((k) => k.visitKind === '초').length,
+    receptionRevisitCount: kept.filter((k) => k.visitKind === '재초').length,
+  };
 }
 
 export interface PriorVisitRow {

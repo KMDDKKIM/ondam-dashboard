@@ -83,3 +83,22 @@ export function summarize(records: ReceptionRecord[]): ReceptionSummary {
   }
   return s;
 }
+
+/** 접수기록부에서 "예약" 칸에 체크된(다음 예약을 잡은) 줄 수. */
+export function countReservedRecords(records: Pick<ReceptionRecord, 'reserved'>[]): number {
+  return records.filter((r) => r.reserved).length;
+}
+
+/**
+ * 일일결산 "다음예약 접수 환자수"를 접수기록부로 미리 채울 값. 채우지 않을 때는 null:
+ * 이미 저장해 둔 결산이 있거나(저장 여부를 확인하지 못한 때 포함), 칸에 이미 값이 있거나, 체크된 줄이 하나도 없을 때.
+ * (체크가 0개면 0을 채우지 않는다 — 접수기록부의 예약 칸을 쓰지 않은 날과 정말 0명인 날을 구분할 수 없어서.)
+ */
+export function nextBookingPrefill(
+  records: Pick<ReceptionRecord, 'reserved'>[],
+  state: { savedClosingExists: boolean; currentValue: string }
+): number | null {
+  if (state.savedClosingExists || state.currentValue.trim() !== '') return null;
+  const count = countReservedRecords(records);
+  return count > 0 ? count : null;
+}
