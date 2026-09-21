@@ -8,6 +8,7 @@ import { totalUnreadCount } from '@/lib/chatHelpers';
 import { isStaffGrade } from '@/lib/staffGrade';
 import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
+import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -42,10 +43,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .catch(() => false);
 
   const remoteNewCount = (await countNewRemoteRequests(supabase)) ?? 0;
+  const herbQueueCount = (await countWaitingHerbQueue(supabase)) ?? 0;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} closingMissing={closingMissing} remoteNewCount={remoteNewCount} />
+      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} closingMissing={closingMissing} remoteNewCount={remoteNewCount} herbQueueCount={herbQueueCount} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>

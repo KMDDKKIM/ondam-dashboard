@@ -10,6 +10,8 @@ export interface TodayStatusProps {
   supply: { waitingOrder: number; waitingArrival: number } | null;
   /** 처리 대기 중인 비대면진료 신청 수. null 이면 조회 실패. */
   remoteNew: number | null;
+  /** 원장님 처리를 기다리는 한약 처방 신청 수. null 이면 조회 실패. */
+  herbWaiting?: number | null;
 }
 
 interface Row {
@@ -23,7 +25,7 @@ interface Row {
 
 // 홈 맨 위 "오늘 해야 할 일" — 직원이 놓치기 쉬운 것(어제 결산, 재고 0, 물품 대기)만 한눈에.
 // 해야 할 것은 빨간 배지, 끝난 것은 초록 체크, 조회에 실패한 것은 회색 "확인 불가"로 보여 준다.
-export function TodayStatus({ missingClosing, zeroStockCount, supply, remoteNew }: TodayStatusProps) {
+export function TodayStatus({ missingClosing, zeroStockCount, supply, remoteNew, herbWaiting = 0 }: TodayStatusProps) {
   const rows: Row[] = [];
 
   if (missingClosing == null) {
@@ -66,6 +68,14 @@ export function TodayStatus({ missingClosing, zeroStockCount, supply, remoteNew 
     rows.push({ key: 'remote', icon: '📨', text: `비대면진료 신청 ${remoteNew}건이 처리를 기다려요`, state: 'todo', badge: '처리하기', href: '/remote-consult-alerts' });
   } else {
     rows.push({ key: 'remote', icon: '📨', text: '처리할 비대면진료 신청 없음', state: 'ok', badge: '정상', href: '/remote-consult-alerts' });
+  }
+
+  if (herbWaiting == null) {
+    rows.push({ key: 'herbQueue', icon: '🫖', text: '한약 처방 대기', state: 'unknown', badge: '확인 불가', href: '/herb-queue' });
+  } else if (herbWaiting > 0) {
+    rows.push({ key: 'herbQueue', icon: '🫖', text: `한약 처방 ${herbWaiting}건이 출력을 기다려요`, state: 'todo', badge: '보기', href: '/herb-queue' });
+  } else {
+    rows.push({ key: 'herbQueue', icon: '🫖', text: '대기 중인 한약 처방 없음', state: 'ok', badge: '정상', href: '/herb-queue' });
   }
 
   const todoCount = rows.filter((r) => r.state === 'todo').length;

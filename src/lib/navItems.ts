@@ -36,6 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: '한약',
     items: [
+      { href: '/herb-queue', label: '한약 대기방', icon: '🫖' },
       { href: '/herb-print', label: '한약 복용법 출력', icon: '💊' },
       { href: '/herb-inventory', label: '한약재 재고 현황', icon: '🌿' },
     ],
