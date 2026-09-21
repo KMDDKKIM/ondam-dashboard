@@ -8,8 +8,8 @@ create table if not exists reception_records (
   id uuid primary key default gen_random_uuid(),
   visit_date date not null,
   seq integer not null,
-  -- 이름 앞에 적는 "초)" / "재초)" 표시. 비어 있으면 재진.
-  visit_kind text check (visit_kind in ('초', '재초')),
+  -- 초(초진) / 재초(재초진) / 재진. 종이 노트에서 이름 앞에 적던 "초)", "재초)"(재진은 표시 없음).
+  visit_kind text not null default '재진' check (visit_kind in ('초', '재초', '재진')),
   patient_name text not null,
   -- 손으로 적던 "44.6.30" 모양 그대로 받는다(두 자리 연도라 날짜 타입으로 바꾸지 않는다).
   birth_date text,
@@ -22,6 +22,13 @@ create table if not exists reception_records (
   created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+-- 구분을 먼저 (초/재초 + 빈칸) 모양으로 만들어 둔 경우를 새 모양(초/재초/재진)으로 바꾼다. 새로 만든 표에는 영향 없다.
+alter table reception_records drop constraint if exists reception_records_visit_kind_check;
+update reception_records set visit_kind = '재진' where visit_kind is null;
+alter table reception_records alter column visit_kind set default '재진';
+alter table reception_records alter column visit_kind set not null;
+alter table reception_records add constraint reception_records_visit_kind_check check (visit_kind in ('초', '재초', '재진'));
 
 create index if not exists reception_records_date_idx on reception_records (visit_date, seq);
 

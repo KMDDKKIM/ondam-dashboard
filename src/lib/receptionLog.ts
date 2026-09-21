@@ -1,8 +1,10 @@
 // 접수기록부의 순수 로직(날짜 머리글, 진료비 입력, 하루 합계). 화면/DB 코드는 따로 있다.
 
 export type ReceptionPayment = '현금' | '카드' | '미수';
-/** 이름 앞에 적던 "초)" / "재초)" 표시. 빈 값은 재진. */
-export type ReceptionVisitKind = '' | '초' | '재초';
+/** 초진 / 재초진 / 재진 — 종이 노트에서 이름 앞에 적던 "초)", "재초)"(재진은 표시 없이 비워 뒀다). */
+export type ReceptionVisitKind = '초' | '재초' | '재진';
+
+export const VISIT_KINDS: ReceptionVisitKind[] = ['초', '재초', '재진'];
 
 export const PAYMENTS: ReceptionPayment[] = ['현금', '카드', '미수'];
 

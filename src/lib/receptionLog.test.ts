@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatFee, formatLogHeader, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
 
 function rec(o: Partial<ReceptionRecord>): ReceptionRecord {
-  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, note: null, ...o };
+  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, note: null, ...o };
 }
 
 describe('날짜 머리글', () => {

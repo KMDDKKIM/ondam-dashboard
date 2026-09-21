@@ -11,6 +11,7 @@ import {
 } from '@/lib/supabase/receptionRecords';
 import {
   PAYMENTS,
+  VISIT_KINDS,
   formatFee,
   formatLogHeader,
   normalizeBirth,
@@ -27,15 +28,11 @@ const inputStyle = { fontSize: 14, padding: 4, width: '100%', border: 'none', ba
 const selectStyle = { fontSize: 14, padding: 2, width: '100%' } as const;
 const navButtonStyle = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-line)', background: 'var(--color-surface)', fontSize: 14, fontWeight: 600 } as const;
 
-const KIND_OPTIONS: { value: ReceptionVisitKind; label: string }[] = [
-  { value: '', label: '' },
-  { value: '초', label: '초' },
-  { value: '재초', label: '재초' },
-];
+const KIND_OPTIONS: { value: ReceptionVisitKind; label: string }[] = VISIT_KINDS.map((k) => ({ value: k, label: k }));
 
 function emptyDraft() {
   return {
-    visitKind: '' as ReceptionVisitKind,
+    visitKind: '재진' as ReceptionVisitKind,
     patientName: '',
     birthDate: '',
     treatment: '',
@@ -379,7 +376,7 @@ export default function ReceptionLogPage() {
         </table>
         {loading && <p className="muted-text" style={{ marginTop: 8, fontSize: 13 }}>불러오는 중…</p>}
         <p className="muted-text" style={{ marginTop: 8, fontSize: 12 }}>
-          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분의 "초"·"재초"는 이름 앞에 적던 초)·재초) 표시고, 비워 두면 재진이에요.
+          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분은 초(초진) · 재초(재초진) · 재진 중에서 골라요.
         </p>
       </div>
 

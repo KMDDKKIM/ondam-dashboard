@@ -5,7 +5,7 @@ interface Row {
   id: string;
   visit_date: string;
   seq: number;
-  visit_kind: '초' | '재초' | null;
+  visit_kind: '초' | '재초' | '재진' | null;
   patient_name: string;
   birth_date: string | null;
   treatment: string | null;
@@ -20,7 +20,7 @@ function rowToRecord(r: Row): ReceptionRecord {
     id: r.id,
     visitDate: r.visit_date,
     seq: r.seq,
-    visitKind: r.visit_kind ?? '',
+    visitKind: r.visit_kind ?? '재진',
     patientName: r.patient_name,
     birthDate: r.birth_date,
     treatment: r.treatment,
@@ -66,7 +66,7 @@ export async function createReceptionRecord(
     .insert({
       visit_date: input.visitDate,
       seq: currentMaxSeq + 1,
-      visit_kind: input.visitKind || null,
+      visit_kind: input.visitKind,
       patient_name: input.patientName,
       birth_date: input.birthDate,
       treatment: input.treatment,
@@ -87,7 +87,7 @@ export type ReceptionRecordPatch = Partial<Omit<ReceptionRecord, 'id' | 'visitDa
 // RLS가 막으면 오류 없이 0행이 바뀌므로 실제로 바뀌었는지 확인한다.
 export async function updateReceptionRecord(supabase: SupabaseClient, id: string, patch: ReceptionRecordPatch): Promise<void> {
   const db: Record<string, unknown> = {};
-  if ('visitKind' in patch) db.visit_kind = patch.visitKind || null;
+  if ('visitKind' in patch) db.visit_kind = patch.visitKind;
   if ('patientName' in patch) db.patient_name = patch.patientName;
   if ('birthDate' in patch) db.birth_date = patch.birthDate;
   if ('treatment' in patch) db.treatment = patch.treatment;
