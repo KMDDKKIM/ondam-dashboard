@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listFirstVisitCallCandidates } from './happyCallPatients';
 import { baseChartNo } from '@/lib/firstVisit';
+import { fetchAllPages } from '@/lib/fetchAllPages';
+import { chartKey, matchPhone, usablePhone, type HistoryPhoneRow } from '@/lib/phoneLookup';
 import {
   applyCallAction,
   buildWorklist,
@@ -161,12 +163,6 @@ interface ManualRow extends SimpleCallRow {
   phone?: string | null;
 }
 
-function usablePhone(phone: string | null | undefined): string | null {
-  const p = (phone ?? '').trim();
-  // "010-" 처럼 앞자리만 적힌 번호는 걸 수 없으니 쓰지 않는다.
-  return p.replace(/\D/g, '').length >= 9 ? p : null;
-}
-
 /**
  * 비급여 구매에서 만든 수동 콜(해피콜 행 id)의 연락처를 찾는다. 구매에 연락처가 적혀 있으면 그것을,
  * 없으면(비급여 현황에는 연락처를 받지 않는다) 그 차트번호로 가져온 내원 이력(patient_visit_history)에서 찾는다.
@@ -208,6 +204,75 @@ async function phonesByManualEntryId(supabase: SupabaseClient, entryIds: string[
     }
   }
   return phones;
+}
+
+const PHONE_LOOKUP_CHUNK = 100;
+
+async function fetchHistoryRows(
+  supabase: SupabaseClient,
+  column: 'chart_no' | 'patient_name',
+  values: string[]
+): Promise<HistoryPhoneRow[]> {
+  const rows: HistoryPhoneRow[] = [];
+  for (let i = 0; i < values.length; i += PHONE_LOOKUP_CHUNK) {
+    const chunk = values.slice(i, i + PHONE_LOOKUP_CHUNK);
+    const page = await fetchAllPages<HistoryPhoneRow>((from, to) =>
+      supabase
+        .from('patient_visit_history')
+        .select('chart_no, patient_name, phone', { count: 'exact' })
+        .in(column, chunk)
+        .order('chart_no')
+        .range(from, to)
+    );
+    rows.push(...page);
+  }
+  return rows;
+}
+
+/** 차트번호로 조회할 때 같이 물어볼 표기들(원본, "-1" 뗀 것, 앞의 0을 뗀/6자리로 채운 것). */
+function chartVariants(chartNo: string): string[] {
+  const trimmed = chartNo.trim();
+  const key = chartKey(trimmed);
+  return [...new Set([trimmed, baseChartNo(trimmed), key, key.padStart(6, '0')].filter(Boolean))];
+}
+
+/**
+ * 연락처가 없는 콜(초진/한약/린다이어트 등)에 내원 이력(patient_visit_history)에서 번호를 채운다.
+ * 차트번호가 맞으면 그 번호, 아니면 이름이 정확히 같고 번호가 하나뿐일 때만(src/lib/phoneLookup.ts).
+ * 동명이인은 고르지 않고 표시만 한다. DB 에는 쓰지 않는다.
+ * 보조 기능이므로 실패해도 콜 목록을 가리지 않는다 — 오류는 삼키고 번호 없이 그대로 돌려준다.
+ */
+async function fillPhonesFromHistory(supabase: SupabaseClient, items: WorklistItem[]): Promise<WorklistItem[]> {
+  const missing = items.filter((i) => !i.phone);
+  if (missing.length === 0) return items;
+  try {
+    const charts = [...new Set(missing.flatMap((i) => (i.chartNo?.trim() ? chartVariants(i.chartNo) : [])))];
+    const history = new Map<string, HistoryPhoneRow>();
+    const add = (rows: HistoryPhoneRow[]) => rows.forEach((r) => history.set(r.chart_no ?? `${r.patient_name}|${r.phone}`, r));
+    if (charts.length > 0) add(await fetchHistoryRows(supabase, 'chart_no', charts));
+
+    // 차트번호가 없거나 내원 이력에서 그 차트를 못 찾은 콜은 이름으로 찾는다.
+    const knownCharts = new Set([...history.values()].map((r) => chartKey(r.chart_no)));
+    const names = [
+      ...new Set(
+        missing
+          .filter((i) => !chartKey(i.chartNo) || !knownCharts.has(chartKey(i.chartNo)))
+          .map((i) => i.patientName.trim())
+          .filter((n) => n && n !== '-')
+      ),
+    ];
+    if (names.length > 0) add(await fetchHistoryRows(supabase, 'patient_name', names));
+
+    const rows = [...history.values()];
+    return items.map((item) => {
+      if (item.phone) return item;
+      const found = matchPhone({ patientName: item.patientName, chartNo: item.chartNo }, rows);
+      if (!found.phone && !found.ambiguous) return item;
+      return { ...item, phone: found.phone, phoneSource: found.source, phoneAmbiguous: found.ambiguous };
+    });
+  } catch {
+    return items;
+  }
 }
 
 /**
@@ -260,7 +325,8 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         kind: 'firstVisit',
         id: p.id,
         patientName: p.patientName,
-        phone: p.phone ?? null,
+        phone: usablePhone(p.phone),
+        chartNo: p.chartNo ?? null,
         doctorStaffId: p.doctorStaffId,
         dueDate: progress.dueDate,
         originalDue: progress.originalDue,
@@ -317,7 +383,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
     ),
   ];
 
-  return buildWorklist(items, today);
+  return buildWorklist(await fillPhonesFromHistory(supabase, items), today);
 }
 
 /**

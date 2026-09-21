@@ -168,6 +168,12 @@ export interface WorklistItem {
   callNumber?: 1 | 2 | 3;
   patientName: string;
   phone: string | null;
+  /** 콜 행에 적힌 차트번호(초진). 내원 이력에서 연락처를 찾을 때만 쓴다. */
+  chartNo?: string | null;
+  /** phone 을 내원 이력에서 찾았다면 그 근거(차트번호 / 이름). 행에 직접 적힌 번호는 없음 */
+  phoneSource?: 'chart' | 'name' | null;
+  /** 같은 이름이 여러 명이라 번호를 고르지 않았음 */
+  phoneAmbiguous?: boolean;
   doctorStaffId: string | null;
   dueDate: string;
   /** 첫 부재중으로 옮겨지기 전의 예정일(되돌리기용) */

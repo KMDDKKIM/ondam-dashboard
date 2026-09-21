@@ -163,7 +163,7 @@ export default function HappyCallListPage() {
                       <OrdinalBadge attempts={item.attempts} />
                     </td>
                     <td style={cellStyle}>
-                      <PhoneCell phone={item.phone} />
+                      <PhoneCell phone={item.phone} source={item.phoneSource} ambiguous={item.phoneAmbiguous} />
                     </td>
                     <td style={cellStyle}>{item.doctorStaffId ? (staffNames[item.doctorStaffId] ?? '-') : '-'}</td>
                     <td style={cellStyle}>
@@ -226,7 +226,7 @@ export default function HappyCallListPage() {
                               {item.dueDate} <span className="muted-text" style={{ fontSize: 12 }}>({days === 1 ? '내일' : `${days}일 뒤`})</span>
                             </td>
                             <td style={cellStyle}>
-                              <PhoneCell phone={item.phone} />
+                              <PhoneCell phone={item.phone} source={item.phoneSource} ambiguous={item.phoneAmbiguous} />
                             </td>
                             <td style={cellStyle}>{[item.note, item.memo].filter(Boolean).join(' · ') || ''}</td>
                             <td style={cellStyle}>
