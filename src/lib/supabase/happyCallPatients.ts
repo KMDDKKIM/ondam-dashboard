@@ -10,7 +10,6 @@ interface HappyCallPatientRow {
   first_visit_date: string;
   revisit_1: string | null;
   revisit_2: string | null;
-  revisit_3: string | null;
   jabo_herb_1: string | null;
   jabo_herb_2: string | null;
   jabo_herb_3: string | null;
@@ -41,7 +40,6 @@ function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
     firstVisitDate: row.first_visit_date,
     revisit1: row.revisit_1,
     revisit2: row.revisit_2,
-    revisit3: row.revisit_3,
     jaboHerb1: row.jabo_herb_1,
     jaboHerb2: row.jabo_herb_2,
     jaboHerb3: row.jabo_herb_3,
@@ -153,7 +151,6 @@ export type HappyCallPatientPatch = Partial<{
   phone: string | null;
   revisit1: string | null;
   revisit2: string | null;
-  revisit3: string | null;
   jaboHerb1: string | null;
   jaboHerb2: string | null;
   jaboHerb3: string | null;
@@ -178,7 +175,6 @@ export async function updateHappyCallPatient(
   if ('phone' in patch) dbPatch.phone = patch.phone;
   if ('revisit1' in patch) dbPatch.revisit_1 = patch.revisit1;
   if ('revisit2' in patch) dbPatch.revisit_2 = patch.revisit2;
-  if ('revisit3' in patch) dbPatch.revisit_3 = patch.revisit3;
   if ('jaboHerb1' in patch) dbPatch.jabo_herb_1 = patch.jaboHerb1;
   if ('jaboHerb2' in patch) dbPatch.jabo_herb_2 = patch.jaboHerb2;
   if ('jaboHerb3' in patch) dbPatch.jabo_herb_3 = patch.jaboHerb3;

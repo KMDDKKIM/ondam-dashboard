@@ -158,7 +158,7 @@ export default function HappyCallRegisterPage() {
     }
   }
 
-  type TextField = 'revisit1' | 'revisit2' | 'revisit3' | 'jaboHerb1' | 'jaboHerb2' | 'jaboHerb3' | 'nextVisitNote' | 'callLog' | 'memo' | 'phone' | 'chartNo';
+  type TextField = 'revisit1' | 'revisit2' | 'jaboHerb1' | 'jaboHerb2' | 'jaboHerb3' | 'nextVisitNote' | 'callLog' | 'memo' | 'phone' | 'chartNo';
 
   async function handleFieldUpdate(id: string, field: TextField, value: string) {
     const next = value.trim() || null;
@@ -264,7 +264,7 @@ export default function HappyCallRegisterPage() {
         )}
 
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1466, width: '100%', margin: '0 auto' }}>
+      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1408, width: '100%', margin: '0 auto' }}>
         <colgroup>
           <col style={{ width: 80 }} />
           <col style={{ width: 66 }} />
@@ -281,13 +281,12 @@ export default function HappyCallRegisterPage() {
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
-          <col style={{ width: 58 }} />
           <col style={{ width: 88 }} />
           <col style={{ width: 44 }} />
         </colgroup>
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
-            {['성함', '차트번호', '연락처', '진료의', '구분', '초진/재초진', '약침/패키지구분', '다음내원메모', '통화내역', '초진일', '재내원1', '재내원2', '재내원3', '자보약1', '자보약2', '자보약3', '메모', ''].map((h, i) => (
+            {['성함', '차트번호', '연락처', '진료의', '구분', '초진/재초진', '약침/패키지구분', '다음내원메모', '통화내역', '1진 초진일', '2진', '3진', '1차약', '2차약', '3차약', '메모', ''].map((h, i) => (
               <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left', fontSize: 12, lineHeight: 1.25 }}>
                 {h}
               </th>
@@ -364,7 +363,7 @@ export default function HappyCallRegisterPage() {
               <td style={cellStyle}>
                 <DateCell value={p.firstVisitDate} todayYear={todayYear} onCommit={(v) => handleDateUpdate(p.id, v)} />
               </td>
-              {(['revisit1', 'revisit2', 'revisit3', 'jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
+              {(['revisit1', 'revisit2', 'jaboHerb1', 'jaboHerb2', 'jaboHerb3'] as const).map((field) => (
                 <td key={field} style={cellStyle}>
                   <DateCell value={p[field] ?? null} todayYear={todayYear} onCommit={(v) => handleFieldUpdate(p.id, field, v)} />
                 </td>
@@ -470,7 +469,7 @@ export default function HappyCallRegisterPage() {
             <td style={cellStyle}>
               <DateCell value={draft.firstVisitDate} todayYear={todayYear} onCommit={(v) => setDraft((d) => ({ ...d, firstVisitDate: v || todayKst() }))} />
             </td>
-            <td style={cellStyle} colSpan={8}></td>
+            <td style={cellStyle} colSpan={7}></td>
           </tr>
         </tbody>
       </table>

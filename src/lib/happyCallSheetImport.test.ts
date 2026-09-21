@@ -68,7 +68,7 @@ describe('parseSheetPaste', () => {
   });
 
   it('머리글이 없으면 이 화면 표의 순서로 본다', () => {
-    const text = '홍길동\t김동규\t자보\t성공\t다음주\t통화 완료\t2026-09-14\t9/21\t\t\t9/28\t\t\t메모';
+    const text = '홍길동\t김동규\t자보\t성공\t다음주\t통화 완료\t2026-09-14\t9/21\t\t9/28\t\t\t메모';
     const { rows, headerFound } = parseSheetPaste(text, TODAY);
     expect(headerFound).toBe(false);
     expect(rows[0]).toMatchObject({
@@ -110,10 +110,10 @@ describe('parseSheetPaste', () => {
 // 실제 구글시트에서 복사한 것과 같은 모양(머리글 없음, 맨 앞 빈 열, 사이사이 빈 칸, 맨 뒤 계산 칸)을 가상 데이터로 만든다.
 function sheetLine(o: {
   name: string; doctor: string; type: string; acu?: string; memo?: string; call?: string;
-  first: string; r1?: string; r2?: string; r3?: string;
+  first: string; r1?: string; r2?: string; h1?: string;
 }): string {
   const cells = ['', o.name, o.doctor, o.type, '', o.acu ?? '', o.memo ?? '', '', '', '', '', '', o.call ?? '', '', '', '', '', '',
-    o.first, o.r1 ?? '', o.r2 ?? '', o.r3 ?? '', '', '', '', '',
+    o.first, o.r1 ?? '', o.r2 ?? '', o.h1 ?? '', '', '', '', '',
     '202634', o.doctor, o.type, '2', '2', '0', '0', 'N', '1', '1', '202609'];
   return cells.join('\t');
 }
@@ -160,11 +160,18 @@ describe('parseSheetPaste - 실제 시트 모양(머리글 없음)', () => {
     expect(row.errors).toEqual([]);
   });
 
-  it('초진일과 같거나 빠른 재내원 날짜는 등록하지 않고 알려 준다', () => {
-    const text = sheetLine({ name: '흥부', doctor: '김동규', type: '건보', first: '2026. 8. 21', r3: '2026. 8. 21' });
+  it('시트의 1차약 칸은 자보약1로 읽고 3진 자리로 착각하지 않는다', () => {
+    const text = sheetLine({ name: '한성애', doctor: '김동규', type: '자보', first: '2026. 8. 22', r1: '2026. 8. 24', r2: '2026. 8. 25', h1: '2026. 8. 22' });
+    expect(parseSheetPaste(text, TODAY).rows[0]).toMatchObject({
+      firstVisitDate: '2026-08-22', revisit1: '2026-08-24', revisit2: '2026-08-25', jaboHerb1: '2026-08-22', errors: [],
+    });
+  });
+
+  it('초진일과 같거나 빠른 2진·3진 날짜는 등록하지 않고 알려 준다', () => {
+    const text = sheetLine({ name: '흥부', doctor: '김동규', type: '건보', first: '2026. 8. 21', r2: '2026. 8. 21' });
     const row = parseSheetPaste(text, TODAY).rows[0];
-    expect(row.revisit3).toBeNull();
-    expect(row.notes[0]).toContain('재내원3');
+    expect(row.revisit2).toBeNull();
+    expect(row.notes[0]).toContain('3진');
     expect(row.errors).toEqual([]);
   });
 

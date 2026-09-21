@@ -19,7 +19,6 @@ export type SheetField =
   | 'firstVisitDate'
   | 'revisit1'
   | 'revisit2'
-  | 'revisit3'
   | 'jaboHerb1'
   | 'jaboHerb2'
   | 'jaboHerb3'
@@ -51,9 +50,15 @@ const HEADER_ALIASES: Record<string, SheetField> = {
   통화내역: 'callLog',
   초진일: 'firstVisitDate',
   초진날짜: 'firstVisitDate',
+  // 시트 머리글: 초진일 칸 = "1진", 재내원일 칸 = "2진"·"3진", 자보약 처방 = "1차약"·"2차약"·"3차약"
+  '1진': 'firstVisitDate',
+  '2진': 'revisit1',
+  '3진': 'revisit2',
   재내원1: 'revisit1',
   재내원2: 'revisit2',
-  재내원3: 'revisit3',
+  '1차약': 'jaboHerb1',
+  '2차약': 'jaboHerb2',
+  '3차약': 'jaboHerb3',
   자보약1: 'jaboHerb1',
   자보약2: 'jaboHerb2',
   자보약3: 'jaboHerb3',
@@ -64,7 +69,7 @@ const HEADER_ALIASES: Record<string, SheetField> = {
 type Layout = Partial<Record<SheetField, number>>;
 
 // 실제 구글시트의 열 위치 — 성함 칸(n)을 0으로 두고 오른쪽으로 센 거리.
-// 성함 · 진료의 · 구분 · (빈 칸) · 약침 · 다음내원메모 · (빈 칸 5) · 통화내역 · (빈 칸 5) · 초진일 · 재내원1~3 · 자보약1~3 · 메모
+// 성함 · 진료의 · 구분 · (빈 칸) · 약침 · 다음내원메모 · (빈 칸 5) · 통화내역 · (빈 칸 5) · 1진(초진일) · 2진 · 3진 · 1차약~3차약 · 메모
 const SHEET_LAYOUT: Layout = {
   patientName: 0,
   doctorName: 1,
@@ -76,12 +81,13 @@ const SHEET_LAYOUT: Layout = {
   firstVisitDate: 17,
   revisit1: 18,
   revisit2: 19,
-  revisit3: 20,
-  jaboHerb1: 21,
-  jaboHerb2: 22,
-  jaboHerb3: 23,
-  memo: 24,
+  jaboHerb1: 20,
+  jaboHerb2: 21,
+  jaboHerb3: 22,
+  memo: 23,
 };
+// 시트에서 3차약 뒤로 메모 칸이 한두 칸 더 떨어져 있을 수 있어, 메모 칸이 비면 이 칸도 본다.
+const SHEET_MEMO_FALLBACK_OFFSET = 24;
 
 // 빈 열 없이 이 화면 표의 순서(초진/재초진·연락처·차트번호 제외)로 붙여넣었을 때.
 const PAGE_LAYOUT: Layout = {
@@ -94,11 +100,10 @@ const PAGE_LAYOUT: Layout = {
   firstVisitDate: 6,
   revisit1: 7,
   revisit2: 8,
-  revisit3: 9,
-  jaboHerb1: 10,
-  jaboHerb2: 11,
-  jaboHerb3: 12,
-  memo: 13,
+  jaboHerb1: 9,
+  jaboHerb2: 10,
+  jaboHerb3: 11,
+  memo: 12,
 };
 
 export interface ParsedSheetRow {
@@ -115,7 +120,6 @@ export interface ParsedSheetRow {
   firstVisitDate: string | null;
   revisit1: string | null;
   revisit2: string | null;
-  revisit3: string | null;
   jaboHerb1: string | null;
   jaboHerb2: string | null;
   jaboHerb3: string | null;
@@ -337,9 +341,8 @@ function buildRow(get: (field: SheetField) => string, rowNumber: number, baseYea
     nextVisitNote: empty(get('nextVisitNote')),
     callLog: empty(get('callLog')),
     firstVisitDate,
-    revisit1: dateField('revisit1', '재내원1', true),
-    revisit2: dateField('revisit2', '재내원2', true),
-    revisit3: dateField('revisit3', '재내원3', true),
+    revisit1: dateField('revisit1', '2진', true),
+    revisit2: dateField('revisit2', '3진', true),
     jaboHerb1: dateField('jaboHerb1', '자보약1', false),
     jaboHerb2: dateField('jaboHerb2', '자보약2', false),
     jaboHerb3: dateField('jaboHerb3', '자보약3', false),
@@ -382,7 +385,10 @@ export function parseSheetPaste(text: string, today: string): SheetParseResult {
     return buildRow(
       (field) => {
         const offset = layout[field];
-        return offset === undefined ? '' : (cells[n + offset] ?? '');
+        if (offset === undefined) return '';
+        const value = cells[n + offset] ?? '';
+        if (field === 'memo' && layout === SHEET_LAYOUT && !value.trim()) return cells[n + SHEET_MEMO_FALLBACK_OFFSET] ?? '';
+        return value;
       },
       idx + 1,
       baseYear

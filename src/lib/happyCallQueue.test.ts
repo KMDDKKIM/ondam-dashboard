@@ -24,7 +24,6 @@ function makePatient(overrides: Partial<HappyCallPatient> = {}): HappyCallPatien
     firstVisitDate: '2026-09-17',
     revisit1: null,
     revisit2: null,
-    revisit3: null,
     jaboHerb1: null,
     jaboHerb2: null,
     jaboHerb3: null,

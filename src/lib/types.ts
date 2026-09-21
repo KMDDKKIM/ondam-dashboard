@@ -13,7 +13,6 @@ export interface HappyCallPatient {
   firstVisitDate: string;
   revisit1: string | null;
   revisit2: string | null;
-  revisit3: string | null;
   jaboHerb1: string | null;
   jaboHerb2: string | null;
   jaboHerb3: string | null;

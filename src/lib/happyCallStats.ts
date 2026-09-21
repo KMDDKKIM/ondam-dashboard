@@ -38,11 +38,11 @@ export function computeDietCallDates(detoxStartDate: string): string[] {
   return dates;
 }
 
-// 삼진 = 초진 후 3주(21일) 안에 3번 내원. 재내원 1~3이 모두 있고, 세 번째 내원일이
-// 초진일 + 21일 이내여야 한다(그보다 늦게 채워진 3번째 내원은 삼진이 아니다).
+// 삼진 = 초진 후 3주(21일) 안에 3번 내원(1진 = 초진일, 2진 = 재내원1, 3진 = 재내원2). 2진·3진이 모두 있고,
+// 3진 내원일이 초진일 + 21일 이내여야 한다(그보다 늦게 채워진 3진은 삼진이 아니다).
 export function isTripleVisit(p: HappyCallPatient): boolean {
-  if (!p.revisit1 || !p.revisit2 || !p.revisit3) return false;
-  const latest = [p.revisit1, p.revisit2, p.revisit3].reduce((a, b) => (a > b ? a : b));
+  if (!p.revisit1 || !p.revisit2) return false;
+  const latest = p.revisit1 > p.revisit2 ? p.revisit1 : p.revisit2;
   return daysBetween(p.firstVisitDate, latest) <= MATURITY_DAYS;
 }
 
@@ -50,7 +50,7 @@ export function isTripleVisit(p: HappyCallPatient): boolean {
 // 실제로는 왔는데 입력이 안 된 것일 수 있어 대조를 요청한다.
 export function isUnreconciledRevisit(p: HappyCallPatient, referenceDate: string): boolean {
   return (
-    daysBetween(p.firstVisitDate, referenceDate) >= MATURITY_DAYS && !p.revisit1 && !p.revisit2 && !p.revisit3
+    daysBetween(p.firstVisitDate, referenceDate) >= MATURITY_DAYS && !p.revisit1 && !p.revisit2
   );
 }
 

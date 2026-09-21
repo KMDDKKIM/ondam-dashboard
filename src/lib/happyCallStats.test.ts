@@ -61,7 +61,6 @@ function makePatient(overrides: Partial<HappyCallPatient>): HappyCallPatient {
     firstVisitDate: '2026-09-01',
     revisit1: null,
     revisit2: null,
-    revisit3: null,
     jaboHerb1: null,
     jaboHerb2: null,
     jaboHerb3: null,
@@ -101,13 +100,12 @@ describe('computeFirstVisitStats', () => {
     expect(stats.tripleVisitRate).toBe(0);
   });
 
-  it('counts a mature patient with all 3 revisits as a triple-visit', () => {
+  it('counts a mature patient with 2진 and 3진 as a triple-visit', () => {
     const patients = [
       makePatient({
         firstVisitDate: '2026-09-01',
         revisit1: '2026-09-05',
         revisit2: '2026-09-10',
-        revisit3: '2026-09-15',
       }),
     ];
     const stats = computeFirstVisitStats(patients, '2026-09-22');
@@ -157,27 +155,27 @@ describe('getWeekRange', () => {
   });
 });
 
-describe('isTripleVisit (3 visits within 21 days after the first visit)', () => {
+describe('isTripleVisit (1진 + 2진 + 3진 within 21 days after the first visit)', () => {
   const base = { firstVisitDate: '2026-09-01' };
 
-  it('accepts a third visit exactly 21 days after the first', () => {
-    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-22' }))).toBe(true);
+  it('accepts the 3진 visit exactly 21 days after the first', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-22' }))).toBe(true);
   });
 
-  it('rejects a third visit on day 22', () => {
-    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-23' }))).toBe(false);
+  it('rejects the 3진 visit on day 22', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-23' }))).toBe(false);
   });
 
-  it('rejects when any revisit is missing', () => {
-    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10' }))).toBe(false);
+  it('rejects when 3진 is missing', () => {
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-05' }))).toBe(false);
   });
 
   it('is judged by the latest date even if the revisit columns are out of order', () => {
-    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-30', revisit2: '2026-09-05', revisit3: '2026-09-10' }))).toBe(false);
+    expect(isTripleVisit(makePatient({ ...base, revisit1: '2026-09-30', revisit2: '2026-09-05' }))).toBe(false);
   });
 
   it('feeds tripleVisitRate: a late third visit is not a triple', () => {
-    const late = makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-10', revisit3: '2026-09-25' });
+    const late = makePatient({ ...base, revisit1: '2026-09-05', revisit2: '2026-09-25' });
     const stats = computeFirstVisitStats([late], '2026-10-01');
     expect(stats.matureCount).toBe(1);
     expect(stats.tripleVisitRate).toBe(0);

@@ -91,7 +91,6 @@ export function SheetPasteImport({ patients, staffList, onDone }: Props) {
           if (row.callLog) patch.callLog = row.callLog;
           if (row.revisit1) patch.revisit1 = row.revisit1;
           if (row.revisit2) patch.revisit2 = row.revisit2;
-          if (row.revisit3) patch.revisit3 = row.revisit3;
           if (row.jaboHerb1) patch.jaboHerb1 = row.jaboHerb1;
           if (row.jaboHerb2) patch.jaboHerb2 = row.jaboHerb2;
           if (row.jaboHerb3) patch.jaboHerb3 = row.jaboHerb3;
@@ -126,7 +125,7 @@ export function SheetPasteImport({ patients, staffList, onDone }: Props) {
         <div style={{ marginTop: 10 }}>
           <p className="muted-text" style={{ marginBottom: 8, fontSize: 12 }}>
             구글시트에서 행을 드래그해 복사(Ctrl+C)한 뒤 아래에 붙여넣으세요. 머리글(성함, 진료의, 구분, 초진일 …)까지 함께 복사하면 열 순서가
-            달라도 돼요. 머리글 없이 시트의 행만 복사해도 열 위치(성함, 진료의, 구분, 약침, 다음내원메모, 통화내역, 초진일, 재내원1~3 …)로
+            달라도 돼요. 머리글 없이 시트의 행만 복사해도 열 위치(성함, 진료의, 구분, 약침, 다음내원메모, 통화내역, 1진, 2진, 3진 …)로
             읽고, 맨 뒤의 계산 칸은 무시해요.
           </p>
           <textarea
@@ -175,7 +174,7 @@ export function SheetPasteImport({ patients, staffList, onDone }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ textAlign: 'left', color: 'var(--color-muted)', position: 'sticky', top: 0, background: 'var(--color-surface)' }}>
-                      {['줄', '성함', '진료의', '구분', '초진일', '재내원', '메모', '상태'].map((h) => (
+                      {['줄', '성함', '진료의', '구분', '초진일', '2진·3진', '메모', '상태'].map((h) => (
                         <th key={h} style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
                           {h}
                         </th>
@@ -190,7 +189,7 @@ export function SheetPasteImport({ patients, staffList, onDone }: Props) {
                         <td style={{ padding: '5px 8px' }}>{row.doctorName || '-'}</td>
                         <td style={{ padding: '5px 8px' }}>{row.patientType ?? (row.isOtherType ? '기타' : '-')}</td>
                         <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }}>{row.firstVisitDate ?? '-'}</td>
-                        <td style={{ padding: '5px 8px' }}>{[row.revisit1, row.revisit2, row.revisit3].filter(Boolean).length}회</td>
+                        <td style={{ padding: '5px 8px' }}>{[row.revisit1, row.revisit2].filter(Boolean).length}회</td>
                         <td style={{ padding: '5px 8px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.memo ?? ''}</td>
                         <td style={{ padding: '5px 8px', color: status === 'ready' ? 'var(--color-green)' : status === 'error' ? 'var(--color-error)' : 'var(--color-muted)', fontWeight: 600 }}>
                           {STATUS_LABEL[status]}
