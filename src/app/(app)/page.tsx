@@ -62,25 +62,32 @@ export default async function HomePage() {
 
       <QuoteBanner />
 
-      <TodayStatus
-        missingClosing={missingClosing}
-        zeroStockCount={zeroStock}
-        supply={supplyResult.error ? null : supplyResult}
-        remoteNew={remoteNew}
-        herbWaiting={herbWaiting}
-      />
+      {/* 한눈에: 왼쪽에는 이번 달 현황과 오늘 확인할 것, 오른쪽에는 오늘의 해피콜과 오늘 할 일 */}
+      <div className="home-grid">
+        <div className="home-col">
+          {summary ? (
+            <div style={{ marginBottom: 20 }}>
+              <MonthlyStatsPanel initial={summary} isOwner={isOwner} compact />
+            </div>
+          ) : (
+            <p className="error-text" style={{ marginBottom: 20 }}>
+              {summaryError}
+            </p>
+          )}
 
-      {summary ? (
-        <MonthlyStatsPanel initial={summary} isOwner={isOwner} />
-      ) : (
-        <p className="error-text" style={{ marginBottom: 20 }}>
-          {summaryError}
-        </p>
-      )}
+          <TodayStatus
+            missingClosing={missingClosing}
+            zeroStockCount={zeroStock}
+            supply={supplyResult.error ? null : supplyResult}
+            remoteNew={remoteNew}
+            herbWaiting={herbWaiting}
+          />
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 20, alignItems: 'start' }}>
-        <TodayHappyCalls />
-        <TodoChecklist />
+        <div className="home-col">
+          <TodayHappyCalls />
+          <TodoChecklist />
+        </div>
       </div>
     </div>
   );

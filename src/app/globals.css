@@ -226,3 +226,21 @@ a.card:hover {
   background: rgba(44, 143, 214, 0.12);
   outline: none;
 }
+
+/* 홈("오늘") 2단 배치: 왼쪽 현황·확인할 것 / 오른쪽 해피콜·할 일. 좁은 화면에서는 한 단으로 쌓인다. */
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.home-col {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
