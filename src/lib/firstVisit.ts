@@ -190,13 +190,32 @@ export interface SettlementClassifyInput {
  * 이전 내원 기록이 있으면 그것으로(마지막 내원 3개월 이상 전이면 재초진), 기록이 없으면 차트번호로 본다:
  * 새 차트(등록일이 내원일이거나, 기존 차트보다 번호가 큼)는 초진, 예전 차트인데 3개월 기록이 없으면 재초진.
  */
-export function classifySettlementCandidate(input: SettlementClassifyInput): { kind: VisitClassification; reason: string } {
+export interface SettlementClassification {
+  kind: VisitClassification;
+  reason: string;
+  /**
+   * 오늘 새로 만든 재등록 차트("000058-1")라서 결산표의 신규환자수에 이미 들어 있는 재초진.
+   * 누락 대조에서 "신규환자수 + 재초진 후보"로 셀 때 이 사람을 두 번 세지 않도록 표시한다.
+   */
+  countedInNewCount?: boolean;
+}
+
+/** 재등록 차트 여부: 같은 환자가 다시 등록되면 원래 차트번호 뒤에 "-1", "-2"가 붙는다. */
+export function isReissuedChart(chartNo: string): boolean {
+  return /-\d+$/.test(chartNo.trim());
+}
+
+export function classifySettlementCandidate(input: SettlementClassifyInput): SettlementClassification {
   const { chartNo, previousVisitDates, date, newChartNos, maxKnownChart, registeredOnDate, windowCovered } = input;
   const byHistory = classifyVisit(previousVisitDates, date);
   if (byHistory === '재진') return { kind: '재진', reason: '최근 3개월 안에 내원한 기록이 있어요' };
   if (byHistory === '재초진') return { kind: '재초진', reason: '마지막 내원이 3개월 이상 전이에요' };
 
   if (registeredOnDate) return { kind: '초진(추정)', reason: '차트 등록일이 내원일이에요' };
+  // 이전 기록이 없는 재등록 차트(-1)는 오늘 새로 만든 차트다: 예전에 왔던 환자가 다시 등록한 재초진이고, 결산 신규환자수에도 잡힌다.
+  if (isReissuedChart(chartNo)) {
+    return { kind: '재초진', reason: '재등록 차트(-숫자)예요 — 결산 신규환자수에 들어 있어요', countedInNewCount: true };
+  }
   const base = baseChartNo(chartNo);
   const chartNumber = /^\d+$/.test(base) ? Number(base) : null;
   if (chartNumber !== null && maxKnownChart !== null && chartNumber > maxKnownChart) {
@@ -215,6 +234,8 @@ export interface FirstVisitCandidateDto extends VisitCandidate {
   /** 일일결산 기반일 때 서버가 정한 판정과 그 이유(예약 명단 기반이면 없음 — 화면이 이전 내원일로 판정) */
   kind?: VisitClassification;
   kindReason?: string;
+  /** 결산 신규환자수에 이미 들어 있는 재초진(오늘 새로 만든 재등록 차트) */
+  countedInNewCount?: boolean;
   /** 그날 신규환자수 기준으로 차트번호가 새 차트로 보이는가(일일결산 기반일 때만, 판단할 수 없으면 null) */
   likelyNewChart?: boolean | null;
   /** 이 환자의 이전 내원일(예약 명단에서 "내원"으로 표시된 날, 오래된 순, 중복 없음) */

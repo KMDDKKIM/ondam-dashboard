@@ -258,7 +258,7 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
         timeLabel: c.chartNo ? (timeByChart.get(c.chartNo) ?? '') : '',
       };
       const previousVisitDates = previousVisitDatesFor(withContact, prior, date);
-      const { kind, reason } = classifySettlementCandidate({
+      const { kind, reason, countedInNewCount } = classifySettlementCandidate({
         chartNo: c.chartNo,
         previousVisitDates,
         date,
@@ -274,6 +274,7 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
         likelyNewChart: newCharts ? newCharts.has(c.chartNo) : null,
         kind,
         kindReason: reason,
+        countedInNewCount: countedInNewCount ?? false,
       };
     }),
   };

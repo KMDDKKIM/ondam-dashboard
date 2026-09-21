@@ -101,7 +101,8 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
   // 일일결산 기반이면 신규환자수(초진)에 재초진 후보를 더한다(신규환자수에는 재초진이 들어 있지 않다).
-  const revisitAfter3Months = rows.filter((r) => r.suggestion === '재초진').length;
+  // (오늘 새로 만든 재등록 차트의 재초진은 신규환자수에 이미 들어 있으니 더하지 않는다.)
+  const revisitAfter3Months = rows.filter((r) => r.suggestion === '재초진' && !r.candidate.countedInNewCount).length;
   const expected =
     data?.closingFirstVisitCount != null
       ? data.closingFirstVisitCount + (data.source === 'settlement' ? revisitAfter3Months : 0)

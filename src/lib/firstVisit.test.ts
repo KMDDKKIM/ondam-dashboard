@@ -12,6 +12,7 @@ import {
   likelyNewChartNos,
   baseChartNo,
   classifySettlementCandidate,
+  isReissuedChart,
 } from './firstVisit';
 
 describe('addMonthsKst', () => {
@@ -235,5 +236,32 @@ describe('classifySettlementCandidate', () => {
 
   it('재등록 차트(-1)는 원래 차트로 이력을 본다', () => {
     expect(classifySettlementCandidate({ ...base, chartNo: '006366-1', previousVisitDates: ['2026-09-01'] }).kind).toBe('재진');
+  });
+});
+
+describe('재등록 차트(-1)의 재초진', () => {
+  const base = { chartNo: '000058-1', previousVisitDates: [] as string[], date: '2026-09-22', newChartNos: null, maxKnownChart: 6544, registeredOnDate: false, windowCovered: true };
+
+  it('isReissuedChart', () => {
+    expect(isReissuedChart('000058-1')).toBe(true);
+    expect(isReissuedChart('006544')).toBe(false);
+  });
+
+  it('이전 기록이 없으면 재초진이고 결산 신규환자수에 이미 들어 있다고 표시한다', () => {
+    const r = classifySettlementCandidate(base);
+    expect(r.kind).toBe('재초진');
+    expect(r.countedInNewCount).toBe(true);
+  });
+
+  it('이전 내원 기록이 있으면 그 기록대로(재진) 판정하고 신규 표시는 없다', () => {
+    const r = classifySettlementCandidate({ ...base, previousVisitDates: ['2026-09-10'] });
+    expect(r.kind).toBe('재진');
+    expect(r.countedInNewCount).toBeUndefined();
+  });
+
+  it('일반 예전 차트의 재초진은 신규환자수에 들어 있지 않다', () => {
+    const r = classifySettlementCandidate({ ...base, chartNo: '001985' });
+    expect(r.kind).toBe('재초진');
+    expect(r.countedInNewCount).toBeUndefined();
   });
 });
