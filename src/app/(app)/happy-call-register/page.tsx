@@ -272,18 +272,18 @@ export default function HappyCallRegisterPage() {
           </p>
         )}
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
-      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1408, width: '100%', margin: '0 auto' }}>
+      <table className="hc-table" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, minWidth: 1464, width: '100%', margin: '0 auto' }}>
         <colgroup>
           <col style={{ width: 80 }} />
-          <col style={{ width: 66 }} />
-          <col style={{ width: 100 }} />
+          <col style={{ width: 70 }} />
+          <col style={{ width: 108 }} />
           <col style={{ width: 66 }} />
           <col style={{ width: 60 }} />
-          <col style={{ width: 62 }} />
-          <col style={{ width: 74 }} />
-          <col style={{ width: 210 }} />
-          <col style={{ width: 210 }} />
-          <col style={{ width: 58 }} />
+          <col style={{ width: 76 }} />
+          <col style={{ width: 112 }} />
+          <col style={{ width: 200 }} />
+          <col style={{ width: 200 }} />
+          <col style={{ width: 70 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
           <col style={{ width: 58 }} />
@@ -295,7 +295,7 @@ export default function HappyCallRegisterPage() {
         <thead>
           <tr style={{ background: '#f0f0f0' }}>
             {['성함', '차트번호', '연락처', '진료의', '구분', '초진/재초진', '약침/패키지구분', '다음내원메모', '통화내역', '1진 초진일', '2진', '3진', '1차약', '2차약', '3차약', '메모', ''].map((h, i) => (
-              <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left', fontSize: 12, lineHeight: 1.25 }}>
+              <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: 'left', fontSize: 12, lineHeight: 1.25, whiteSpace: 'nowrap' }}>
                 {h}
               </th>
             ))}

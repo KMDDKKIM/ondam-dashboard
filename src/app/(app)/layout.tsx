@@ -47,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} closingMissing={closingMissing} remoteNewCount={remoteNewCount} herbQueueCount={herbQueueCount} />
+      <Sidebar isOwner={staff?.role === 'owner'} grade={staffGrade} unreadCount={unreadCount} closingMissing={closingMissing} remoteNewCount={remoteNewCount} herbQueueCount={herbQueueCount} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>

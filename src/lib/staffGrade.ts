@@ -21,3 +21,10 @@ export function isAssignableGrade(value: unknown): value is AssignableGrade {
 export function gradeAtLeast(grade: StaffGrade, min: StaffGrade): boolean {
   return GRADES.indexOf(grade) <= GRADES.indexOf(min);
 }
+
+// 상담 녹음 차팅은 원장님만(대표원장 · 부원장) 쓴다. 화면·API·DB가 모두 이 기준을 따른다.
+export const CONSULT_CHART_MIN_GRADE: StaffGrade = '부원장';
+
+export function canUseConsultChart(grade: StaffGrade | null | undefined): boolean {
+  return grade != null && gradeAtLeast(grade, CONSULT_CHART_MIN_GRADE);
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
+import { canUseConsultChart, isStaffGrade } from '@/lib/staffGrade';
 
 const SYSTEM_PROMPT = `당신은 한의원 진료 상담 녹음 스크립트를 차팅(진료 기록)으로 정리하는 보조원입니다.
 아래 형식의 한국어 차팅을 작성하세요. 각 항목은 스크립트에 실제로 언급된 내용만 담고, 언급이 없으면
@@ -28,9 +29,13 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
   }
-  const { data: staff } = await supabase.from('staff').select('status').eq('id', user.id).maybeSingle();
+  const { data: staff } = await supabase.from('staff').select('status, grade').eq('id', user.id).maybeSingle();
   if (staff?.status !== 'approved') {
     return NextResponse.json({ error: '승인된 계정만 사용할 수 있습니다.' }, { status: 403 });
+  }
+  // 상담 녹음 차팅은 원장님(대표원장·부원장)만 쓴다 — AI 사용 비용과 환자 상담 내용을 함께 지키기 위해서다.
+  if (!canUseConsultChart(isStaffGrade(staff?.grade) ? staff.grade : null)) {
+    return NextResponse.json({ error: '상담 녹음 차팅은 원장님만 사용할 수 있습니다.' }, { status: 403 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

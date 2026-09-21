@@ -1,9 +1,13 @@
 // 왼쪽 메뉴에 들어가는 도구 목록. 도구를 추가/이동할 때는 여기만 고치면 된다.
+import { canUseConsultChart, type StaffGrade } from './staffGrade';
+
 export interface NavItem {
   href: string;
   label: string;
   icon: string;
   ownerOnly?: boolean;
+  /** 원장님(대표원장·부원장)에게만 보이는 메뉴 — 상담 녹음 차팅 */
+  doctorsOnly?: boolean;
   soon?: boolean;
 }
 
@@ -29,7 +33,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/happy-call-register', label: '초진환자 해피콜', icon: '📞' },
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
       { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },
-      { href: '/consult-summary', label: '상담 녹음 차팅', icon: '🩺' },
+      { href: '/consult-summary', label: '상담 녹음 차팅', icon: '🩺', doctorsOnly: true },
       { href: '/treatment-timer', label: '치료실 타이머', icon: '⏱️' },
     ],
   },
@@ -75,8 +79,9 @@ export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function visibleGroups(isOwner: boolean): NavGroup[] {
-  return NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !i.ownerOnly || isOwner) })).filter(
-    (g) => g.items.length > 0
-  );
+export function visibleGroups(isOwner: boolean, grade: StaffGrade | null = null): NavGroup[] {
+  return NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => (!i.ownerOnly || isOwner) && (!i.doctorsOnly || canUseConsultChart(isOwner ? '대표원장' : grade))),
+  })).filter((g) => g.items.length > 0);
 }

@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isActivePath, isWidePath, visibleGroups } from '@/lib/navItems';
+import type { StaffGrade } from '@/lib/staffGrade';
 
 interface SidebarProps {
   isOwner: boolean;
+  /** 직원 등급 — 등급에 따라 보이는 메뉴가 달라진다(상담 녹음 차팅은 원장님만). */
+  grade?: StaffGrade | null;
   unreadCount: number;
   /** 어제 결산이 아직 입력되지 않았으면 true — 일일결산 메뉴에 빨간 표시를 붙인다. */
   closingMissing?: boolean;
@@ -22,7 +25,7 @@ const RAIL_WIDTH = 60;
 
 // 도구를 묶어 항상 보여 주는 왼쪽 메뉴. 표가 넓은 화면이나 좁은 창에서는 처음에 아이콘만
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
-export function Sidebar({ isOwner, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
+export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const [pref, setPref] = useState<'open' | 'collapsed' | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -104,7 +107,7 @@ export function Sidebar({ isOwner, unreadCount, closingMissing = false, remoteNe
       </Link>
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '0 8px' : '0 10px' }}>
-        {visibleGroups(isOwner).map((group, gi) => (
+        {visibleGroups(isOwner, grade).map((group, gi) => (
           <div key={group.title ?? `g${gi}`} style={{ marginBottom: 6 }}>
             {group.title &&
               (collapsed ? (

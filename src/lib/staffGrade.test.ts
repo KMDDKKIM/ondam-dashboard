@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ASSIGNABLE_GRADES,
+  canUseConsultChart,
   DEFAULT_GRADE,
   GRADES,
   gradeAtLeast,
@@ -62,5 +63,16 @@ describe('gradeAtLeast', () => {
     expect(gradeAtLeast('부원장', '대표원장')).toBe(false);
     expect(gradeAtLeast('대표원장', '사원')).toBe(true);
     expect(gradeAtLeast('사원', '사원')).toBe(true);
+  });
+});
+
+describe('canUseConsultChart', () => {
+  it('대표원장·부원장만 상담 녹음 차팅을 쓴다', () => {
+    expect(canUseConsultChart('대표원장')).toBe(true);
+    expect(canUseConsultChart('부원장')).toBe(true);
+    expect(canUseConsultChart('팀장')).toBe(false);
+    expect(canUseConsultChart('사원')).toBe(false);
+    expect(canUseConsultChart(null)).toBe(false);
+    expect(canUseConsultChart(undefined)).toBe(false);
   });
 });
