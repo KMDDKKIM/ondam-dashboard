@@ -3,8 +3,9 @@
 import { useRef, useState } from 'react';
 import { formatOrderLines, type ShortHerb } from '@/lib/herbOrder';
 
-// 부족 기준 이하인 약재 목록 + "발주 목록 복사". 권장 발주량은 제안일 뿐이다.
+// 부족 기준 이하인 약재 요약(접어둠) + "발주 목록 복사". 권장 발주량은 제안일 뿐이다.
 export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -20,44 +21,63 @@ export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
       setCopied(true);
     } catch {
       // 클립보드 권한이 없거나 http 환경 등 — 직접 복사할 수 있게 글상자를 보여준다.
+      setOpen(true);
       setFallbackText(text);
       setTimeout(() => areaRef.current?.select(), 0);
     }
   }
 
+  const preview = shorts.slice(0, 4).map((s) => s.name).join(', ') + (shorts.length > 4 ? ' …' : '');
+
   return (
-    <div className="card" style={{ padding: 16, marginBottom: 20, borderColor: 'var(--color-gold)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 700 }}>⚠️ 부족한 약재 ({shorts.length}개)</div>
-        <button className="btn-primary" onClick={handleCopy} style={{ padding: '8px 14px', fontSize: 13 }}>
+    <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderColor: 'var(--color-gold)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 14, padding: 0, textAlign: 'left', flex: 1, minWidth: 0 }}
+        >
+          {open ? '▼' : '▶'} ⚠️ 부족한 약재 {shorts.length}개
+          {!open && (
+            <span className="muted-text" style={{ fontWeight: 500, marginLeft: 8 }}>
+              {preview}
+            </span>
+          )}
+        </button>
+        <button className="btn-primary" onClick={handleCopy} style={{ padding: '6px 12px', fontSize: 13 }}>
           {copied ? '복사됨 ✓' : '발주 목록 복사'}
         </button>
       </div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 }}>
-        {shorts.map((s) => (
-          <li key={s.name} style={{ fontSize: 14 }}>
-            <strong>{s.name}</strong> — 현재 {s.currentStock}봉지 (기준 {s.threshold}) — 권장 발주 {s.recommend}봉지
-          </li>
-        ))}
-      </ul>
-      <p className="muted-text" style={{ marginTop: 10 }}>
-        권장 발주량은 제안이에요: 부족 기준의 2배까지 채우도록 (기준×2 − 현재), 최소 1봉지. 실제 주문 수량은 직접 정해주세요.
-      </p>
-      {fallbackText != null && (
-        <div style={{ marginTop: 10 }}>
-          <p className="muted-text" style={{ marginBottom: 6 }}>
-            자동 복사가 안 돼요. 아래 글을 선택해서 직접 복사해주세요.
+      {open && (
+        <>
+          <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 2 }}>
+            {shorts.map((s) => (
+              <li key={s.name} style={{ fontSize: 13 }}>
+                <strong>{s.name}</strong> — 현재 {s.currentStock}봉지 (기준 {s.threshold}) — 권장 발주 {s.recommend}봉지
+              </li>
+            ))}
+          </ul>
+          <p className="muted-text" style={{ marginTop: 8 }}>
+            권장 발주량은 제안이에요: 부족 기준의 2배까지 채우도록 (기준×2 − 현재), 최소 1봉지. 실제 주문 수량은 직접 정해주세요.
           </p>
-          <textarea
-            ref={areaRef}
-            readOnly
-            value={fallbackText}
-            rows={Math.min(8, shorts.length + 1)}
-            className="input-field"
-            style={{ width: '100%', resize: 'vertical' }}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-        </div>
+          {fallbackText != null && (
+            <div style={{ marginTop: 8 }}>
+              <p className="muted-text" style={{ marginBottom: 6 }}>
+                자동 복사가 안 돼요. 아래 글을 선택해서 직접 복사해주세요.
+              </p>
+              <textarea
+                ref={areaRef}
+                readOnly
+                value={fallbackText}
+                rows={Math.min(8, shorts.length + 1)}
+                className="input-field"
+                style={{ width: '100%', resize: 'vertical' }}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
