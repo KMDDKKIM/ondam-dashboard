@@ -11,7 +11,7 @@ export interface FavoriteLink {
 }
 
 export const FAVORITE_LINKS: FavoriteLink[] = [
-  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', icon: 'https://growth-mate.co.kr/favicon.png', bg: '#daf2ec', fg: '#12917a' },
+  { label: '핀셋포인트', url: 'https://growth-mate.co.kr/reservations', emoji: '📌', icon: 'https://www.google.com/s2/favicons?domain=growth-mate.co.kr&sz=64', bg: '#daf2ec', fg: '#12917a' },
   { label: '주차', url: 'https://npdc-i.nicepark.co.kr/', emoji: '🅿️', icon: 'https://npdc-i.nicepark.co.kr/images/DC/favicon.ico', bg: '#e0eefa', fg: '#245d8f' },
   { label: '린다이어트', url: 'https://chart.leandiet.co.kr/patients?status=ongoing', emoji: '🥗', icon: 'https://leandiet.co.kr/favicon.png', bg: '#ebe3fb', fg: '#6831d7' },
   { label: '혈액검사', url: 'https://prs.precision-bio.com/login', emoji: '🩸', icon: 'https://prs.precision-bio.com/favicon.ico', bg: '#fbe4e1', fg: '#b03a2e' },
