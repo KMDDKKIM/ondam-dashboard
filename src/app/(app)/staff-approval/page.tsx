@@ -3,6 +3,7 @@
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { TempPasswordModal } from '@/components/TempPasswordModal';
 import type { Staff } from '@/lib/types';
 import { ASSIGNABLE_GRADES, DEFAULT_GRADE, type AssignableGrade, type StaffGrade } from '@/lib/staffGrade';
 
@@ -21,6 +22,16 @@ const removeButtonStyle = {
   cursor: 'pointer',
 } as const;
 
+const resetButtonStyle = {
+  padding: '6px 14px',
+  fontSize: 13,
+  borderRadius: 8,
+  border: '1px solid var(--color-line)',
+  background: 'var(--color-surface-2)',
+  color: 'var(--color-ink)',
+  cursor: 'pointer',
+} as const;
+
 export default function StaffApprovalPage() {
   const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const [pending, setPending] = useState<StaffRow[]>([]);
@@ -31,6 +42,9 @@ export default function StaffApprovalPage() {
   const [pendingGrades, setPendingGrades] = useState<Record<string, AssignableGrade>>({});
   const [changingId, setChangingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  // 임시 비밀번호는 모달이 떠 있는 동안만 이 state에 두고, 닫으면 null로 비운다(저장소에는 넣지 않는다).
+  const [issued, setIssued] = useState<{ name: string; password: string } | null>(null);
 
   const supabase = createClient();
 
@@ -139,6 +153,31 @@ export default function StaffApprovalPage() {
       setError('삭제에 실패했습니다. 네트워크 상태를 확인해주세요.');
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  async function handleResetPassword(staff: StaffRow) {
+    if (!await confirmDialog(`"${staff.name}" 님의 비밀번호를 새로 만들까요? 기존 비밀번호는 더 이상 쓸 수 없어요.`)) {
+      return;
+    }
+    setResettingId(staff.id);
+    setError('');
+    try {
+      const response = await fetch('/api/staff/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: staff.id }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string; password?: string };
+      if (!response.ok || typeof body.password !== 'string') {
+        setError(body.error ?? '비밀번호를 재설정하지 못했습니다.');
+        return;
+      }
+      setIssued({ name: staff.name, password: body.password });
+    } catch {
+      setError('비밀번호를 재설정하지 못했습니다. 네트워크 상태를 확인해주세요.');
+    } finally {
+      setResettingId(null);
     }
   }
 
@@ -255,9 +294,16 @@ export default function StaffApprovalPage() {
                     ))}
                   </select>
                   <button
+                    onClick={() => handleResetPassword(s)}
+                    disabled={resettingId === s.id || removingId === s.id}
+                    style={{ ...resetButtonStyle, marginLeft: 'auto' }}
+                  >
+                    비밀번호 재설정
+                  </button>
+                  <button
                     onClick={() => handleRemove(s)}
                     disabled={removingId === s.id}
-                    style={{ ...removeButtonStyle, marginLeft: 'auto' }}
+                    style={removeButtonStyle}
                   >
                     삭제
                   </button>
@@ -267,6 +313,9 @@ export default function StaffApprovalPage() {
           ))}
         </ul>
       </div>
+      {issued && (
+        <TempPasswordModal name={issued.name} password={issued.password} onClose={() => setIssued(null)} />
+      )}
     </div>
   );
 }
