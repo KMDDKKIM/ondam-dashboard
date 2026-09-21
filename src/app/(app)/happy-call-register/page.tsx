@@ -12,6 +12,7 @@ import {
 import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
+import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
 import { addDays, countUnreconciledRevisits, isUnreconciledRevisit } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 
@@ -214,6 +215,8 @@ export default function HappyCallRegisterPage() {
           registered={registeredOnDate}
           onRegister={handleRegisterCandidate}
         />
+
+        <SheetPasteImport patients={patients} staffList={staffList} onDone={() => load(candidateDate)} />
 
         <HappyCallStatsPanel patients={patients} staffList={staffList} onDateClick={setHighlightDate} />
 

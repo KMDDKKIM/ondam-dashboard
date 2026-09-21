@@ -6,6 +6,7 @@ import { AppMain } from '@/components/AppMain';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
 import { isStaffGrade } from '@/lib/staffGrade';
+import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -34,9 +35,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // 채팅 목록을 못 가져와도 나머지 화면은 정상적으로 보여준다.
   }
 
+  // 어제 결산이 비어 있으면 왼쪽 메뉴의 일일결산에 빨간 표시를 붙인다(조회 실패는 무시).
+  const closingMissing = await fetchMissingClosingDates(supabase)
+    .then((dates) => dates.length > 0)
+    .catch(() => false);
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} />
+      <Sidebar isOwner={staff?.role === 'owner'} unreadCount={unreadCount} closingMissing={closingMissing} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>

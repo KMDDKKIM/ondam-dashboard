@@ -8,6 +8,8 @@ import { isActivePath, isWidePath, visibleGroups } from '@/lib/navItems';
 interface SidebarProps {
   isOwner: boolean;
   unreadCount: number;
+  /** 어제 결산이 아직 입력되지 않았으면 true — 일일결산 메뉴에 빨간 표시를 붙인다. */
+  closingMissing?: boolean;
 }
 
 const STORAGE_KEY = 'ondam-sidebar';
@@ -16,7 +18,7 @@ const RAIL_WIDTH = 60;
 
 // 도구를 묶어 항상 보여 주는 왼쪽 메뉴. 표가 넓은 화면이나 좁은 창에서는 처음에 아이콘만
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
-export function Sidebar({ isOwner, unreadCount }: SidebarProps) {
+export function Sidebar({ isOwner, unreadCount, closingMissing = false }: SidebarProps) {
   const pathname = usePathname();
   const [pref, setPref] = useState<'open' | 'collapsed' | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -124,12 +126,20 @@ export function Sidebar({ isOwner, unreadCount }: SidebarProps) {
                     {item.href === '/chat' && unreadCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`읽지 않은 메시지 ${unreadCount}개`} />
                     )}
+                    {item.href === '/paste-import' && closingMissing && collapsed && (
+                      <span className="side-dot" aria-label="어제 결산 미입력" />
+                    )}
                   </span>
                   {!collapsed && (
                     <>
                       <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
                       {item.href === '/chat' && unreadCount > 0 && (
                         <span className="side-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                      )}
+                      {item.href === '/paste-import' && closingMissing && (
+                        <span className="side-badge" title="어제 결산이 아직 입력되지 않았어요">
+                          미입력
+                        </span>
                       )}
                     </>
                   )}

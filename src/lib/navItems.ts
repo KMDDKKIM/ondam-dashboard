@@ -13,7 +13,14 @@ export interface NavGroup {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
-  { title: null, items: [{ href: '/', label: '오늘', icon: '🏠' }] },
+  {
+    title: null,
+    items: [
+      { href: '/', label: '오늘', icon: '🏠' },
+      // 매일 마감 때 입력하는 화면이라 홈 바로 아래에 둔다.
+      { href: '/paste-import', label: '일일결산', icon: '🧾' },
+    ],
+  },
   {
     title: '진료',
     items: [
@@ -32,11 +39,8 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: '결산·매출',
-    items: [
-      { href: '/paste-import', label: '엑셀 붙여넣기', icon: '📥' },
-      { href: '/non-covered-patients', label: '비급여 현황', icon: '💰' },
-    ],
+    title: '매출',
+    items: [{ href: '/non-covered-patients', label: '비급여 현황', icon: '💰' }],
   },
   {
     title: '운영',

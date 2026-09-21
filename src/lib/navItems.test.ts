@@ -22,6 +22,13 @@ describe('isWidePath', () => {
   });
 });
 
+describe('일일결산 메뉴', () => {
+  it('홈 바로 아래(맨 위 묶음)에 있다', () => {
+    expect(NAV_GROUPS[0].items.map((i) => i.href)).toEqual(['/', '/paste-import']);
+    expect(NAV_GROUPS[0].items[1].label).toBe('일일결산');
+  });
+});
+
 describe('visibleGroups', () => {
   const hrefs = (owner: boolean) => visibleGroups(owner).flatMap((g) => g.items.map((i) => i.href));
 
