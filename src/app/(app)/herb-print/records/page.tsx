@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import LetterPreview from "@/components/herb-print/LetterPreview";
@@ -60,7 +61,7 @@ export default function RecordsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("이 기록을 삭제할까요?")) return;
+    if (!await confirmDialog("이 기록을 삭제할까요?")) return;
     try {
       await remove(id);
       await loadRecords();

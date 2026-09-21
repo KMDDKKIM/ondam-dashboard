@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -143,7 +144,7 @@ export default function HerbQueuePage() {
   }
 
   async function handleDelete(item: HerbQueueItem) {
-    if (!window.confirm(`${item.patientName}님 한약 신청을 삭제할까요?`)) return;
+    if (!await confirmDialog(`${item.patientName}님 한약 신청을 삭제할까요?`)) return;
     try {
       await deleteHerbQueueItem(supabase, item.id);
       setWaiting((prev) => prev.filter((w) => w.id !== item.id));

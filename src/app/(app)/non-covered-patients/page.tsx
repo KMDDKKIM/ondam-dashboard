@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useMemo, useState } from 'react';
 import {
   HappyCallSyncError,
@@ -81,7 +82,7 @@ export default function NonCoveredRecordsPage() {
   }
 
   async function handleDelete(purchase: NonCoveredPurchase) {
-    if (!window.confirm('이 기록을 삭제할까요? 이 구매로 예정된 해피콜도 함께 지워져요.')) return;
+    if (!await confirmDialog('이 기록을 삭제할까요? 이 구매로 예정된 해피콜도 함께 지워져요.')) return;
     setError('');
     try {
       await deleteNonCoveredPurchase(supabase, purchase);

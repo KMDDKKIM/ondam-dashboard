@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -187,20 +188,20 @@ export default function SupplyRequestsPage() {
     }
   }
 
-  function toggleOrdered(r: SupplyRequest) {
-    if (r.orderedAt && !window.confirm('주문완료 표시를 취소할까요? (도착 표시도 함께 지워져요)')) return;
+  async function toggleOrdered(r: SupplyRequest) {
+    if (r.orderedAt && !await confirmDialog('주문완료 표시를 취소할까요? (도착 표시도 함께 지워져요)')) return;
     run(() => setSupplyOrdered(supabase, r.id, !r.orderedAt, me?.id ?? null));
   }
 
-  function toggleReceived(r: SupplyRequest) {
-    if (r.receivedAt && !window.confirm('도착 표시를 취소할까요?')) return;
+  async function toggleReceived(r: SupplyRequest) {
+    if (r.receivedAt && !await confirmDialog('도착 표시를 취소할까요?')) return;
     run(() => setSupplyReceived(supabase, r.id, !r.receivedAt, me?.id ?? null));
   }
 
-  function handleDeleteItem() {
+  async function handleDeleteItem() {
     const picked = categoryItems.find((i) => i.id === itemChoice);
     if (!picked) return;
-    if (!window.confirm(`"${picked.name}"을(를) 자주 쓰는 품목 목록에서 삭제할까요? (이미 한 신청 내역은 그대로 남아요)`)) return;
+    if (!await confirmDialog(`"${picked.name}"을(를) 자주 쓰는 품목 목록에서 삭제할까요? (이미 한 신청 내역은 그대로 남아요)`)) return;
     setFormError('');
     deleteSupplyItem(supabase, picked.id)
       .then(() => {
@@ -211,8 +212,8 @@ export default function SupplyRequestsPage() {
       .catch(() => setFormError('품목을 삭제하지 못했습니다.'));
   }
 
-  function handleDelete(r: SupplyRequest) {
-    if (!window.confirm(`"${r.itemName}" 신청을 삭제할까요?`)) return;
+  async function handleDelete(r: SupplyRequest) {
+    if (!await confirmDialog(`"${r.itemName}" 신청을 삭제할까요?`)) return;
     run(() => deleteSupplyRequest(supabase, r.id));
   }
 

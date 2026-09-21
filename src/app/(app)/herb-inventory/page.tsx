@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -166,7 +167,7 @@ export default function HerbInventoryPage() {
   }
 
   async function handleDeleteHerb(item: HerbInventoryItem) {
-    if (!window.confirm(`"${item.name}"을(를) 삭제할까요? 사용·입고 기록도 함께 지워져요.`)) return;
+    if (!await confirmDialog(`"${item.name}"을(를) 삭제할까요? 사용·입고 기록도 함께 지워져요.`)) return;
     setError('');
     setNotice('');
     setWarning('');

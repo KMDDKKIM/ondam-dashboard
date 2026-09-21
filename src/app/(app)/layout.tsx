@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { TopBar } from '@/components/TopBar';
 import { Sidebar } from '@/components/Sidebar';
 import { AppMain } from '@/components/AppMain';
+import { ConfirmHost } from '@/components/ConfirmHost';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
 import { isStaffGrade } from '@/lib/staffGrade';
@@ -52,6 +53,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
         <AppMain>{children}</AppMain>
       </div>
+      <ConfirmHost />
     </div>
   );
 }

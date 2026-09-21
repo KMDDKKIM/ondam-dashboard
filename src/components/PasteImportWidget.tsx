@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { analyzePasteText } from '@/lib/pasteImport';
@@ -73,12 +74,12 @@ function MonthlySettlementSection() {
     if (totalRevenue == null || !month || !asOfDate || invalidCells.length > 0) return;
     // 붙여넣은 표에 날짜별 행이 없으면 기준일이 오늘로 잡혀서 오늘 마감이 합산되지 않는다 — 먼저 확인받는다.
     if (analysis?.format === 'monthly' && analysis.latestDate == null) {
-      const fallbackOk = window.confirm(
+      const fallbackOk = await confirmDialog(
         `붙여넣은 표에 날짜별 행이 없어 오늘(${asOfDate})을 기준일로 저장해요. 오늘 마감은 합산되지 않아요. 계속할까요?`
       );
       if (!fallbackOk) return;
     }
-    const ok = window.confirm(
+    const ok = await confirmDialog(
       `${month}의 총매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원으로 다시 채웁니다. 그 뒤 일일 마감이 여기에 더해져요. 계속할까요?`
     );
     if (!ok) return;
@@ -196,7 +197,7 @@ function ReservationSection({ onSaved }: { onSaved: (dates: string[]) => void })
         analysis.groups.map((g) => ({ date: g.date, newCount: g.rows.length })),
         countsBody.counts as Record<string, number>
       );
-      if (!window.confirm(replaceConfirmMessage(lines))) return;
+      if (!await confirmDialog(replaceConfirmMessage(lines))) return;
 
       const response = await fetch('/api/reservation-paste', {
         method: 'POST',
@@ -503,8 +504,8 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
   }
 
   // 붙여넣은 결산표와 아래 칸을 전부 비운다(화면만 비우고, 이미 저장한 기록은 그대로다).
-  function handleClearAll() {
-    if (text.trim() && !window.confirm('붙여넣은 결산표와 아래 입력칸을 모두 비울까요? (이미 저장한 기록은 그대로예요)')) return;
+  async function handleClearAll() {
+    if (text.trim() && !await confirmDialog('붙여넣은 결산표와 아래 입력칸을 모두 비울까요? (이미 저장한 기록은 그대로예요)')) return;
     setText('');
     setClosing(EMPTY_CLOSING);
     setCopied(false);
@@ -531,7 +532,7 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
       const existing = await getSavedDailyRevenue(supabase, date);
       const warnings = closingSaveWarnings({ date, totalRevenue, visitCount, today: todayKst(), existing });
       if (warnings.length > 0) {
-        const ok = window.confirm(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);
+        const ok = await confirmDialog(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);
         if (!ok) return;
       }
       const {

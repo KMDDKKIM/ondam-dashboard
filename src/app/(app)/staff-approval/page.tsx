@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Staff } from '@/lib/types';
@@ -117,7 +118,7 @@ export default function StaffApprovalPage() {
       staff.status === 'pending'
         ? `"${staff.name}" 님의 가입 신청을 거절할까요?`
         : `"${staff.name}" 님을 삭제할까요?\n계정이 삭제되어 로그인할 수 없게 됩니다. 이 직원이 남긴 기록은 남고 작성자 이름만 지워져요.`;
-    if (!window.confirm(message)) {
+    if (!await confirmDialog(message)) {
       return;
     }
     setRemovingId(staff.id);

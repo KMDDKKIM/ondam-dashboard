@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -201,7 +202,7 @@ export default function HappyCallRegisterPage() {
   }
 
   async function handleDelete(p: HappyCallPatient) {
-    if (!window.confirm(`${p.patientName} (${p.firstVisitDate}) 등록을 삭제할까요? 되돌릴 수 없어요.`)) return;
+    if (!await confirmDialog(`${p.patientName} (${p.firstVisitDate}) 등록을 삭제할까요? 되돌릴 수 없어요.`)) return;
     try {
       await deleteHappyCallPatient(supabase, p.id);
       setError('');

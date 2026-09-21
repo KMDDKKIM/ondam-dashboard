@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -58,7 +59,7 @@ export function ProductManager({ supabase, products, onProductsChange, onError }
   }
 
   async function handleDelete(p: NonCoveredProduct) {
-    if (!window.confirm(`"${p.name}"을(를) 상품 목록에서 삭제할까요? (이미 등록된 기록은 그대로 남아요)`)) return;
+    if (!await confirmDialog(`"${p.name}"을(를) 상품 목록에서 삭제할까요? (이미 등록된 기록은 그대로 남아요)`)) return;
     try {
       onError('');
       await deleteNonCoveredProduct(supabase, p.id);

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -157,7 +158,7 @@ export default function ReceptionLogPage() {
   }
 
   async function handleDelete(r: ReceptionRecord, index: number) {
-    if (!window.confirm(`${index + 1}번 ${r.patientName} 줄을 삭제할까요?`)) return;
+    if (!await confirmDialog(`${index + 1}번 ${r.patientName} 줄을 삭제할까요?`)) return;
     try {
       await deleteReceptionRecord(supabase, r.id);
       setRecords((prev) => prev.filter((x) => x.id !== r.id));

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/confirmDialog';
 import { useState } from 'react';
 import { createManualEntry, deleteUntouchedManualEntry } from '@/lib/supabase/happyCallQueue';
 import { useHappyCallWorklist } from '@/components/happy-call/useHappyCallWorklist';
@@ -60,7 +61,7 @@ export default function HappyCallListPage() {
   }
 
   async function handleDelete(item: WorklistItem) {
-    if (!window.confirm(`${item.patientName}님 ${kindText(item)} 해피콜을 삭제할까요?`)) return;
+    if (!await confirmDialog(`${item.patientName}님 ${kindText(item)} 해피콜을 삭제할까요?`)) return;
     const ok = await deleteUntouchedManualEntry(supabase, item.id);
     if (!ok) {
       setError('지우지 못했어요. 비급여 현황에서 만든 콜이면 비급여 현황에서 고치거나 지워 주세요.');
