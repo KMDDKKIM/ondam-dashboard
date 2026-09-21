@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { canUseConsultChart, isStaffGrade } from '@/lib/staffGrade';
-import { DAILY_SUMMARY_LIMIT, MAX_TRANSCRIPT_CHARS, kstMidnightIso } from '@/lib/consultLimits';
+import {
+  DAILY_SUMMARY_LIMIT,
+  MAX_TRANSCRIPT_CHARS,
+  decideUsage,
+  isMissingTableError,
+  kstMidnightIso,
+} from '@/lib/consultLimits';
 
 const SYSTEM_PROMPT = `당신은 한의원 진료 상담 녹음 스크립트를 차팅(진료 기록)으로 정리하는 보조원입니다.
 아래 형식의 한국어 차팅을 작성하세요. 각 항목은 스크립트에 실제로 언급된 내용만 담고, 언급이 없으면
@@ -59,22 +65,41 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 직원 한 명이 하루(한국 시간 0시부터)에 저장한 차팅이 한도에 이르면 더 만들지 못하게 한다(AI 사용 비용 보호).
-  const { count, error: countError } = await supabase
-    .from('consult_summaries')
-    .select('id', { count: 'exact', head: true })
-    .eq('created_by', user.id)
-    .gte('created_at', kstMidnightIso());
-  if (countError) {
-    console.error('[consult-summary] daily count failed', countError);
+  // 직원 한 명이 하루(한국 시간 0시부터)에 AI로 차팅을 만든 횟수가 한도에 이르면 더 만들지 못하게 한다(AI 사용 비용 보호).
+  // 저장 여부와 상관없이 '차팅 생성'을 누른 횟수를 센다 — 사용 기록은 AI 호출 전에 먼저 남겨서 실패해도 세어진다.
+  const sinceIso = kstMidnightIso();
+  const usageErrorResponse = (error: { code?: string | null; message?: string | null }) => {
+    console.error('[consult-summary] usage check failed', error);
+    if (isMissingTableError(error)) {
+      return NextResponse.json({ error: '사용량 기록 테이블이 아직 설치되지 않았어요(관리자 문의)' }, { status: 500 });
+    }
     return NextResponse.json({ error: '사용 횟수를 확인하지 못했습니다. 잠시 뒤 다시 시도해주세요.' }, { status: 500 });
-  }
-  if ((count ?? 0) >= DAILY_SUMMARY_LIMIT) {
-    return NextResponse.json(
+  };
+  const limitResponse = () =>
+    NextResponse.json(
       { error: `하루에 만들 수 있는 차팅(${DAILY_SUMMARY_LIMIT}건)을 모두 사용했어요. 내일 다시 이용해주세요.` },
       { status: 429 }
     );
-  }
+
+  const { count: countBefore, error: countError } = await supabase
+    .from('consult_usage')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', sinceIso);
+  if (countError) return usageErrorResponse(countError);
+  if (decideUsage(countBefore ?? 0) === 'deny') return limitResponse();
+
+  const { error: insertError } = await supabase.from('consult_usage').insert({ user_id: user.id });
+  if (insertError) return usageErrorResponse(insertError);
+
+  // 거의 동시에 여러 번 눌렀을 때를 막기 위해, 방금 남긴 기록까지 포함해 다시 센다.
+  const { count: countAfter, error: recountError } = await supabase
+    .from('consult_usage')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', sinceIso);
+  if (recountError) return usageErrorResponse(recountError);
+  if (decideUsage((countAfter ?? 1) - 1) === 'deny') return limitResponse();
 
   try {
     const anthropic = new Anthropic({ apiKey });
