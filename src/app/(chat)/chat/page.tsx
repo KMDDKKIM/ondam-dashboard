@@ -59,7 +59,7 @@ export default function ChatPage() {
   return (
     <>
       {error && <p className="error-text">{error}</p>}
-      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 120px)' }}>
+      <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 32px)' }}>
         <ChatRoomList
           rooms={rooms}
           selectedRoomId={selectedRoomId}

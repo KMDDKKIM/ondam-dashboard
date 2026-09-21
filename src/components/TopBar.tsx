@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { FavoriteIcons } from '@/components/FavoriteIcons';
 import type { StaffGrade } from '@/lib/staffGrade';
+import { openChatWindow } from '@/lib/openChatWindow';
 
 interface TopBarProps {
   staffName: string | null;
@@ -41,8 +41,10 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <FavoriteIcons />
-        <Link
-          href="/chat"
+        <button
+          type="button"
+          onClick={openChatWindow}
+          aria-label="채팅 열기"
           style={{
             position: 'relative',
             display: 'inline-flex',
@@ -53,8 +55,8 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
             borderRadius: 10,
             border: '1px solid var(--color-line)',
             background: 'var(--color-surface-2)',
-            textDecoration: 'none',
             fontSize: 16,
+            padding: 0,
           }}
         >
           💬
@@ -80,7 +82,7 @@ export function TopBar({ staffName, staffGrade, unreadCount }: TopBarProps) {
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
-        </Link>
+        </button>
         <span className="muted-text">
           {staffName ?? '로그인됨'}
           {staffGrade ? ` · ${staffGrade}` : ''}
