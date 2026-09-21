@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/supply-requests', label: '물품신청', icon: '📦' },
       { href: '/chat', label: '채팅', icon: '💬' },
       { href: '/staff-approval', label: '직원 승인', icon: '🙋', ownerOnly: true },
+      { href: '/backup', label: '백업 내려받기', icon: '💾', ownerOnly: true },
     ],
   },
 ];

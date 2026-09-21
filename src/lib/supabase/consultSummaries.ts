@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ConsultSummary } from '@/lib/types';
 
+// 상담 기록은 10년 보관한다. 이 표에는 삭제(delete) 기능도, 오래된 기록을 지우는 자동 정리도 만들지 않는다.
+// 저장된 원문·요약은 화면에서 읽기만 한다(고치거나 지우는 화면 없음). 직원 계정을 지워도 기록은 남는다
+// (created_by 는 on delete set null). README 의 "상담 기록은 10년 보관" 참고.
+
 interface ConsultSummaryRow {
   id: string;
   patient_name: string;
@@ -58,9 +62,4 @@ export async function createConsultSummary(
     .single();
   if (error) throw error;
   return rowToSummary(data as ConsultSummaryRow);
-}
-
-export async function updateConsultSummary(supabase: SupabaseClient, id: string, summary: string): Promise<void> {
-  const { error } = await supabase.from('consult_summaries').update({ summary }).eq('id', id);
-  if (error) throw error;
 }

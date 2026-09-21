@@ -2,16 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import {
-  listConsultSummaries,
-  createConsultSummary,
-  updateConsultSummary,
-} from '@/lib/supabase/consultSummaries';
+import { listConsultSummaries, createConsultSummary } from '@/lib/supabase/consultSummaries';
+import { MAX_TRANSCRIPT_CHARS } from '@/lib/consultLimits';
+import { todayKst } from '@/lib/kst';
 import type { ConsultSummary } from '@/lib/types';
 
 function todayString(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return todayKst();
 }
 
 export default function ConsultSummaryPage() {
@@ -48,7 +45,7 @@ export default function ConsultSummaryPage() {
   }, []);
 
   async function handleSummarize() {
-    if (!transcript.trim()) return;
+    if (!transcript.trim() || transcript.trim().length > MAX_TRANSCRIPT_CHARS) return;
     setSummarizing(true);
     setError('');
     try {
@@ -57,11 +54,14 @@ export default function ConsultSummaryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? '요약에 실패했습니다.');
+      const body = (await response.json().catch(() => ({}))) as { error?: string; summary?: string };
+      if (!response.ok || !body.summary) {
+        setError(body.error ?? '요약에 실패했습니다.');
+        return;
+      }
       setSummary(body.summary);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '요약에 실패했습니다.');
+    } catch {
+      setError('요약에 실패했습니다. 네트워크 상태를 확인해주세요.');
     } finally {
       setSummarizing(false);
     }
@@ -94,14 +94,8 @@ export default function ConsultSummaryPage() {
     }
   }
 
-  async function handleEditSaved(id: string, value: string) {
-    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, summary: value } : r)));
-    try {
-      await updateConsultSummary(supabase, id, value);
-    } catch {
-      setError('수정 사항을 저장하지 못했습니다.');
-    }
-  }
+  const transcriptLength = transcript.trim().length;
+  const overLimit = transcriptLength > MAX_TRANSCRIPT_CHARS;
 
   const filtered = useMemo(() => {
     const q = search.trim();
@@ -143,10 +137,23 @@ export default function ConsultSummaryPage() {
           onChange={(e) => setTranscript(e.target.value)}
           placeholder="티로에서 복사한 상담 내용을 여기에 붙여넣으세요"
           className="input-field"
-          style={{ minHeight: 140, fontSize: 13, resize: 'vertical', marginBottom: 10 }}
+          style={{ minHeight: 140, fontSize: 13, resize: 'vertical', marginBottom: 4 }}
         />
+        <p
+          className={overLimit ? 'error-text' : 'muted-text'}
+          style={{ fontSize: 12, marginBottom: 10, textAlign: 'right' }}
+          aria-live="polite"
+        >
+          {transcriptLength.toLocaleString('ko-KR')} / {MAX_TRANSCRIPT_CHARS.toLocaleString('ko-KR')}자
+          {overLimit && ` — ${(transcriptLength - MAX_TRANSCRIPT_CHARS).toLocaleString('ko-KR')}자 넘었어요. 나누어 넣어주세요.`}
+        </p>
 
-        <button onClick={handleSummarize} disabled={!transcript.trim() || summarizing} className="btn-primary" style={{ marginBottom: 16 }}>
+        <button
+          onClick={handleSummarize}
+          disabled={!transcript.trim() || overLimit || summarizing}
+          className="btn-primary"
+          style={{ marginBottom: 16 }}
+        >
           {summarizing ? '요약 중...' : '🩺 차팅 생성'}
         </button>
 
@@ -171,7 +178,9 @@ export default function ConsultSummaryPage() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>저장된 차팅</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700 }}>
+        저장된 차팅 <span className="muted-text" style={{ fontSize: 12, fontWeight: 400 }}>· 상담 기록은 10년 보관해요</span>
+      </h2>
         <input
           placeholder="환자명 검색"
           value={search}
@@ -208,12 +217,27 @@ export default function ConsultSummaryPage() {
                 <span className="muted-text">{expandedId === r.id ? '접기 ▲' : '펼치기 ▼'}</span>
               </button>
               {expandedId === r.id && (
-                <textarea
-                  defaultValue={r.summary}
-                  onBlur={(e) => handleEditSaved(r.id, e.target.value)}
-                  className="input-field"
-                  style={{ marginTop: 12, minHeight: 200, fontSize: 13, fontFamily: 'monospace' }}
-                />
+                // 저장된 기록은 읽기만 한다(10년 보관 — 고치기·삭제 없음).
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <div className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>차팅 요약</div>
+                    <textarea
+                      readOnly
+                      value={r.summary}
+                      className="input-field"
+                      style={{ minHeight: 200, fontSize: 13, fontFamily: 'monospace' }}
+                    />
+                  </div>
+                  <div>
+                    <div className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>상담 원문</div>
+                    <textarea
+                      readOnly
+                      value={r.transcript}
+                      className="input-field"
+                      style={{ minHeight: 160, fontSize: 13 }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
           ))}
