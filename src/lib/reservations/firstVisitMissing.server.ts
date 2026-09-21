@@ -19,6 +19,6 @@ export const getFirstVisitMissing = cache(async (date: string): Promise<FirstVis
   const supabase = await createClient();
   const [data, registered] = await Promise.all([getFirstVisitCandidates(date), listHappyCallPatientsByFirstVisitDate(supabase, date)]);
   if (!hasReliableFirstVisitBasis(data)) return { comparable: false };
-  const r = reconcileFirstVisits(data, registered.length, date, registered);
+  const r = reconcileFirstVisits(data, registered.length, date);
   return { comparable: true, expected: r.expected, registered: r.registered, missing: r.missing };
 });

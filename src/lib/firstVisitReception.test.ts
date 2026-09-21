@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergeReceptionCandidates, type FirstVisitCandidateDto, type FirstVisitCandidatesResult, type ReceptionVisitRow } from './firstVisit';
-import { hasReliableFirstVisitBasis, reconcileFirstVisits, registeredCandidates } from './firstVisitReconcile';
+import { hasReliableFirstVisitBasis, matchRegisteredCandidates, reconcileFirstVisits } from './firstVisitReconcile';
 
 const DATE = '2026-09-22';
 
@@ -105,25 +105,46 @@ describe('mergeReceptionCandidates', () => {
   });
 });
 
-describe('registeredCandidates', () => {
-  it('이미 등록된 환자와 이름이 같은 접수 후보는 등록된 것으로 본다', () => {
+describe('matchRegisteredCandidates', () => {
+  const nameOnly = { patientName: '홍길동', chartNo: null, phone: null };
+
+  it('차트번호·연락처 없이 이름만 등록된 환자와 이름이 같은 접수 후보는 등록된 것으로 본다', () => {
     const c = mergeReceptionCandidates([], [rec()], DATE).candidates;
-    const set = registeredCandidates(c, [{ patientName: '홍길동', chartNo: '555', phone: '010-1' }]);
-    expect(set.has(c[0])).toBe(true);
+    const m = matchRegisteredCandidates(c, [nameOnly]);
+    expect(m.registered.has(c[0])).toBe(true);
+    expect(m.possibleHomonym.size).toBe(0);
+  });
+
+  it('등록 환자에게 차트번호나 연락처가 있으면 이름만으로 숨기지 않고 동명이인 가능으로 남긴다', () => {
+    const c = mergeReceptionCandidates([], [rec()], DATE).candidates;
+    for (const p of [
+      { patientName: '홍길동', chartNo: '555', phone: null },
+      { patientName: '홍길동', chartNo: null, phone: '010-1' },
+    ]) {
+      const m = matchRegisteredCandidates(c, [p]);
+      expect(m.registered.size).toBe(0);
+      expect(m.possibleHomonym.has(c[0])).toBe(true);
+    }
+  });
+
+  it('이름만 등록된 환자와 차트번호 있는 환자가 같이 있으면 이름만 등록된 쪽과 짝짓는다', () => {
+    const c = mergeReceptionCandidates([], [rec()], DATE).candidates;
+    const m = matchRegisteredCandidates(c, [{ patientName: '홍길동', chartNo: '9', phone: null }, nameOnly]);
+    expect(m.registered.has(c[0])).toBe(true);
   });
 
   it('결산 후보와 이미 짝지어진 등록 환자는 접수 후보에 다시 쓰이지 않는다', () => {
     const closing = base({ chartNo: '100' });
     const receptionOnly = mergeReceptionCandidates([base({ kind: '재진' })], [rec()], DATE).candidates[1];
-    const set = registeredCandidates([closing, receptionOnly], [{ patientName: '홍길동', chartNo: '100', phone: null }]);
-    expect(set.has(closing)).toBe(true);
-    expect(set.has(receptionOnly)).toBe(false);
+    const m = matchRegisteredCandidates([closing, receptionOnly], [{ patientName: '홍길동', chartNo: '100', phone: null }]);
+    expect(m.registered.has(closing)).toBe(true);
+    expect(m.registered.has(receptionOnly)).toBe(false);
+    expect(m.possibleHomonym.has(receptionOnly)).toBe(false);
   });
 
-  it('동명이인 가능 표시가 붙은 접수 후보는 이름만으로 등록됨 처리하지 않는다', () => {
+  it('이미 동명이인 가능 표시가 붙은 접수 후보는 이름만으로 등록됨 처리하지 않는다', () => {
     const c = mergeReceptionCandidates([], [rec({ id: 'a' }), rec({ id: 'b' })], DATE).candidates;
-    const set = registeredCandidates(c, [{ patientName: '홍길동', chartNo: null, phone: null }]);
-    expect(set.size).toBe(0);
+    expect(matchRegisteredCandidates(c, [nameOnly]).registered.size).toBe(0);
   });
 
   it('등록 환자 한 명은 접수 후보 한 명에게만 짝지어진다', () => {
@@ -131,7 +152,7 @@ describe('registeredCandidates', () => {
       { ...base(), chartNo: '', fromReception: true, receptionId: 'a' },
       { ...base(), chartNo: '', fromReception: true, receptionId: 'b' },
     ];
-    expect(registeredCandidates(c, [{ patientName: '홍길동' }]).size).toBe(1);
+    expect(matchRegisteredCandidates(c, [{ patientName: '홍길동' }]).registered.size).toBe(1);
   });
 });
 
@@ -165,11 +186,48 @@ describe('reconcileFirstVisits + 접수기록부', () => {
     expect(reconcileFirstVisits(data, 0, DATE).expected).toBe(2);
   });
 
-  it('접수 후보가 이미 등록된 환자와 같은 사람이면 기준에 더하지 않는다', () => {
-    const data = result({ source: 'settlement', closingFirstVisitCount: 2, candidates: [recOnly('C', 'c')] });
-    const r = reconcileFirstVisits(data, 2, DATE, [{ patientName: 'C' }]);
-    expect(r.expected).toBe(2);
-    expect(r.missing).toBe(0);
+  it('접수기록부에만 있는 사람이 이미 등록돼 있어도 기준에 센다(등록 수에도 들어 있으므로) — 다른 사람의 누락이 가려지지 않는다', () => {
+    // 결산 신규환자수 2 = A, B. 접수기록부에만 있는 C는 등록됨. A도 등록됨, B는 아직.
+    const data = result({
+      source: 'settlement',
+      closingFirstVisitCount: 2,
+      candidates: [base({ patientName: 'A', chartNo: '1' }), base({ patientName: 'B', chartNo: '2' }), recOnly('C', 'c')],
+      receptionFirstCount: 1,
+    });
+    const r = reconcileFirstVisits(data, 2, DATE); // 등록: A, C
+    expect(r.expected).toBe(3);
+    expect(r.missing).toBe(1);
+  });
+
+  it('결산 + 접수 + 등록이 섞인 경우: 겹치는 접수 줄은 더하지 않고, 접수에만 있는 재초진은 더한다', () => {
+    const merged = mergeReceptionCandidates(
+      [base({ patientName: 'A', chartNo: '1' }), base({ patientName: 'R', chartNo: '3', kind: '재초진' })],
+      [rec({ id: 'a', patientName: 'A' }), rec({ id: 'x', patientName: 'X' }), rec({ id: 'y', patientName: 'Y', visitKind: '재초' })],
+      DATE
+    );
+    const data = result({
+      source: 'settlement',
+      closingFirstVisitCount: 1,
+      candidates: merged.candidates,
+      receptionFirstCount: merged.receptionFirstCount,
+      receptionRevisitCount: merged.receptionRevisitCount,
+    });
+    // 신규 1 + 결산 재초진 후보 R 1 + 접수에만 있는 X, Y 2 = 4 ; 등록 A, X → missing 2
+    const r = reconcileFirstVisits(data, 2, DATE);
+    expect(r.expected).toBe(4);
+    expect(r.missing).toBe(2);
+  });
+
+  it('결산 없이 예약 명단만 있고 접수기록부에 초/재초가 있으면 접수기록부 수를 기준으로 삼고 비교 가능하다', () => {
+    const data = result({
+      source: 'reservation',
+      candidates: [base({ patientName: 'R1', kind: undefined }), base({ patientName: 'R2', chartNo: '2', kind: undefined }), recOnly('C', 'c')],
+      receptionFirstCount: 1,
+    });
+    expect(hasReliableFirstVisitBasis(data)).toBe(true);
+    const r = reconcileFirstVisits(data, 0, DATE);
+    expect(r).toMatchObject({ expected: 1, missing: 1, expectedSource: '접수기록부 기준' });
+    expect(hasReliableFirstVisitBasis(result({ source: 'reservation' }))).toBe(false);
   });
 
   it('접수기록부의 초가 결산 신규환자수보다 많으면 그 차이를 알린다', () => {

@@ -13,6 +13,10 @@ import { todayKst } from '@/lib/kst';
 import { countReservationsByDates } from '@/lib/reservations/dailyRecords.server';
 import { getFirstVisitMissing } from '@/lib/reservations/firstVisitMissing.server';
 import { getOpenCallCounts } from '@/lib/supabase/happyCallCounts.server';
+import { withTimeout } from '@/lib/withTimeout';
+
+// 느린 조회 하나 때문에 홈이 끝없이 기다리지 않게: 이 시간이 지나면 그 항목만 "-"(null)로 보인다.
+const LOOKUP_TIMEOUT_MS = 8000;
 
 // 도구 이동은 왼쪽 메뉴가 맡는다. 홈은 "오늘" 화면 — 확인할 것, 이번 달 현황, 오늘의 해피콜과 할 일.
 export default async function HomePage() {
@@ -53,9 +57,9 @@ export default async function HomePage() {
     countNewRemoteRequests(supabase),
     countWaitingHerbQueue(supabase),
     // 아래 세 가지도 서로 독립이라 하나가 실패해도 그 항목만 "-"(null)로 보인다.
-    countReservationsByDates([today]).then((counts) => counts[today] ?? 0, () => null),
-    getFirstVisitMissing(today).catch(() => null),
-    getOpenCallCounts(today).catch(() => null),
+    withTimeout(countReservationsByDates([today]).then((counts) => counts[today] ?? 0), LOOKUP_TIMEOUT_MS),
+    withTimeout(getFirstVisitMissing(today), LOOKUP_TIMEOUT_MS),
+    withTimeout(getOpenCallCounts(today), LOOKUP_TIMEOUT_MS),
   ]);
   const summary = summaryResult.value;
   const summaryError = summaryResult.error;

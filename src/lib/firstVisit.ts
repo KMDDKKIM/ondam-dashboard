@@ -260,6 +260,8 @@ export interface FirstVisitCandidatesResult {
   /** 접수기록부에 초로 적힌 사람 수 / 재초로 적힌 사람 수(결산 명단과 겹치는 사람 포함, 같은 사람의 중복 줄은 하나) */
   receptionFirstCount?: number;
   receptionRevisitCount?: number;
+  /** 접수기록부를 읽지 못해서 그 후보가 빠져 있다(화면에서 안내) */
+  receptionUnavailable?: boolean;
 }
 
 /** 접수기록부 한 줄에서 후보 만들기에 필요한 것만. */

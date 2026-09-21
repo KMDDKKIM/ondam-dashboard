@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FirstVisitCandidateDto, FirstVisitCandidatesResult, VisitClassification } from '@/lib/firstVisit';
-import { candidateSuggestion, reconcileFirstVisits, registeredCandidates } from '@/lib/firstVisitReconcile';
+import { candidateSuggestion, reconcileFirstVisits, matchRegisteredCandidates } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
@@ -74,17 +74,19 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   const rows = useMemo(() => {
     // 등록 여부는 홈/메뉴 배지와 같은 함수로 정한다(등록 환자 한 명은 후보 한 명에게만 짝지어진다).
-    const registeredSet = registeredCandidates(
+    const match = matchRegisteredCandidates(
       data?.candidates ?? [],
       registered.map((p) => ({ patientName: p.patientName, chartNo: p.chartNo, phone: p.phone }))
     );
-    return (data?.candidates ?? []).map((candidate) => {
+    return (data?.candidates ?? []).map((rawCandidate) => {
+      // 이름이 같은 등록 환자가 있지만 같은 사람인지 확인할 수 없는 접수 후보는 "동명이인 가능"으로 보여 준다.
+      const candidate = match.possibleHomonym.has(rawCandidate) ? { ...rawCandidate, possibleHomonym: true } : rawCandidate;
       // 일일결산 기반이면 서버가 이전 내원 기록·차트번호로 정한 판정을 쓰고, 예약 명단 기반이면 이전 내원일로 판정한다.
       const suggestion: VisitClassification = candidateSuggestion(candidate, date);
       const key = candidate.fromReception
         ? `reception|${candidate.receptionId ?? candidate.patientName}`
         : `${candidate.chartNo}|${candidate.patientName}|${candidate.phone}`;
-      return { candidate, suggestion, isRegistered: registeredSet.has(candidate), key };
+      return { candidate, suggestion, isRegistered: match.registered.has(rawCandidate), key };
     });
   }, [data, date, registered]);
 
@@ -95,7 +97,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   // 대조 규칙은 홈/메뉴 배지와 같은 함수(firstVisitReconcile.ts)를 쓴다.
   const { expected, expectedSource, registered: registeredCount, missing, receptionMore } = data
-    ? reconcileFirstVisits(data, registered.length, date, registered)
+    ? reconcileFirstVisits(data, registered.length, date)
     : { expected: 0, expectedSource: '', registered: registered.length, missing: 0, receptionMore: 0 };
   const label = date === today ? '오늘' : date;
 
@@ -141,6 +143,11 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       </p>
 
       {error && <p style={{ color: 'red', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
+      {data?.receptionUnavailable && (
+        <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
+          접수기록부를 읽지 못했어요 — 접수기록부에서 온 후보는 빠져 있어요. 새로고침해 보세요.
+        </p>
+      )}
 
       {loading ? (
         <p className="muted-text">불러오는 중...</p>

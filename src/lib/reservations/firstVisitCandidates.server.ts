@@ -314,15 +314,16 @@ async function getBaseCandidates(date: string): Promise<FirstVisitCandidatesResu
 
 /**
  * 접수기록부(reception_records)는 로그인 사용자의 RLS(승인된 직원만 읽기)로 열려 있어서, 위의 admin 클라이언트가 아니라
- * 요청의 로그인 세션을 쓰는 서버 클라이언트로 읽는다. 읽지 못해도(표 없음·권한 없음·네트워크) 조용히 건너뛴다 — 후보 목록 자체는 막지 않는다.
+ * 요청의 로그인 세션을 쓰는 서버 클라이언트로 읽는다. 읽지 못해도(표 없음·권한 없음·네트워크) 후보 목록 자체는 막지 않고 receptionUnavailable 로만 알린다.
  */
-async function loadReceptionRows(date: string): Promise<ReceptionVisitRow[]> {
+async function loadReceptionRows(date: string): Promise<{ rows: ReceptionVisitRow[]; failed: boolean }> {
   try {
     const supabase = await createClient();
     const records = await listReceptionRecords(supabase, date);
-    return records.map((r) => ({ id: r.id, patientName: r.patientName, visitKind: r.visitKind, birthDate: r.birthDate }));
+    return { rows: records.map((r) => ({ id: r.id, patientName: r.patientName, visitKind: r.visitKind, birthDate: r.birthDate })), failed: false };
   } catch {
-    return [];
+    // 화면이 "접수기록부를 읽지 못했어요"라고 알릴 수 있게 실패했다는 표시를 남긴다.
+    return { rows: [], failed: true };
   }
 }
 
@@ -333,8 +334,8 @@ async function loadReceptionRows(date: string): Promise<ReceptionVisitRow[]> {
  * 접수기록부에서 초/재초로 적힌 사람은 mergeReceptionCandidates 로 합친다(같은 사람은 한 명, 이름만 같은 다른 사람은 동명이인 가능으로 표시).
  */
 export async function getFirstVisitCandidates(date: string): Promise<FirstVisitCandidatesResult> {
-  const [base, receptionRows] = await Promise.all([getBaseCandidates(date), loadReceptionRows(date)]);
-  const merged = mergeReceptionCandidates(base.candidates, receptionRows, date);
+  const [base, reception] = await Promise.all([getBaseCandidates(date), loadReceptionRows(date)]);
+  const merged = mergeReceptionCandidates(base.candidates, reception.rows, date);
   const hasReception = merged.receptionFirstCount + merged.receptionRevisitCount > 0;
   return {
     ...base,
@@ -344,5 +345,6 @@ export async function getFirstVisitCandidates(date: string): Promise<FirstVisitC
     candidates: merged.candidates,
     receptionFirstCount: merged.receptionFirstCount,
     receptionRevisitCount: merged.receptionRevisitCount,
+    receptionUnavailable: reception.failed || undefined,
   };
 }

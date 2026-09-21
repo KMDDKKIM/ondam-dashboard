@@ -10,6 +10,7 @@ import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
 import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
 import { nextBookingPrefill } from '@/lib/receptionLog';
+import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/sectionMessages';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
@@ -53,7 +54,8 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
   useEffect(() => {
     if (clearSignal > 0) {
       setResult('');
-      setError('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
     }
   }, [clearSignal]);
 
@@ -178,7 +180,8 @@ function ReservationSection({ onSaved, clearSignal, onOutcome }: SectionSync & {
   useEffect(() => {
     if (clearSignal > 0) {
       setResult('');
-      setError('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
     }
   }, [clearSignal]);
 
@@ -372,7 +375,8 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   useEffect(() => {
     if (clearSignal > 0) {
       setResult('');
-      setError('');
+      // 다시 저장해야 하는 오류(예: 내원 환자 명단 저장 실패)는 다른 칸을 저장해도 남긴다.
+      setError(errorAfterOtherSectionSaved);
     }
   }, [clearSignal]);
 
@@ -619,7 +623,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
           await replaceDailyVisits(supabase, date, visits, user?.id ?? null);
           visitsNote = ` 내원 환자 ${visits.length}명의 이름·차트번호도 저장했어요.`;
         } catch {
-          setError('결산은 저장했지만 내원 환자 명단을 저장하지 못했어요. 같은 결산표로 저장을 한 번 더 눌러 주세요.');
+          setError(VISITS_NOT_SAVED_ERROR);
         }
       }
       setResult(`${date} 일일 결산을 저장했어요. (매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''})${visitsNote}`);
@@ -661,7 +665,8 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         onChange={(e) => {
           setText(e.target.value);
           setResult('');
-          setError('');
+          // 내원 환자 명단 저장 실패 안내는 일일결산을 다시 저장할 때까지 남긴다.
+          setError(errorAfterOtherSectionSaved);
           setCopied(false);
         }}
         placeholder="일일 결산표를 여기에 붙여넣으세요 (Ctrl+V)"

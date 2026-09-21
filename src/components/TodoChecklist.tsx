@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { listTodos, createTodo, setTodoDone, deleteTodo } from '@/lib/supabase/todos';
 import { visibleTodos } from '@/lib/todoVisibility';
@@ -99,10 +99,21 @@ export function TodoChecklist() {
     }
   }
 
+  // × 를 빠르게 두 번 눌러도 확인창이 두 개 뜨지 않게, 확인창이 열려 있는 할 일은 무시한다.
+  const confirming = useRef(new Set<string>());
+
   async function remove(todo: Todo) {
     const id = todo.id;
+    if (confirming.current.has(id)) return;
+    confirming.current.add(id);
     // 실수로 × 를 눌러도 바로 지워지지 않게 먼저 물어본다.
-    if (!(await confirmDialog(`"${todo.text}" 을(를) 삭제할까요?`, { confirmLabel: '삭제' }))) return;
+    let ok = false;
+    try {
+      ok = await confirmDialog(`"${todo.text}" 을(를) 삭제할까요?`, { confirmLabel: '삭제' });
+    } finally {
+      confirming.current.delete(id);
+    }
+    if (!ok) return;
     setTodos((prev) => prev.filter((t) => t.id !== id));
     try {
       await deleteTodo(supabase, id);
