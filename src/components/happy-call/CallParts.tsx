@@ -26,6 +26,8 @@ const smallButton = {
 
 /** "한약 2/3" 처럼 종류 + (한약이면) 몇 번째 콜인지 */
 export function kindText(item: WorklistItem): string {
+  // 직접 추가하거나 비급여 구매에서 만든 콜은 고른 종류(초진/한약/린다이어트/비급여/기타)를 그대로 보여 준다.
+  if (item.kind === 'manual' && item.callType) return item.callType;
   const base = CALL_KIND_LABEL[item.kind];
   return item.kind === 'herb' && item.callNumber ? `${base} ${item.callNumber}/3` : base;
 }

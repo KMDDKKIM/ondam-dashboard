@@ -33,6 +33,14 @@ export const CALL_KIND_LABEL: Record<CallKind, string> = {
   manual: '비급여/수동',
 };
 
+/** 직접 추가하거나 비급여 구매에서 만든 콜에 붙이는 종류(수동 콜의 call_type). */
+export const MANUAL_CALL_TYPES = ['초진', '한약', '린다이어트', '비급여', '기타'] as const;
+export type ManualCallType = (typeof MANUAL_CALL_TYPES)[number];
+
+export function isManualCallType(value: string | null | undefined): value is ManualCallType {
+  return (MANUAL_CALL_TYPES as readonly string[]).includes(value ?? '');
+}
+
 /** 부재중까지 포함해 최대 이만큼 건다(1차 + 재시도 1번). */
 export const MAX_ATTEMPTS = 2;
 
@@ -171,6 +179,8 @@ export interface WorklistItem {
   memo: string | null;
   /** 콜을 만들 때 붙은 안내 문구(비급여/수동 콜) */
   note: string | null;
+  /** 수동 콜에 고른 종류(초진/한약/린다이어트/비급여/기타). 종류를 고르지 않고 만든 옛 콜이나 다른 출처는 null */
+  callType: string | null;
   completedBy: string | null;
   completedAt: string | null;
 }
@@ -189,6 +199,8 @@ export function isProcessedToday(item: WorklistItem, today: string): boolean {
 export interface Worklist {
   /** 예정일 ≤ 오늘인 미완료 콜. 연체(예정일이 더 이른 것)가 위로 온다. */
   open: WorklistItem[];
+  /** 예정일이 오늘보다 뒤인 미완료 콜(앞으로 걸 콜). 가까운 날짜가 위로 온다. */
+  upcoming: WorklistItem[];
   /** 오늘 결과를 기록한 콜(되돌리기 대상). 최근 처리한 것이 위로 온다. */
   doneToday: WorklistItem[];
 }
@@ -202,8 +214,16 @@ export function buildWorklist(items: WorklistItem[], today: string): Worklist {
         a.patientName.localeCompare(b.patientName, 'ko') ||
         a.key.localeCompare(b.key)
     );
+  const upcoming = items
+    .filter((i) => !i.closed && i.dueDate > today)
+    .sort(
+      (a, b) =>
+        a.dueDate.localeCompare(b.dueDate) ||
+        a.patientName.localeCompare(b.patientName, 'ko') ||
+        a.key.localeCompare(b.key)
+    );
   const doneToday = items
     .filter((i) => isProcessedToday(i, today))
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
-  return { open, doneToday };
+  return { open, upcoming, doneToday };
 }

@@ -2,6 +2,7 @@
 // 어떻게 다시 맞출지 정하는 순수 로직. DB 접근은 src/lib/supabase/nonCoveredPurchases.ts.
 
 import { addDays, computeHerbCallDates } from './happyCallStats';
+import type { ManualCallType } from './happyCallQueue';
 
 export type CallSlot = 1 | 2 | 3;
 export const CALL_SLOTS: readonly CallSlot[] = [1, 2, 3];
@@ -71,4 +72,14 @@ export function planCallResync(desired: readonly DesiredCall[], existing: readon
     }
   }
   return ops;
+}
+
+/**
+ * 비급여 구매에서 만든 해피콜에 붙일 종류. 린다이어트/린데일리는 린다이어트, 처방일수가 있거나 한약류(한약·보약·경옥고·공진단·관절고)는 한약,
+ * 그 밖에는 비급여.
+ */
+export function callTypeForPurchase(productName: string, durationDays: number | null): ManualCallType {
+  if (/린다이어트|린데일리/.test(productName)) return '린다이어트';
+  if (durationDays || /한약|보약|경옥고|공진단|관절고/.test(productName)) return '한약';
+  return '비급여';
 }

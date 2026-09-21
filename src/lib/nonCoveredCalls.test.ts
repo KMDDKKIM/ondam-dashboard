@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { desiredCalls, planCallResync, type ExistingCall } from './nonCoveredCalls';
+import { callTypeForPurchase, desiredCalls, planCallResync, type ExistingCall } from './nonCoveredCalls';
 
 function existing(slot: 1 | 2 | 3, callDate: string, extra: Partial<ExistingCall> = {}): ExistingCall {
   return { slot, id: `e${slot}`, callDate, note: null, closed: false, attempts: 0, ...extra };
@@ -73,5 +73,17 @@ describe('planCallResync', () => {
   it('수령일을 지우면 열린 콜을 모두 지운다', () => {
     const have = [same(1, '2026-09-21'), same(2, '2026-10-05', { closed: true })];
     expect(planCallResync([], have)).toEqual([{ type: 'remove', slot: 1, id: 'e1' }]);
+  });
+});
+
+describe('callTypeForPurchase', () => {
+  it('린다이어트·린데일리는 린다이어트, 처방일수가 있거나 한약류면 한약, 그 밖은 비급여', () => {
+    expect(callTypeForPurchase('린다이어트', null)).toBe('린다이어트');
+    expect(callTypeForPurchase('린데일리', null)).toBe('린다이어트');
+    expect(callTypeForPurchase('일반한약', null)).toBe('한약');
+    expect(callTypeForPurchase('녹용2배공진단', null)).toBe('한약');
+    expect(callTypeForPurchase('경옥고', null)).toBe('한약');
+    expect(callTypeForPurchase('무슨약침', 15)).toBe('한약');
+    expect(callTypeForPurchase('약침 패키지', null)).toBe('비급여');
   });
 });

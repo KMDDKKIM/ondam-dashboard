@@ -7,7 +7,7 @@ import {
   updateUntouchedManualEntry,
 } from './happyCallQueue';
 import { addDays } from '@/lib/happyCallStats';
-import { CALL_SLOTS, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
+import { CALL_SLOTS, callTypeForPurchase, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
 
 const TABLE = 'non_covered_purchases';
 
@@ -174,6 +174,8 @@ export async function createNonCoveredPurchase(
         note: call.note,
         callDate: call.callDate,
         createdBy: input.createdBy,
+        callType: callTypeForPurchase(input.productName, input.durationDays),
+        phone: input.phone,
       });
       createdIds.push(id);
       linked[call.slot] = id;
@@ -257,6 +259,8 @@ export async function updateNonCoveredPurchase(
         note: op.note,
         callDate: op.callDate,
         createdBy: existing.createdBy,
+        callType: callTypeForPurchase(patch.productName, patch.durationDays),
+        phone: patch.phone,
       });
       createdIds.push(id);
       nextIds[op.slot] = id;

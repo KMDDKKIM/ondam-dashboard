@@ -129,6 +129,7 @@ function herbItems(row: HerbRow): WorklistItem[] {
       closed: done,
       memo: (row[`call_${n}_note`] as string | null) ?? null,
       note: null,
+      callType: null,
       completedBy: (row[`call_${n}_completed_by`] as string | null) ?? null,
       completedAt: (row[`call_${n}_completed_at`] as string | null) ?? null,
     };
@@ -155,6 +156,8 @@ interface ManualRow extends SimpleCallRow {
   patient_name: string;
   note: string | null;
   done_note: string | null;
+  call_type?: string | null;
+  phone?: string | null;
 }
 
 /** 비급여 구매에 적힌 연락처를 수동 콜(해피콜 행 id)에 이어 붙인다. 실패하면 그냥 "-"로 둔다. */
@@ -193,18 +196,18 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
     .select('*')
     .or(
       [1, 2, 3]
-        .map((n) => `and(call_${n}_done.eq.false,call_date_${n}.lte.${today})`)
+        .map((n) => `call_${n}_done.eq.false`)
         .concat([1, 2, 3].map((n) => `call_${n}_completed_at.gte.${since}`))
         .join(',')
     );
   const dietQuery = supabase
     .from('diet_package_calls')
     .select('id, call_date, original_due, done, note, attempts, result, completed_by, completed_at, diet_packages(patient_name)')
-    .or(`and(done.eq.false,call_date.lte.${today}),completed_at.gte.${since}`);
+    .or(`done.eq.false,completed_at.gte.${since}`);
   const manualQuery = supabase
     .from('happy_call_manual_entries')
     .select('*')
-    .or(`and(done.eq.false,call_date.lte.${today}),completed_at.gte.${since}`);
+    .or(`done.eq.false,completed_at.gte.${since}`);
 
   const [herb, diet, manual, patients] = await Promise.all([
     herbQuery,
@@ -239,6 +242,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         closed: progress.closed,
         memo: p.callMemo ?? null,
         note: null,
+        callType: null,
         completedBy: p.callCompletedBy ?? null,
         completedAt: p.callCompletedAt ?? null,
       };
@@ -259,6 +263,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         closed: c.done,
         memo: c.note,
         note: null,
+        callType: null,
         completedBy: c.completed_by,
         completedAt: c.completed_at,
       })
@@ -269,7 +274,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         kind: 'manual',
         id: m.id,
         patientName: m.patient_name,
-        phone: phones.get(m.id) ?? null,
+        phone: m.phone ?? phones.get(m.id) ?? null,
         doctorStaffId: null,
         dueDate: m.call_date,
         originalDue: m.original_due,
@@ -278,6 +283,7 @@ export async function loadWorklist(supabase: SupabaseClient, today: string): Pro
         closed: m.done,
         memo: m.done_note,
         note: m.note,
+        callType: m.call_type ?? null,
         completedBy: m.completed_by,
         completedAt: m.completed_at,
       })

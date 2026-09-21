@@ -51,6 +51,7 @@ function makeItem(overrides: Partial<WorklistItem> = {}): WorklistItem {
     closed: false,
     memo: null,
     note: null,
+    callType: null,
     completedBy: null,
     completedAt: null,
     ...overrides,
@@ -246,6 +247,22 @@ describe('isOpenAndDue', () => {
     expect(isOpenAndDue({ closed: false, dueDate: '2026-09-20' }, '2026-09-20')).toBe(true);
     expect(isOpenAndDue({ closed: false, dueDate: '2026-09-20' }, '2026-09-25')).toBe(true);
     expect(isOpenAndDue({ closed: true, dueDate: '2026-09-20' }, '2026-09-25')).toBe(false);
+  });
+});
+
+describe('buildWorklist - upcoming', () => {
+  const today = '2026-09-21';
+
+  it('예정일이 오늘보다 뒤인 미완료 콜은 upcoming 에, 가까운 날짜 순', () => {
+    const items = [
+      makeItem({ key: 'far', dueDate: '2026-09-30' }),
+      makeItem({ key: 'near', dueDate: '2026-09-22' }),
+      makeItem({ key: 'today', dueDate: '2026-09-21' }),
+      makeItem({ key: 'done-future', dueDate: '2026-09-25', closed: true, result: 'answered' }),
+    ];
+    const w = buildWorklist(items, today);
+    expect(w.upcoming.map((i) => i.key)).toEqual(['near', 'far']);
+    expect(w.open.map((i) => i.key)).toEqual(['today']);
   });
 });
 
