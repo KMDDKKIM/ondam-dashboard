@@ -129,8 +129,46 @@ export function dedupeVisitCandidates(rows: ReservationLike[]): VisitCandidate[]
   return result;
 }
 
+export interface SettlementVisitLike {
+  patientName: string;
+  chartNo: string;
+  doctorName: string;
+}
+
+/**
+ * 일일결산에 저장된 그날 내원 환자에서 후보 목록을 만든다(같은 차트번호는 한 명, 차트번호가 없으면 이름으로).
+ * 연락처·시간은 결산표에 없어 비워 두고, 서버가 예약 기록에서 찾을 수 있으면 채운다.
+ */
+export function dedupeSettlementVisits(rows: SettlementVisitLike[]): VisitCandidate[] {
+  const seen = new Set<string>();
+  const result: VisitCandidate[] = [];
+  for (const row of rows) {
+    const name = row.patientName.trim();
+    if (!name) continue;
+    const chart = row.chartNo.trim();
+    const key = chart ? `c:${chart}` : `n:${name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ patientName: name, chartNo: chart, phone: '', doctorName: row.doctorName.trim(), timeLabel: '' });
+  }
+  return result;
+}
+
+/**
+ * 결산표의 신규환자수 N명 → 그날 차트번호가 가장 큰 N명이 새 차트(초진)일 가능성이 높다(새 환자는 항상 가장 큰 번호를 받는다).
+ * 차트번호가 숫자가 아닌 사람이 있거나 신규환자수를 모르면 판단하지 않고 null.
+ */
+export function likelyNewChartNos(chartNos: string[], newPatientCount: number | null): Set<string> | null {
+  if (newPatientCount == null) return null;
+  if (chartNos.length === 0 || chartNos.some((c) => !/^\d+$/.test(c))) return null;
+  const sorted = [...new Set(chartNos)].sort((a, b) => Number(b) - Number(a));
+  return new Set(sorted.slice(0, newPatientCount));
+}
+
 /** GET /api/first-visit-candidates 응답의 후보 한 명. */
 export interface FirstVisitCandidateDto extends VisitCandidate {
+  /** 그날 신규환자수 기준으로 차트번호가 새 차트로 보이는가(일일결산 기반일 때만, 판단할 수 없으면 null) */
+  likelyNewChart?: boolean | null;
   /** 이 환자의 이전 내원일(예약 명단에서 "내원"으로 표시된 날, 오래된 순, 중복 없음) */
   previousVisitDates: string[];
   /** 이름이 같은 이전 기록이 있지만 번호를 확인할 수 없어 같은 사람인지 모름(이전 내원으로 세지 않음) */
@@ -139,7 +177,9 @@ export interface FirstVisitCandidateDto extends VisitCandidate {
 
 export interface FirstVisitCandidatesResult {
   date: string;
-  /** 그 날짜의 예약 명단(daily_records)이 저장되어 있는지 */
+  /** 후보를 어디서 뽑았나 — settlement: 일일결산의 내원 환자 명단, reservation: 예약 명단 */
+  source?: 'settlement' | 'reservation';
+  /** 그 날짜의 명단(일일결산 환자 목록 또는 예약 명단)이 저장되어 있는지 */
   hasRecord: boolean;
   /** daily_records.first_visit_count — 마감 결산에 적힌 초진 수(없으면 null) */
   closingFirstVisitCount: number | null;

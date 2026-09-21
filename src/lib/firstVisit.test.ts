@@ -8,6 +8,8 @@ import {
   isSamePatient,
   previousVisitDatesFor,
   type ReservationLike,
+  dedupeSettlementVisits,
+  likelyNewChartNos,
 } from './firstVisit';
 
 describe('addMonthsKst', () => {
@@ -160,5 +162,35 @@ describe('same-name history without a phone never hides a candidate', () => {
     const r = (visitStatus: string) => ({ patientName: '박', chartNo: '9', phone: '', mobile: '', visitStatus, doctorName: '', timeLabel: '' });
     expect(dedupeVisitCandidates([r('취소'), r('노쇼')])).toEqual([]);
     expect(dedupeVisitCandidates([r('')])).toHaveLength(1);
+  });
+});
+
+describe('dedupeSettlementVisits', () => {
+  it('같은 차트번호는 한 명으로, 차트번호가 없으면 이름으로 묶는다', () => {
+    const rows = [
+      { patientName: '가상하나', chartNo: '004001', doctorName: '김동규' },
+      { patientName: '가상하나', chartNo: '004001', doctorName: '김동규' },
+      { patientName: '가상둘', chartNo: '', doctorName: '박소은' },
+      { patientName: '가상둘', chartNo: '', doctorName: '박소은' },
+      { patientName: ' ', chartNo: '1', doctorName: '' },
+    ];
+    expect(dedupeSettlementVisits(rows).map((c) => c.patientName)).toEqual(['가상하나', '가상둘']);
+  });
+});
+
+describe('likelyNewChartNos', () => {
+  it('신규환자수 N명이면 차트번호가 가장 큰 N명', () => {
+    const set = likelyNewChartNos(['004001', '006544', '006543', '006370'], 2);
+    expect([...set!].sort()).toEqual(['006543', '006544']);
+  });
+
+  it('신규환자수 0이면 아무도 새 차트가 아니다', () => {
+    expect(likelyNewChartNos(['004001', '006544'], 0)!.size).toBe(0);
+  });
+
+  it('신규환자수를 모르거나 차트번호가 숫자가 아니면 판단하지 않는다(null)', () => {
+    expect(likelyNewChartNos(['1', '2'], null)).toBeNull();
+    expect(likelyNewChartNos(['A-1', '2'], 1)).toBeNull();
+    expect(likelyNewChartNos([], 1)).toBeNull();
   });
 });

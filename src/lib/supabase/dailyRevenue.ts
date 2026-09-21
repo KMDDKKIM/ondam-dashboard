@@ -11,15 +11,17 @@ export async function upsertDailyRevenue(
     date: string;
     totalRevenue: number;
     visitCount: number | null;
+    /** 결산표 합계 줄의 신규환자수(초진 수). 모르면 null. */
+    newPatientCount?: number | null;
     closing: DailyClosing;
     updatedBy: string | null;
   }
 ): Promise<void> {
-  const { error } = await supabase.from('daily_revenue').upsert(
-    {
+  const row = {
       date: input.date,
       total_revenue: input.totalRevenue,
       visit_count: input.visitCount,
+      new_patient_count: input.newPatientCount ?? null,
       reservation_count: input.closing.reservationCount,
       kept_count: input.closing.keptCount,
       noshow_count: input.closing.noshowCount,
@@ -30,9 +32,16 @@ export async function upsertDailyRevenue(
       source: 'daily',
       updated_by: input.updatedBy,
       updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'date' }
-  );
+  };
+  const { error } = await supabase.from('daily_revenue').upsert(row, { onConflict: 'date' });
+  // 신규환자수 칸을 만드는 SQL(migration_daily_visits.sql)을 아직 실행하지 않았어도 결산 저장은 되도록, 그 칸만 빼고 한 번 더 시도한다.
+  if (error && /new_patient_count/.test(error.message)) {
+    const { new_patient_count: _omit, ...withoutNewCount } = row;
+    void _omit;
+    const retry = await supabase.from('daily_revenue').upsert(withoutNewCount, { onConflict: 'date' });
+    if (retry.error) throw retry.error;
+    return;
+  }
   if (error) throw error;
 }
 

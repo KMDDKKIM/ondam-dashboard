@@ -67,7 +67,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
     } catch {
       if (id !== requestId.current) return;
       setData(null);
-      setError('예약 명단에서 후보를 불러오지 못했어요.');
+      setError('후보를 불러오지 못했어요.');
     } finally {
       if (id === requestId.current) setLoading(false);
     }
@@ -79,7 +79,9 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   const rows = useMemo(() => {
     return (data?.candidates ?? []).map((candidate) => {
-      const suggestion: VisitClassification = classifyVisit(candidate.previousVisitDates, date);
+      let suggestion: VisitClassification = classifyVisit(candidate.previousVisitDates, date);
+      // 일일결산 기반: 이전 기록이 없어도 신규환자수로 볼 때 새 차트가 아니면 초진이 아니다(저장을 시작하기 전에 온 재진 환자).
+      if (data?.source === 'settlement' && suggestion === '초진(추정)' && candidate.likelyNewChart === false) suggestion = '재진';
       const person = { name: candidate.patientName, chartNo: candidate.chartNo, phones: [candidate.phone] };
       const isRegistered = registered.some((p) =>
         isSamePatient(person, { name: p.patientName, chartNo: p.chartNo, phones: [p.phone] })
@@ -96,7 +98,12 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
 
   // 대조: 마감 결산에 적힌 초진 수가 있으면 그것을, 없으면 예약 명단에서 초진/재초진으로 추정된 사람 수를 기준으로 삼는다.
   const expected = data?.closingFirstVisitCount ?? estimatedRows.length;
-  const expectedSource = data?.closingFirstVisitCount != null ? '마감 결산 기준' : '예약 명단 기준 추정';
+  const expectedSource =
+    data?.closingFirstVisitCount != null
+      ? data.source === 'settlement'
+        ? '일일결산 신규환자수 기준'
+        : '마감 결산 기준'
+      : '명단 기준 추정';
   const registeredCount = registered.length;
   const missing = Math.max(expected - registeredCount, 0);
   const label = date === today ? '오늘' : date;
@@ -121,15 +128,17 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   return (
     <div className="card" style={{ padding: 12, marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-        <strong>예약 명단의 초진·재초진 후보</strong>
+        <strong>{data?.source === 'settlement' ? '그날 내원 환자 중 초진·재초진 후보' : '예약 명단의 초진·재초진 후보'}</strong>
         <input type="date" value={date} onChange={(e) => e.target.value && onDateChange(e.target.value)} style={{ fontSize: 12, padding: 3 }} />
         <button type="button" onClick={load} style={{ fontSize: 12, padding: '3px 10px' }}>
           새로고침
         </button>
       </div>
       <p className="muted-text" style={{ fontSize: 12, margin: '0 0 8px' }}>
-        대시보드에 저장된 예약 기록만으로 판단해서 &quot;초진(추정)&quot;은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.
-        재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
+        {data?.source === 'settlement'
+          ? '일일결산에 저장된 그날 실제 내원 환자에서 뽑았어요. 이전 내원 기록과 결산표의 신규환자수로 판단하며, 저장을 시작하기 전에 온 재초진 환자는 알아낼 수 없어요.'
+          : '대시보드에 저장된 예약 기록만으로 판단해서 "초진(추정)"은 실제와 다를 수 있어요. 등록 전에 꼭 확인해 주세요.'}
+        {' '}재초진은 마지막 내원 후 3개월 이상 지나 다시 온 환자예요.
       </p>
 
       {error && <p style={{ color: 'red', fontSize: 13, margin: '0 0 8px' }}>{error}</p>}
@@ -137,7 +146,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
       {loading ? (
         <p className="muted-text">불러오는 중...</p>
       ) : data && !data.hasRecord ? (
-        <p className="muted-text">{date} 예약 명단이 아직 저장되어 있지 않아요.</p>
+        <p className="muted-text">{date} 일일결산(환자 목록)이나 예약 명단이 아직 저장되어 있지 않아요.</p>
       ) : data ? (
         <>
           <div
@@ -163,7 +172,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr style={{ background: '#f0f0f0' }}>
-                  {['성함', '차트번호', '연락처', '예약 주치의', '시간', '판정', '진료의', '구분', ''].map((h) => (
+                  {['성함', '차트번호', '연락처', data?.source === 'settlement' ? '결산 진료의' : '예약 주치의', ...(data?.source === 'settlement' ? [] : ['시간']), '판정', '진료의', '구분', ''].map((h) => (
                     <th key={h} style={{ ...cell, textAlign: 'left' }}>
                       {h}
                     </th>
@@ -180,9 +189,17 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
                       <td style={cell}>{row.candidate.chartNo || '-'}</td>
                       <td style={cell}>{row.candidate.phone || '-'}</td>
                       <td style={cell}>{row.candidate.doctorName || '-'}</td>
-                      <td style={cell}>{row.candidate.timeLabel || '-'}</td>
+                      {data?.source !== 'settlement' && <td style={cell}>{row.candidate.timeLabel || '-'}</td>}
                       <td style={cell}>
                         {row.suggestion}
+                        {row.candidate.likelyNewChart && (
+                          <span
+                            style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 999, background: '#e8f5ec', color: '#1b7a3a', fontSize: 11, fontWeight: 700 }}
+                            title="결산표의 신규환자수만큼, 그날 차트번호가 가장 큰 사람이에요"
+                          >
+                            새 차트
+                          </span>
+                        )}
                         {row.candidate.possibleHomonym && (
                           <span
                             style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 999, background: '#fff3cd', color: '#7a5b00', fontSize: 11, fontWeight: 700 }}

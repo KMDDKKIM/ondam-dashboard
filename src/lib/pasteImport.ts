@@ -64,7 +64,7 @@ const RESERVATION_REQUIRED = [
   '예약메모',
 ];
 
-function toRows(text: string): string[][] {
+export function toRows(text: string): string[][] {
   return text
     .split(/\r?\n/)
     .map((line) => line.split('\t').map((cell) => cell.trim()))

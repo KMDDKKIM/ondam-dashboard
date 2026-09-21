@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { analyzePasteText } from '@/lib/pasteImport';
+import { parseSettlementVisits } from '@/lib/settlementVisits';
+import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
@@ -353,6 +355,8 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
   const visitCount = analysis?.format === 'daily' ? analysis.visitCount : null;
   const newPatientCount = analysis?.format === 'daily' ? analysis.newPatientCount : null;
   const invalidCells = analysis?.format === 'daily' ? analysis.invalidCells : [];
+  // 결산표 아래 환자 목록(이름·차트번호). 저장하면 초진환자 해피콜의 초진·재초진 후보로 쓰인다.
+  const visits = useMemo(() => (analysis?.format === 'daily' ? parseSettlementVisits(text) : []), [analysis, text]);
   const formatError = analysis && analysis.format !== 'daily';
   const missingDate = analysis?.format === 'daily' && !analysis.date;
 
@@ -537,6 +541,7 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
         date,
         totalRevenue,
         visitCount,
+        newPatientCount,
         closing: {
           reservationCount: n('reservationCount'),
           keptCount: n('keptCount'),
@@ -548,7 +553,16 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
         },
         updatedBy: user?.id ?? null,
       });
-      setResult(`${date} 일일 결산을 저장했어요. (매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''})`);
+      let visitsNote = '';
+      if (visits.length > 0) {
+        try {
+          await replaceDailyVisits(supabase, date, visits, user?.id ?? null);
+          visitsNote = ` 내원 환자 ${visits.length}명의 이름·차트번호도 저장했어요.`;
+        } catch {
+          setError('결산은 저장했지만 내원 환자 명단을 저장하지 못했어요. 같은 결산표로 저장을 한 번 더 눌러 주세요.');
+        }
+      }
+      setResult(`${date} 일일 결산을 저장했어요. (매출 ${totalRevenue.toLocaleString()}원${visitCount != null ? `, 내원 ${visitCount}명` : ''})${visitsNote}`);
       await loadHistory();
     } catch {
       setError('저장에 실패했습니다.');
@@ -609,6 +623,11 @@ function DailySettlementSection({ reservationSync }: { reservationSync: Reservat
           <p className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>
             금일환자수 {visitCount ?? 0}명 · 매출 {totalRevenue.toLocaleString()}원 (결산표에서 읽음). 예약 명단·비급여를 저장해 둔 날은
             아래 칸이 자동으로 채워져요. 이름은 띄어쓰기로 구분하세요.
+          </p>
+          <p style={{ fontSize: 12, marginBottom: 4, color: visits.length > 0 ? 'var(--color-teal-deep)' : 'var(--color-orange)' }}>
+            {visits.length > 0
+              ? `내원 환자 ${visits.length}명(이름·차트번호)을 읽었어요 — 저장하면 초진환자 해피콜의 초진·재초진 후보로 쓰여요.`
+              : '결산표 아래 환자 목록(환자이름·차트번호)이 없어요 — 목록까지 함께 복사해야 초진환자 해피콜 후보로 쓸 수 있어요.'}
           </p>
 
           <div style={groupTitle}>예약</div>
