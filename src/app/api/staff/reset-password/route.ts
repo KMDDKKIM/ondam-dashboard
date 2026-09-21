@@ -55,5 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 500 });
   }
 
+  // 누가 누구의 비밀번호를 재설정했는지만 남긴다(비밀번호·이름은 남기지 않는다).
+  console.info('[staff.reset-password]', { by: user.id, target: staffId });
   return NextResponse.json({ password }, { headers: NO_STORE });
 }

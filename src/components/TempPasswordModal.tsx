@@ -83,8 +83,11 @@ export function TempPasswordModal({ name, password, onClose }: TempPasswordModal
         >
           {password}
         </div>
-        <p style={{ margin: '0 0 16px', fontSize: 14, lineHeight: 1.6 }}>
+        <p style={{ margin: '0 0 10px', fontSize: 14, lineHeight: 1.6 }}>
           이 비밀번호는 지금 한 번만 보여요. 직원에게 전하고, 로그인 후 &quot;내 계정&quot;에서 바꾸라고 안내해주세요.
+        </p>
+        <p className="muted-text" style={{ margin: '0 0 16px', lineHeight: 1.6 }}>
+          이미 로그인해 둔 기기는 최대 1시간 정도 그대로 쓰일 수 있어요. 계정이 도용된 것 같다면 그 직원의 계정을 삭제하고 다시 가입시키세요.
         </p>
         {copyFailed && (
           <p className="error-text" style={{ margin: '0 0 12px' }}>
