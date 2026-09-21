@@ -1,18 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-
-const QUOTES = [
-  '오늘도 환자분의 이야기를 먼저 들어주세요.',
-  '작은 친절이 재진율을 만듭니다.',
-  '기록이 쌓이면 진료의 방향이 보입니다.',
-  '바쁠수록 해피콜 한 통이 더 중요합니다.',
-  '오늘 걸어야 할 전화, 미루지 않기.',
-  '환자의 다음 방문을 미리 준비하세요.',
-];
+import { QUOTES, quoteIndexForDate } from '@/lib/dailyQuote';
+import { todayKst } from '@/lib/kst';
 
 export function QuoteBanner() {
-  const [index, setIndex] = useState(0);
+  // 처음 문구는 한국 날짜로만 정한다(하루 동안 고정, 서버·브라우저 결과 동일).
+  const [index, setIndex] = useState(() => quoteIndexForDate(todayKst()));
 
   function nextQuote() {
     setIndex((prev) => (prev + 1) % QUOTES.length);
@@ -46,7 +40,7 @@ export function QuoteBanner() {
           <span>💬</span>
           <span>오늘의 한마디</span>
         </div>
-        <p style={{ margin: 0, fontWeight: 700, fontSize: 16 }}>“{QUOTES[index]}”</p>
+        <p suppressHydrationWarning style={{ margin: 0, fontWeight: 700, fontSize: 16 }}>“{QUOTES[index]}”</p>
       </div>
       <button
         onClick={nextQuote}

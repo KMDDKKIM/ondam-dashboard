@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Todo } from '@/lib/types';
+import { todayKst } from '@/lib/kst';
+import { completedWindowStart } from '@/lib/todoVisibility';
 
 interface TodoRow {
   id: string;
@@ -25,16 +27,43 @@ function rowToTodo(row: TodoRow): Todo {
   };
 }
 
-// 오늘 화면에 보여줄 후보를 넉넉히 가져온다(지난 미완료 건까지 자동으로 계속
-// 뜨게 하려고 done 여부와 무관하게 최근 것 위주로 가져오고, 화면에서 걸러낸다).
-export async function listTodos(supabase: SupabaseClient): Promise<Todo[]> {
-  const { data, error } = await supabase
-    .from('todos')
-    .select('*')
-    .order('due_date', { ascending: true })
-    .limit(300);
-  if (error) throw error;
-  return (data as TodoRow[]).map(rowToTodo);
+const PAGE_SIZE = 1000;
+
+// Supabase는 한 번에 1000행까지만 주므로, 다 받을 때까지 이어서 읽는다.
+async function fetchAllRows(
+  run: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
+): Promise<TodoRow[]> {
+  const rows: TodoRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await run(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as TodoRow[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+// 오늘 화면에 보여줄 후보: 안 끝난 것은 예정일과 상관없이 전부, 끝난 것은 최근 7일치만.
+// (예전에는 예정일 순 300건만 가져와서, 오래된 끝난 항목이 쌓이면 오늘 할 일이 밀려났다.)
+export async function listTodos(supabase: SupabaseClient, today: string = todayKst()): Promise<Todo[]> {
+  const since = completedWindowStart(today);
+  const [open, done] = await Promise.all([
+    fetchAllRows((a, b) =>
+      supabase.from('todos').select('*').eq('done', false).order('due_date', { ascending: true }).order('id').range(a, b),
+    ),
+    fetchAllRows((a, b) =>
+      supabase
+        .from('todos')
+        .select('*')
+        .eq('done', true)
+        .gte('done_at', since)
+        .order('due_date', { ascending: true })
+        .order('id')
+        .range(a, b),
+    ),
+  ]);
+  return [...open, ...done].map(rowToTodo);
 }
 
 export interface NewTodo {
@@ -54,16 +83,10 @@ export async function createTodo(supabase: SupabaseClient, input: NewTodo): Prom
   if (error) throw error;
 }
 
-function todayISO(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 export async function setTodoDone(supabase: SupabaseClient, id: string, done: boolean): Promise<void> {
   const { error } = await supabase
     .from('todos')
-    .update({ done, done_at: done ? todayISO() : null })
+    .update({ done, done_at: done ? todayKst() : null })
     .eq('id', id);
   if (error) throw error;
 }

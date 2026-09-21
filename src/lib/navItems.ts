@@ -34,7 +34,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
       { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },
       { href: '/consult-summary', label: '상담 녹음 차팅', icon: '🩺', doctorsOnly: true },
-      { href: '/treatment-timer', label: '치료실 타이머', icon: '⏱️' },
     ],
   },
   {
@@ -55,12 +54,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/supply-requests', label: '물품신청', icon: '📦' },
       { href: '/chat', label: '채팅', icon: '💬' },
       { href: '/staff-approval', label: '직원 승인', icon: '🙋', ownerOnly: true },
-    ],
-  },
-  {
-    title: '준비 중',
-    items: [
-      { href: '/event-patients', label: '이벤트 환자 목록', icon: '🎁', soon: true },
     ],
   },
 ];

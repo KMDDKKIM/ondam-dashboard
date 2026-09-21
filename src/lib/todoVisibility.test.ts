@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { visibleTodos } from './todoVisibility';
+import { completedWindowStart, visibleTodos } from './todoVisibility';
 import type { Todo } from './types';
 
 function makeTodo(overrides: Partial<Todo>): Todo {
@@ -57,5 +57,15 @@ describe('visibleTodos', () => {
       makeTodo({ id: 'pending' }),
     ];
     expect(visibleTodos(todos, '2026-09-18').map((t) => t.id)).toEqual(['pending', 'done']);
+  });
+});
+
+describe('completedWindowStart', () => {
+  it('오늘에서 7일 전 날짜', () => {
+    expect(completedWindowStart('2026-09-21')).toBe('2026-09-14');
+  });
+
+  it('달이 바뀌어도 맞다', () => {
+    expect(completedWindowStart('2026-03-03')).toBe('2026-02-24');
   });
 });
