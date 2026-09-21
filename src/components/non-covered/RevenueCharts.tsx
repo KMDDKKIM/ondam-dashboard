@@ -159,24 +159,24 @@ export function RevenueCharts({ purchases, currentMonth, selectedMonth, onSelect
 
       {showTable ? (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
             <thead>
               <tr style={{ background: 'var(--color-surface-2)' }}>
-                <th style={{ padding: '8px 10px', textAlign: 'left' }}>월</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right' }}>매출</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right' }}>건수</th>
+                <th style={{ padding: '11px 12px', textAlign: 'left' }}>월</th>
+                <th style={{ padding: '11px 12px', textAlign: 'right' }}>매출</th>
+                <th style={{ padding: '11px 12px', textAlign: 'right' }}>건수</th>
               </tr>
             </thead>
             <tbody>
               {[...series].reverse().map((s) => (
                 <tr key={s.month} style={{ borderTop: '1px solid var(--color-line)' }}>
-                  <td style={{ padding: '8px 10px' }}>
+                  <td style={{ padding: '11px 12px' }}>
                     <button type="button" onClick={() => onSelectMonth(s.month)} style={{ border: 'none', background: 'transparent', fontWeight: s.month === chartMonth ? 700 : 500, padding: 0, color: 'var(--color-ink)' }}>
                       {monthLabel(s.month)}
                     </button>
                   </td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>{s.count === 0 ? '-' : formatAmount(s.total)}</td>
-                  <td style={{ padding: '8px 10px', textAlign: 'right' }}>{s.count}건</td>
+                  <td style={{ padding: '11px 12px', textAlign: 'right' }}>{s.count === 0 ? '-' : formatAmount(s.total)}</td>
+                  <td style={{ padding: '11px 12px', textAlign: 'right' }}>{s.count}건</td>
                 </tr>
               ))}
             </tbody>
@@ -371,28 +371,28 @@ export function RevenueCharts({ purchases, currentMonth, selectedMonth, onSelect
             )}
 
             <div style={{ overflowX: 'auto', marginTop: 10 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
                 <thead>
                   <tr style={{ background: 'var(--color-surface-2)' }}>
-                    <th style={{ padding: '8px 10px', textAlign: 'left' }}>상품</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{shortMonth(chartMonth)} 매출</th>
-                    {compareMonth && <th style={{ padding: '8px 10px', textAlign: 'right' }}>{shortMonth(compareMonth)} 매출</th>}
-                    {compareMonth && <th style={{ padding: '8px 10px', textAlign: 'right' }}>증감</th>}
+                    <th style={{ padding: '11px 12px', textAlign: 'left' }}>상품</th>
+                    <th style={{ padding: '11px 12px', textAlign: 'right' }}>{shortMonth(chartMonth)} 매출</th>
+                    {compareMonth && <th style={{ padding: '11px 12px', textAlign: 'right' }}>{shortMonth(compareMonth)} 매출</th>}
+                    {compareMonth && <th style={{ padding: '11px 12px', textAlign: 'right' }}>증감</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {comparison.map((p) => (
                     <tr key={p.product} style={{ borderTop: '1px solid var(--color-line)' }}>
-                      <td style={{ padding: '8px 10px', fontWeight: 600 }}>{p.product}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                      <td style={{ padding: '11px 12px', fontWeight: 600 }}>{p.product}</td>
+                      <td style={{ padding: '11px 12px', textAlign: 'right' }}>
                         {p.a.count === 0 ? '-' : `${p.a.pricedCount > 0 ? formatAmount(p.a.total) : '금액 미입력'} · ${p.a.count}건`}
                       </td>
                       {compareMonth && (
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                        <td style={{ padding: '11px 12px', textAlign: 'right' }}>
                           {p.b.count === 0 ? '-' : `${p.b.pricedCount > 0 ? formatAmount(p.b.total) : '금액 미입력'} · ${p.b.count}건`}
                         </td>
                       )}
-                      {compareMonth && <td style={{ padding: '8px 10px', textAlign: 'right' }}>{changeText(p.a.total, p.b.total)}</td>}
+                      {compareMonth && <td style={{ padding: '11px 12px', textAlign: 'right' }}>{changeText(p.a.total, p.b.total)}</td>}
                     </tr>
                   ))}
                 </tbody>

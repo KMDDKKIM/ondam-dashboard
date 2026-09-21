@@ -19,8 +19,8 @@ interface Props {
   currentMonth: string;
 }
 
-const th = { padding: '8px 10px', textAlign: 'right' } as const;
-const td = { padding: '8px 10px', textAlign: 'right' } as const;
+const th = { padding: '11px 12px', textAlign: 'right' } as const;
+const td = { padding: '11px 12px', textAlign: 'right' } as const;
 
 /** 금액을 입력하지 않은 건수 표시(평균/총액에서는 빠져 있다). */
 function MissingNote({ stat }: { stat: Stat }) {
@@ -74,7 +74,7 @@ export function MonthStats({ purchases, currentMonth }: Props) {
       ) : (
         <>
           <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
               <thead>
                 <tr style={{ background: 'var(--color-surface-2)' }}>
                   <th style={{ ...th, textAlign: 'left' }}>상품별</th>
@@ -107,8 +107,8 @@ export function MonthStats({ purchases, currentMonth }: Props) {
 
           {crossTab.categories.length > 1 && (
             <div style={{ overflowX: 'auto' }}>
-              <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>구분별 (일반 / 이벤트) 나란히 보기</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 15 }}>구분별 (일반 / 이벤트) 나란히 보기</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
                 <thead>
                   <tr style={{ background: 'var(--color-surface-2)' }}>
                     <th style={{ ...th, textAlign: 'left' }}>상품</th>

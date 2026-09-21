@@ -97,7 +97,7 @@ export default function NonCoveredRecordsPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
-        <button onClick={() => setShowProductManager((v) => !v)} style={{ ...smallBtn, padding: '10px 14px', fontSize: 13, fontWeight: 600 }}>
+        <button onClick={() => setShowProductManager((v) => !v)} style={{ ...smallBtn, padding: '11px 16px', fontSize: 14, fontWeight: 600 }}>
           상품 목록 관리
         </button>
         <button className="btn-primary" onClick={() => setShowForm(true)}>
@@ -127,13 +127,13 @@ export default function NonCoveredRecordsPage() {
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
-              padding: '7px 14px',
+              padding: '9px 18px',
               borderRadius: 999,
               border: '1px solid var(--color-line)',
               background: activeTab === tab ? 'var(--color-brand-b)' : 'var(--color-surface)',
               color: activeTab === tab ? '#fff' : 'var(--color-ink)',
-              fontSize: 13,
-              fontWeight: 600,
+              fontSize: 15,
+              fontWeight: 700,
             }}
           >
             {tab}

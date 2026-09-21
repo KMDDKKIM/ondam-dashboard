@@ -11,8 +11,8 @@ interface Props {
   eventCategories: string[];
 }
 
-const th = { padding: '8px 10px', textAlign: 'right' } as const;
-const td = { padding: '8px 10px', textAlign: 'right' } as const;
+const th = { padding: '11px 12px', textAlign: 'right' } as const;
+const td = { padding: '11px 12px', textAlign: 'right' } as const;
 
 function StatText({ stat }: { stat: Stat | undefined }) {
   if (!stat || stat.count === 0) return <>-</>;
@@ -107,7 +107,7 @@ export function EventComparison({ purchases, categories, eventCategories }: Prop
 
       {sides.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
             <thead>
               <tr style={{ background: 'var(--color-surface-2)' }}>
                 <th style={{ ...th, textAlign: 'left' }}>상품명</th>

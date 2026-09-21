@@ -11,8 +11,8 @@ interface Props {
   currentMonth: string;
 }
 
-const th = { padding: '8px 10px', textAlign: 'right' } as const;
-const td = { padding: '8px 10px', textAlign: 'right' } as const;
+const th = { padding: '11px 12px', textAlign: 'right' } as const;
+const td = { padding: '11px 12px', textAlign: 'right' } as const;
 
 function Cell({ stat }: { stat: Stat }) {
   if (stat.count === 0) return <>-</>;
@@ -36,7 +36,7 @@ export function MonthlyTrend({ purchases, currentMonth }: Props) {
   return (
     <div className="card" style={{ padding: 20, marginBottom: 20, overflowX: 'auto' }}>
       <div style={{ fontWeight: 700, marginBottom: 12 }}>최근 6개월 추이</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
         <thead>
           <tr style={{ background: 'var(--color-surface-2)' }}>
             <th style={{ ...th, textAlign: 'left' }}>월</th>

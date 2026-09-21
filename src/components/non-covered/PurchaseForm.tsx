@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { defaultHappyCallDate, suggestGoalCategory, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
+import { DURATION_PRESETS, defaultHappyCallDate, suggestGoalCategory, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
+import { Field, fieldGrid, inputBig } from './Field';
 import { PatientSearch } from './PatientSearch';
-import { PurchaseFormDetails } from './PurchaseFormDetails';
+import { GOAL_CATEGORY_LABEL } from './shared';
 
 const CUSTOM_PRODUCT = '__custom__';
 
@@ -36,10 +37,9 @@ interface Props {
   onCancel: () => void;
 }
 
-const labelStyle = { display: 'block', marginBottom: 4 } as const;
+const sectionTitle = { fontSize: 14, fontWeight: 800, margin: '0 0 10px' } as const;
 
-// 기본으로는 환자명/차트번호/연락처/구분/상품/금액/구매일만 보이고,
-// 목표 반영·수령일·처방일수·메모는 "자세히"에 접어 둔다.
+// 등록 폼: 환자 → 구매 내용 → 목표·한약 해피콜 → 메모를 한 화면에 모두 보여 준다("자세히"로 접지 않는다).
 export function PurchaseForm({ products, categories, defaultCategory, knownPatients, submitting, onSubmit, onCancel }: Props) {
   const today = todayKst();
   const [name, setName] = useState('');
@@ -52,7 +52,6 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const [productName, setProductName] = useState('');
   const [amount, setAmount] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(today);
-  const [showDetails, setShowDetails] = useState(false);
   const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(today));
   const [durationDays, setDurationDays] = useState('');
   const [goalCategory, setGoalCategory] = useState<GoalCategory | null>(null);
@@ -80,9 +79,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     if (!goalCategoryTouched) setGoalCategory(picked ? suggestGoalCategory(picked.name) : null);
   }
 
+  const missing = [!name.trim() && '환자 성함', !chartNo.trim() && '차트번호', !productName.trim() && '상품'].filter(Boolean) as string[];
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim() || !chartNo.trim() || !productName.trim()) return;
+    if (missing.length > 0) return;
     onSubmit({
       patientName: name.trim(),
       chartNo: chartNo.trim(),
@@ -100,99 +101,106 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   }
 
   const callHint = !happyCallDate
-    ? '해피콜 없음'
+    ? '해피콜 없음 (수령일이 비어 있어요)'
     : durationDays
       ? (() => {
           const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, Number(durationDays));
-          return `해피콜: ${callDate1} · ${callDate2} · ${callDate3}`;
+          return `해피콜 3회: ${callDate1} · ${callDate2} · ${callDate3}`;
         })()
-      : `1차 해피콜: ${addDays(happyCallDate, 1)} (수령일 다음날)`;
+      : `해피콜 1회: ${addDays(happyCallDate, 1)} (수령일 다음날)`;
 
   return (
-    <form onSubmit={handleSubmit} className="card" style={{ padding: 20, marginBottom: 20 }}>
+    <form onSubmit={handleSubmit} className="card" style={{ padding: 22, marginBottom: 24 }}>
+      <h3 style={sectionTitle}>① 환자</h3>
       <PatientSearch knownPatients={knownPatients} onPick={pickPatient} />
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <input placeholder="환자 성함" value={name} onChange={(e) => setName(e.target.value)} className="input-field" style={{ maxWidth: 140 }} />
-        <input placeholder="차트번호" value={chartNo} onChange={(e) => setChartNo(e.target.value)} className="input-field" style={{ maxWidth: 120 }} />
-        <input placeholder="연락처" value={phone} onChange={(e) => setPhone(e.target.value)} className="input-field" style={{ maxWidth: 150 }} />
+      <div style={fieldGrid}>
+        <Field label="환자 성함 *">
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input-field" style={inputBig} />
+        </Field>
+        <Field label="차트번호 *">
+          <input value={chartNo} onChange={(e) => setChartNo(e.target.value)} className="input-field" style={inputBig} />
+        </Field>
+        <Field label="연락처">
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input-field" style={inputBig} />
+        </Field>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10, alignItems: 'flex-end' }}>
-        {!addingCategory ? (
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="input-field" style={{ maxWidth: 160 }}>
-            {(categories.includes(category) ? categories : [...categories, category]).map((c) => (
-              <option key={c} value={c}>
-                {c}
+      <h3 style={sectionTitle}>② 구매 내용</h3>
+      <div style={fieldGrid}>
+        <Field label="구분">
+          {!addingCategory ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="input-field" style={inputBig}>
+                {(categories.includes(category) ? categories : [...categories, category]).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingCategory(true);
+                  setNewCategory('');
+                }}
+                style={{ padding: '0 12px', borderRadius: 10, border: '1px solid var(--color-line)', background: 'var(--color-surface-2)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                + 새 구분
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                placeholder="새 구분 이름 (예: 27설이벤트)"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                className="input-field"
+                style={inputBig}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (newCategory.trim()) setCategory(newCategory.trim());
+                  setAddingCategory(false);
+                }}
+                style={{ padding: '0 12px', borderRadius: 10, border: '1px solid var(--color-line)', background: 'var(--color-surface-2)', fontSize: 13, fontWeight: 600 }}
+              >
+                확인
+              </button>
+            </div>
+          )}
+        </Field>
+        <Field label="상품 *">
+          <select value={productChoice} onChange={(e) => handleProductChoice(e.target.value)} className="input-field" style={inputBig}>
+            <option value="">상품 선택</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
             ))}
+            <option value={CUSTOM_PRODUCT}>＋ 직접 입력</option>
           </select>
-        ) : (
-          <input
-            placeholder="새 구분 이름 (예: 27설이벤트)"
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-            className="input-field"
-            style={{ maxWidth: 180 }}
-          />
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            if (addingCategory) {
-              if (newCategory.trim()) setCategory(newCategory.trim());
-              setAddingCategory(false);
-            } else {
-              setAddingCategory(true);
-              setNewCategory('');
-            }
-          }}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid var(--color-line)',
-            background: 'var(--color-surface-2)',
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {addingCategory ? '확인' : '+ 새 구분'}
-        </button>
-
-        <select value={productChoice} onChange={(e) => handleProductChoice(e.target.value)} className="input-field" style={{ maxWidth: 200 }}>
-          <option value="">상품 선택</option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-          <option value={CUSTOM_PRODUCT}>＋ 직접 입력</option>
-        </select>
+        </Field>
         {productChoice === CUSTOM_PRODUCT && (
-          <input
-            placeholder="상품명 직접 입력 (다음부터 목록에서 고를 수 있어요)"
-            value={productName}
-            onChange={(e) => {
-              setProductName(e.target.value);
-              if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(e.target.value));
-            }}
-            className="input-field"
-            style={{ maxWidth: 260 }}
-            autoFocus
-          />
+          <Field label="상품명 직접 입력">
+            <input
+              placeholder="다음부터 목록에서 고를 수 있어요"
+              value={productName}
+              onChange={(e) => {
+                setProductName(e.target.value);
+                if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(e.target.value));
+              }}
+              className="input-field"
+              style={inputBig}
+              autoFocus
+            />
+          </Field>
         )}
-        <input
-          type="number"
-          placeholder="금액 (선택)"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="input-field"
-          style={{ maxWidth: 130 }}
-        />
-        <div>
-          <label className="muted-text" style={labelStyle}>
-            구매일
-          </label>
+        <Field label="금액 (원)">
+          <input type="number" placeholder="선택" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-field" style={inputBig} />
+        </Field>
+        <Field label="구매일">
           <input
             type="date"
             value={purchaseDate}
@@ -201,50 +209,84 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
               setHappyCallDate(defaultHappyCallDate(e.target.value));
             }}
             className="input-field"
-            style={{ maxWidth: 160 }}
+            style={inputBig}
           />
-        </div>
+        </Field>
       </div>
 
-      <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
-        {callHint}
-      </p>
+      <h3 style={sectionTitle}>③ 목표 · 한약 해피콜</h3>
+      <div style={fieldGrid}>
+        <Field label="목표 반영">
+          <select
+            value={goalCategory ?? ''}
+            onChange={(e) => {
+              setGoalCategory((e.target.value || null) as GoalCategory | null);
+              setGoalCategoryTouched(true);
+            }}
+            className="input-field"
+            style={inputBig}
+          >
+            <option value="">없음</option>
+            {(Object.keys(GOAL_CATEGORY_LABEL) as GoalCategory[]).map((key) => (
+              <option key={key} value={key}>
+                {GOAL_CATEGORY_LABEL[key]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="한약 수령일 (해피콜 기준일, 기본: 구매일 다음날)">
+          <input type="date" value={happyCallDate} onChange={(e) => setHappyCallDate(e.target.value)} className="input-field" style={inputBig} />
+        </Field>
+        <Field label="처방일수 (한약일 때만)">
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+            {DURATION_PRESETS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDurationDays(String(d))}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--color-line)',
+                  background: durationDays === String(d) ? 'var(--color-brand-b)' : 'var(--color-surface-2)',
+                  color: durationDays === String(d) ? '#fff' : 'var(--color-ink)',
+                  fontSize: 14,
+                  fontWeight: 600,
+                }}
+              >
+                {d}일
+              </button>
+            ))}
+            <input
+              type="number"
+              placeholder="직접"
+              value={durationDays}
+              onChange={(e) => setDurationDays(e.target.value)}
+              className="input-field"
+              style={{ ...inputBig, width: 80 }}
+            />
+          </div>
+        </Field>
+      </div>
+      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-teal-deep)', margin: '-4px 0 16px' }}>📞 {callHint}</p>
 
-      <button
-        type="button"
-        onClick={() => setShowDetails((v) => !v)}
-        style={{ border: 'none', background: 'transparent', color: 'var(--color-brand-b)', fontSize: 13, fontWeight: 600, padding: 0, marginBottom: 10 }}
-      >
-        {showDetails ? '자세히 접기 ▲' : '자세히 ▼'}
-      </button>
+      <h3 style={sectionTitle}>④ 메모</h3>
+      <div style={{ marginBottom: 18 }}>
+        <input placeholder="메모 (선택)" value={memo} onChange={(e) => setMemo(e.target.value)} className="input-field" style={inputBig} />
+      </div>
 
-      {showDetails && (
-        <PurchaseFormDetails
-          goalCategory={goalCategory}
-          onGoalCategoryChange={(value) => {
-            setGoalCategory(value);
-            setGoalCategoryTouched(true);
-          }}
-          happyCallDate={happyCallDate}
-          onHappyCallDateChange={setHappyCallDate}
-          durationDays={durationDays}
-          onDurationDaysChange={setDurationDays}
-          memo={memo}
-          onMemoChange={setMemo}
-        />
-      )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" disabled={submitting} className="btn-primary">
-          저장
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="submit" disabled={submitting || missing.length > 0} className="btn-primary" style={{ padding: '12px 28px', fontSize: 15 }}>
+          {submitting ? '저장 중...' : '저장'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid var(--color-line)', background: 'var(--color-surface-2)', fontWeight: 600, fontSize: 14 }}
+          style={{ padding: '12px 22px', borderRadius: 10, border: '1px solid var(--color-line)', background: 'var(--color-surface-2)', fontWeight: 600, fontSize: 15 }}
         >
           취소
         </button>
+        {missing.length > 0 && <span className="muted-text" style={{ fontSize: 13 }}>{missing.join(', ')}을(를) 입력해 주세요</span>}
       </div>
     </form>
   );
