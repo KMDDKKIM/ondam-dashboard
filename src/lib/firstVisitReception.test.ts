@@ -20,7 +20,7 @@ function base(over: Partial<FirstVisitCandidateDto> = {}): FirstVisitCandidateDt
 }
 
 function rec(over: Partial<ReceptionVisitRow> = {}): ReceptionVisitRow {
-  return { id: 'r1', patientName: '홍길동', visitKind: '초', birthDate: null, ...over };
+  return { id: 'r1', patientName: '홍길동', visitKind: '초진', birthDate: null, ...over };
 }
 
 function result(over: Partial<FirstVisitCandidatesResult>): FirstVisitCandidatesResult {
@@ -56,7 +56,7 @@ describe('mergeReceptionCandidates', () => {
   });
 
   it('재초는 재초진으로 더한다', () => {
-    const m = mergeReceptionCandidates([], [rec({ visitKind: '재초', patientName: '이몽룡' })], DATE);
+    const m = mergeReceptionCandidates([], [rec({ visitKind: '재초진', patientName: '이몽룡' })], DATE);
     expect(m.candidates[0]).toMatchObject({ kind: '재초진', kindReason: '접수기록부에서 재초진으로 적혔어요' });
     expect(m.receptionRevisitCount).toBe(1);
     expect(m.receptionFirstCount).toBe(0);
@@ -157,7 +157,7 @@ describe('matchRegisteredCandidates', () => {
 });
 
 describe('reconcileFirstVisits + 접수기록부', () => {
-  const recOnly = (name: string, id: string, kind: '초' | '재초' = '초') =>
+  const recOnly = (name: string, id: string, kind: '초진' | '재초진' = '초진') =>
     mergeReceptionCandidates([], [rec({ id, patientName: name, visitKind: kind })], DATE).candidates[0];
 
   it('결산 신규환자수 기준에 접수기록부에만 있는 사람은 더해서 센다', () => {
@@ -182,7 +182,7 @@ describe('reconcileFirstVisits + 접수기록부', () => {
   });
 
   it('접수기록부에만 있는 재초진도 기준에 더한다', () => {
-    const data = result({ source: 'settlement', closingFirstVisitCount: 1, candidates: [recOnly('C', 'c', '재초')], receptionRevisitCount: 1 });
+    const data = result({ source: 'settlement', closingFirstVisitCount: 1, candidates: [recOnly('C', 'c', '재초진')], receptionRevisitCount: 1 });
     expect(reconcileFirstVisits(data, 0, DATE).expected).toBe(2);
   });
 
@@ -202,7 +202,7 @@ describe('reconcileFirstVisits + 접수기록부', () => {
   it('결산 + 접수 + 등록이 섞인 경우: 겹치는 접수 줄은 더하지 않고, 접수에만 있는 재초진은 더한다', () => {
     const merged = mergeReceptionCandidates(
       [base({ patientName: 'A', chartNo: '1' }), base({ patientName: 'R', chartNo: '3', kind: '재초진' })],
-      [rec({ id: 'a', patientName: 'A' }), rec({ id: 'x', patientName: 'X' }), rec({ id: 'y', patientName: 'Y', visitKind: '재초' })],
+      [rec({ id: 'a', patientName: 'A' }), rec({ id: 'x', patientName: 'X' }), rec({ id: 'y', patientName: 'Y', visitKind: '재초진' })],
       DATE
     );
     const data = result({
@@ -238,7 +238,7 @@ describe('reconcileFirstVisits + 접수기록부', () => {
   });
 
   it('접수기록부만 있는 날은 접수 후보 수가 기준이다', () => {
-    const data = result({ source: 'reception', candidates: [recOnly('C', 'c'), recOnly('D', 'd', '재초')], receptionFirstCount: 1, receptionRevisitCount: 1 });
+    const data = result({ source: 'reception', candidates: [recOnly('C', 'c'), recOnly('D', 'd', '재초진')], receptionFirstCount: 1, receptionRevisitCount: 1 });
     const r = reconcileFirstVisits(data, 1, DATE);
     expect(r).toMatchObject({ expected: 2, missing: 1, expectedSource: '접수기록부 기준' });
     expect(hasReliableFirstVisitBasis(data)).toBe(true);

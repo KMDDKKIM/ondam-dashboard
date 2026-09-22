@@ -1,12 +1,12 @@
 // 접수기록부의 순수 로직(날짜 머리글, 진료비 입력, 하루 합계). 화면/DB 코드는 따로 있다.
 
-export type ReceptionPayment = '현금' | '카드' | '미수';
-/** 초진 / 재초진 / 재진 — 종이 노트에서 이름 앞에 적던 "초)", "재초)"(재진은 표시 없이 비워 뒀다). */
-export type ReceptionVisitKind = '초' | '재초' | '재진';
+/** "제외"는 결제 자체가 없는 경우(린다이어트 상담, 자보 환자 등) — 원장 결정, 2026-09-23. */
+export type ReceptionPayment = '현금' | '카드' | '미수' | '제외';
+export type ReceptionVisitKind = '초진' | '재초진' | '재진';
 
-export const VISIT_KINDS: ReceptionVisitKind[] = ['초', '재초', '재진'];
+export const VISIT_KINDS: ReceptionVisitKind[] = ['초진', '재초진', '재진'];
 
-export const PAYMENTS: ReceptionPayment[] = ['현금', '카드', '미수'];
+export const PAYMENTS: ReceptionPayment[] = ['현금', '카드', '미수', '제외'];
 
 export interface ReceptionRecord {
   id: string;
@@ -65,20 +65,33 @@ export interface ReceptionSummary {
   cash: number;
   card: number;
   unpaid: number;
-  /** 결제 방법을 아직 고르지 않은 줄 수 — 합계 대조 전에 채워야 한다. */
+  /** 결제 "제외"로 표시한 줄 수(린다이어트 상담·자보 환자처럼 결제를 안 하는 경우). */
+  excluded: number;
+  /** 결제 방법을 아직 고르지 않은 줄 수 — 합계 대조 전에 채워야 한다("제외"는 고른 것이라 여기 안 낀다). */
   paymentMissing: number;
 }
 
 export function summarize(records: ReceptionRecord[]): ReceptionSummary {
-  const s: ReceptionSummary = { count: records.length, firstVisitCount: 0, reservedCount: 0, feeTotal: 0, cash: 0, card: 0, unpaid: 0, paymentMissing: 0 };
+  const s: ReceptionSummary = {
+    count: records.length,
+    firstVisitCount: 0,
+    reservedCount: 0,
+    feeTotal: 0,
+    cash: 0,
+    card: 0,
+    unpaid: 0,
+    excluded: 0,
+    paymentMissing: 0,
+  };
   for (const r of records) {
-    if (r.visitKind === '초' || r.visitKind === '재초') s.firstVisitCount += 1;
+    if (r.visitKind === '초진' || r.visitKind === '재초진') s.firstVisitCount += 1;
     if (r.reserved) s.reservedCount += 1;
     const fee = r.fee ?? 0;
     s.feeTotal += fee;
     if (r.payment === '현금') s.cash += fee;
     else if (r.payment === '카드') s.card += fee;
     else if (r.payment === '미수') s.unpaid += fee;
+    else if (r.payment === '제외') s.excluded += 1;
     else if (r.fee !== null) s.paymentMissing += 1;
   }
   return s;

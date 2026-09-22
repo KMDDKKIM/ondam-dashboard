@@ -5,7 +5,7 @@ interface Row {
   id: string;
   visit_date: string;
   seq: number;
-  visit_kind: '초' | '재초' | '재진' | null;
+  visit_kind: '초진' | '재초진' | '재진' | null;
   patient_name: string;
   birth_date: string | null;
   treatment: string | null;

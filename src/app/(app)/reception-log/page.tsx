@@ -239,7 +239,7 @@ export default function ReceptionLogPage() {
       {error && <p className="error-text" style={{ marginBottom: 8 }}>{error}</p>}
 
       <div className="card" style={{ padding: 10, overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 880 }}>
+        <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 920 }}>
           <colgroup>
             <col style={{ width: 46 }} />
             <col style={{ width: 44 }} />
@@ -248,7 +248,7 @@ export default function ReceptionLogPage() {
             <col style={{ width: 92 }} />
             <col style={{ width: 170 }} />
             <col style={{ width: 92 }} />
-            <col style={{ width: 150 }} />
+            <col style={{ width: 190 }} />
             <col />
             <col style={{ width: 54 }} />
           </colgroup>
@@ -377,7 +377,8 @@ export default function ReceptionLogPage() {
         </table>
         {loading && <p className="muted-text" style={{ marginTop: 8, fontSize: 13 }}>불러오는 중…</p>}
         <p className="muted-text" style={{ marginTop: 8, fontSize: 12 }}>
-          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분은 초(초진) · 재초(재초진) · 재진 중에서 골라요.
+          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분은 초진 · 재초진 · 재진 중에서 골라요.
+          결제의 &quot;제외&quot;는 린다이어트 상담·자보 환자처럼 결제 자체가 없는 경우예요.
         </p>
       </div>
 
@@ -394,6 +395,7 @@ export default function ReceptionLogPage() {
         <span>현금 {formatFee(summary.cash) || 0}</span>
         <span>카드 {formatFee(summary.card) || 0}</span>
         <span>미수 {formatFee(summary.unpaid) || 0}</span>
+        {summary.excluded > 0 && <span>제외 {summary.excluded}건</span>}
         {summary.paymentMissing > 0 && (
           <span style={{ color: '#b3261e', fontWeight: 600 }}>결제 방법 안 고른 줄 {summary.paymentMissing}건</span>
         )}

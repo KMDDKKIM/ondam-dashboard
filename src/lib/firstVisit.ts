@@ -287,7 +287,7 @@ export interface FirstVisitCandidatesResult {
 export interface ReceptionVisitRow {
   id: string;
   patientName: string;
-  visitKind: '초' | '재초' | '재진';
+  visitKind: '초진' | '재초진' | '재진';
   birthDate: string | null;
 }
 
@@ -298,7 +298,7 @@ export interface ReceptionMerge {
 }
 
 /**
- * 접수기록부의 초/재초 줄을 후보 목록에 합친다(재진 줄은 무시).
+ * 접수기록부의 초진/재초진 줄을 후보 목록에 합친다(재진 줄은 무시).
  * - 접수기록부에는 차트번호가 없어서 이름(공백 제거, 정확히 같음)으로 같은 사람을 찾는다.
  * - 이미 후보(초진·재초진)인 사람과 이름이 같으면 한 명으로 본다(줄을 더하지 않음). 이름이 같은 후보가 여러 명이면 접수 줄 하나가 후보 하나씩만 가져간다.
  * - 이름은 같지만 짝지을 후보가 없으면(결산에서 재진으로 분류됐거나, 이미 다른 접수 줄과 짝지어짐) 다른 사람일 수 있으니
@@ -329,7 +329,7 @@ export function mergeReceptionCandidates(base: FirstVisitCandidateDto[], rows: R
     }
     const sameNameInBase = base.some((c) => c.patientName.trim() === row.name);
     const sameNameInReception = kept.filter((k) => k.name === row.name).length > 1;
-    const revisit = row.visitKind === '재초';
+    const revisit = row.visitKind === '재초진';
     added.push({
       patientName: row.name,
       chartNo: '',
@@ -348,8 +348,8 @@ export function mergeReceptionCandidates(base: FirstVisitCandidateDto[], rows: R
   }
   return {
     candidates: [...base, ...added],
-    receptionFirstCount: kept.filter((k) => k.visitKind === '초').length,
-    receptionRevisitCount: kept.filter((k) => k.visitKind === '재초').length,
+    receptionFirstCount: kept.filter((k) => k.visitKind === '초진').length,
+    receptionRevisitCount: kept.filter((k) => k.visitKind === '재초진').length,
   };
 }
 
