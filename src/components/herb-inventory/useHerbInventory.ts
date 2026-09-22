@@ -11,8 +11,11 @@ import {
   listRecentHerbInventoryLogs,
   listStaffNames,
 } from '@/lib/supabase/herbInventory';
+import { getHerbOrderMemo, saveHerbOrderMemo } from '@/lib/supabase/herbOrderMemo';
 import { sortHerbsKo } from '@/lib/herbList';
-import type { HerbInventoryItem, HerbInventoryLog } from '@/lib/types';
+import type { HerbInventoryItem, HerbInventoryLog, HerbOrderMemo } from '@/lib/types';
+
+const EMPTY_MEMO: HerbOrderMemo = { text: '', updatedBy: null, updatedAt: new Date(0).toISOString() };
 
 export interface HerbMessages {
   error: string;
@@ -32,6 +35,7 @@ export function useHerbInventory() {
   const [messages, setMessages] = useState<HerbMessages>({ error: '', notice: '', warning: '' });
   const [logs, setLogs] = useState<HerbInventoryLog[]>([]);
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+  const [orderMemo, setOrderMemo] = useState<HerbOrderMemo>(EMPTY_MEMO);
 
   const commit = useCallback((updater: (prev: HerbInventoryItem[]) => HerbInventoryItem[]) => {
     itemsRef.current = updater(itemsRef.current);
@@ -53,6 +57,15 @@ export function useHerbInventory() {
     }
   }, [supabase]);
 
+  // 발주 메모도 부가 정보라 실패해도 재고 화면은 그대로 보여준다.
+  const loadOrderMemo = useCallback(async () => {
+    try {
+      setOrderMemo(await getHerbOrderMemo(supabase));
+    } catch {
+      // 메모 칸만 비어 있게 둔다(아직 마이그레이션을 안 돌렸을 수도 있다).
+    }
+  }, [supabase]);
+
   // 처음 한 번만 "불러오는 중"을 보여준다(다시 불러올 때 화면을 비우면 입력 중인 내용이 사라진다).
   const load = useCallback(async () => {
     try {
@@ -63,8 +76,8 @@ export function useHerbInventory() {
     } finally {
       setLoading(false);
     }
-    await loadHistory();
-  }, [supabase, commit, patchMessages, loadHistory]);
+    await Promise.all([loadHistory(), loadOrderMemo()]);
+  }, [supabase, commit, patchMessages, loadHistory, loadOrderMemo]);
 
   useEffect(() => {
     load();
@@ -88,6 +101,18 @@ export function useHerbInventory() {
       commit((prev) => sortHerbsKo(prev.map((i) => (i.id === id ? { ...i, name, updatedAt: new Date().toISOString() } : i))));
     },
     [supabase, commit]
+  );
+
+  // "부족한 약재" 칸의 발주 메모. 모든 직원이 같이 보는 메모 한 장이라 마지막에 저장한 게 남는다.
+  const saveOrderMemo = useCallback(
+    async (text: string) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await saveHerbOrderMemo(supabase, text, user?.id ?? null);
+      setOrderMemo({ text, updatedBy: user?.id ?? null, updatedAt: new Date().toISOString() });
+    },
+    [supabase]
   );
 
   const deleteHerb = useCallback(
@@ -117,9 +142,11 @@ export function useHerbInventory() {
     patchMessages,
     logs,
     staffNames,
+    orderMemo,
     load,
     saveThreshold,
     renameHerb,
     deleteHerb,
+    saveOrderMemo,
   };
 }

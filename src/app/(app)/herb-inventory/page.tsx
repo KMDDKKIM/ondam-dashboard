@@ -32,8 +32,22 @@ function blockingProblems(parsed: ReturnType<typeof parseBulkHerbEntry>): string
 }
 
 export default function HerbInventoryPage() {
-  const { supabase, items, itemsRef, loading, messages, patchMessages, logs, staffNames, load, saveThreshold, renameHerb, deleteHerb } =
-    useHerbInventory();
+  const {
+    supabase,
+    items,
+    itemsRef,
+    loading,
+    messages,
+    patchMessages,
+    logs,
+    staffNames,
+    orderMemo,
+    load,
+    saveThreshold,
+    renameHerb,
+    deleteHerb,
+    saveOrderMemo,
+  } = useHerbInventory();
 
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<HerbFilter>('all');
@@ -186,7 +200,9 @@ export default function HerbInventoryPage() {
         </button>
       </div>
 
-      <LowStockPanel shorts={shorts} onDisableAlarm={handleDisableAlarm} />
+      <LowStockPanel shorts={shorts} onDisableAlarm={handleDisableAlarm} memo={orderMemo} onSaveMemo={saveOrderMemo} />
+      {/* 입력 기록은 가끔 확인하면 되는 정보라 접어둔 채로 위쪽에 작게 둔다. */}
+      <HistorySection logs={logs} herbNames={herbNames} staffNames={staffNames} />
       <BulkStockForms onSubmit={handleBulkSubmit} />
       {showAddForm && <AddHerbForm onSubmit={handleAddHerbs} onCancel={() => setShowAddForm(false)} />}
 
@@ -223,7 +239,6 @@ export default function HerbInventoryPage() {
       )}
 
       <InitialsBar keys={groupKeys} />
-      <HistorySection logs={logs} herbNames={herbNames} staffNames={staffNames} />
       <HerbMessages messages={messages} onDismiss={() => patchMessages({ error: '', warning: '', notice: '' })} />
     </div>
   );

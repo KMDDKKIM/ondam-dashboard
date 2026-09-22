@@ -98,6 +98,13 @@ export interface HerbInventoryLog {
   createdAt: string;
 }
 
+/** "부족한 약재" 칸에 붙는 발주 메모 한 장 — 직원 전체가 같이 보고 고치는 공유 텍스트. */
+export interface HerbOrderMemo {
+  text: string;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
 export type GoalCategory = 'herb' | 'diet' | 'special_herb' | 'chuna';
 
 export interface NonCoveredPurchase {

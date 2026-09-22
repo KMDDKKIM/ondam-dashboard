@@ -29,11 +29,11 @@ export default function HistorySection({
   }
 
   return (
-    <div className="card" style={{ padding: 16, marginTop: 24 }}>
+    <div className="card" style={{ padding: '8px 12px', marginBottom: 10 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 15, padding: 0, cursor: 'pointer' }}
+        style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 13, padding: 0, cursor: 'pointer' }}
       >
         {open ? '▼' : '▶'} 입력 기록 (최근 {logs.length}건, {batches.length}회 입력)
       </button>
