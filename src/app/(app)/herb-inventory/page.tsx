@@ -23,10 +23,10 @@ function blockingProblems(parsed: ReturnType<typeof parseBulkHerbEntry>): string
     parts.push(`목록에 없는 약재: ${parsed.unmatchedNames.join(', ')} (먼저 "+ 약재 추가"로 등록해주세요)`);
   }
   if (parsed.danglingNames.length > 0) {
-    parts.push(`봉지 수가 안 붙은 약재: ${parsed.danglingNames.join(', ')}`);
+    parts.push(`숫자가 안 붙은 약재: ${parsed.danglingNames.join(', ')}`);
   }
   if (parsed.invalidAmountNames.length > 0) {
-    parts.push(`봉지 수는 1 이상의 정수여야 해요: ${parsed.invalidAmountNames.join(', ')}`);
+    parts.push(`숫자는 1 이상의 정수여야 해요: ${parsed.invalidAmountNames.join(', ')}`);
   }
   return parts.join(' / ');
 }
@@ -107,7 +107,7 @@ export default function HerbInventoryPage() {
       );
     }
     if (repeated.length > 0) warnings.push(`중복 입력이라 처음 것만 사용: ${repeated.join(', ')}`);
-    if (invalidStockNames.length > 0) warnings.push(`재고(봉지 수)는 정수여야 해서 등록 안 함: ${invalidStockNames.join(', ')}`);
+    if (invalidStockNames.length > 0) warnings.push(`재고 숫자는 정수여야 해서 등록 안 함: ${invalidStockNames.join(', ')}`);
     patchMessages({ warning: warnings.join(' / '), error: '', notice: '' });
     if (existing.length > 0) revealHerb(existing[0].herb.id);
     if (toAdd.length === 0) return false;
@@ -126,7 +126,7 @@ export default function HerbInventoryPage() {
     }
     const noStock = toAdd.filter((e) => e.missingStock).map((e) => e.name);
     patchMessages({
-      notice: `${toAdd.length}개 추가했어요.${noStock.length > 0 ? ` (재고 숫자가 없어 0봉지로 등록: ${noStock.join(', ')})` : ''}`,
+      notice: `${toAdd.length}개 추가했어요.${noStock.length > 0 ? ` (재고 숫자가 없어 0으로 등록: ${noStock.join(', ')})` : ''}`,
     });
     await load();
     if (existing.length === 0 && toAdd.length === 1) {
@@ -179,7 +179,7 @@ export default function HerbInventoryPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, marginBottom: 2 }}>한약재 재고 현황</h1>
-          <p className="muted-text">재고는 봉지 수로 관리해요. 재고 조정은 위 &quot;한꺼번에 입력&quot;으로만 해주세요.</p>
+          <p className="muted-text">재고 조정은 위 &quot;한꺼번에 입력&quot;으로만 해주세요.</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
           + 약재 추가

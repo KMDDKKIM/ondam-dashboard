@@ -17,7 +17,8 @@ interface Props extends HerbRowHandlers {
 }
 
 // 카드 한 칸짜리 약재 행. 재고 조정(입고·사용)은 위의 "한꺼번에 입력"에서만 하므로,
-// 여기서는 이름·봉지 수·⋯(부족 기준·삭제)만 보여준다 — 여러 칸을 나란히 배치해도 좁다.
+// 여기서는 이름·재고 수·⋯(부족 기준·삭제)만 보여준다 — 여러 칸을 나란히 배치해도 좁다.
+// (재고 단위 "봉지"라는 글자는 화면에서 뺐다 — 원장 결정, 2026-09-22: 없어도 된다.)
 function HerbRowInner({ item, highlighted, onSaveName, onSaveThreshold, onDelete }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const bags = bagCount(item.currentStock);
@@ -52,11 +53,10 @@ function HerbRowInner({ item, highlighted, onSaveName, onSaveThreshold, onDelete
       </span>
 
       <span
-        aria-label={`${item.name} 현재 ${bags}봉지`}
-        style={{ minWidth: 52, textAlign: 'right', fontSize: 18, fontWeight: 800, color: bagColor, fontVariantNumeric: 'tabular-nums' }}
+        aria-label={`${item.name} 현재 재고 ${bags}`}
+        style={{ minWidth: 40, textAlign: 'right', fontSize: 18, fontWeight: 800, color: bagColor, fontVariantNumeric: 'tabular-nums' }}
       >
         {bags.toLocaleString()}
-        <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 2, color: 'var(--color-muted)' }}>봉지</span>
       </span>
 
       <div style={{ position: 'relative' }}>

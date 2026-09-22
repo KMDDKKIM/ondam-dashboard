@@ -6,9 +6,9 @@ export function formatKstDateTime(iso: string): string {
   return `${kstDateOf(iso)} ${kstTimeOf(iso)}`;
 }
 
-/** 입고는 +N, 사용은 -N 봉지. */
+/** 입고는 +N, 사용은 -N. */
 export function signedChange(changeType: 'use' | 'restock', amount: number): string {
-  return `${changeType === 'restock' ? '+' : '-'}${amount}봉지`;
+  return `${changeType === 'restock' ? '+' : '-'}${amount}`;
 }
 
 /** 처리자 이름. 이름을 못 찾으면(직원이 삭제돼 created_by가 비었거나 목록에 없음) '(삭제된 직원)'. */

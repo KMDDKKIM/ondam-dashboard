@@ -105,7 +105,7 @@ export function MorePopover({
   async function commitThreshold(next: number | null) {
     if (next === threshold || saving) return;
     if (next != null && !isValidThreshold(next)) {
-      setError('0 이상의 정수(봉지)만 입력할 수 있어요.');
+      setError('0 이상의 정수만 입력할 수 있어요.');
       setText(current);
       return;
     }
@@ -165,7 +165,7 @@ export function MorePopover({
             value={text}
             disabled={saving}
             placeholder="없음"
-            aria-label={`${name} 부족 기준(봉지)`}
+            aria-label={`${name} 부족 기준`}
             onChange={(e) => setText(e.target.value)}
             onBlur={(e) => commitThreshold(e.target.value.trim() === '' ? null : Number(e.target.value.trim()))}
             onKeyDown={(e) => {
@@ -178,7 +178,7 @@ export function MorePopover({
             className="input-field"
             style={{ width: 72, padding: '4px 8px', fontSize: 13 }}
           />
-          봉지 이하
+          이하
         </label>
         <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
           0 = 재고가 다 떨어지면 알림(새 약재 기본값)

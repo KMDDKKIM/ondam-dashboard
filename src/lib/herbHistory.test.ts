@@ -7,8 +7,8 @@ describe('herbHistory', () => {
     expect(formatKstDateTime('2026-09-19T15:30:00Z')).toBe('2026-09-20 00:30');
   });
   it('입고는 +, 사용은 -', () => {
-    expect(signedChange('restock', 5)).toBe('+5봉지');
-    expect(signedChange('use', 2)).toBe('-2봉지');
+    expect(signedChange('restock', 5)).toBe('+5');
+    expect(signedChange('use', 2)).toBe('-2');
   });
   it('삭제된 직원은 (삭제된 직원)', () => {
     expect(staffLabel(null, { a: '김' })).toBe('(삭제된 직원)');

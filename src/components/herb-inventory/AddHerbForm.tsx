@@ -31,7 +31,7 @@ export default function AddHerbForm({
     <form onSubmit={handleSubmit} className="card" style={{ padding: 14, marginBottom: 10 }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>새 약재 추가</div>
       <p className="muted-text" style={{ marginBottom: 8 }}>
-        약재명 뒤에 현재 재고(봉지 수, 정수)를 적어주세요. 하나만 적어도 되고, 줄바꿈이나 띄어쓰기로 여러 개를 구분해도 돼요.
+        약재명 뒤에 현재 재고(정수)를 적어주세요. 하나만 적어도 되고, 줄바꿈이나 띄어쓰기로 여러 개를 구분해도 돼요.
         재고가 같은 약재는 이름을 이어 쓴 뒤 숫자를 한 번만 쓰면 돼요. 예: 당귀 5 천궁 3 생강 대조 1 (엑셀에서 복사해 붙여넣어도
         돼요). 추가하면 가나다순 자리에 바로 들어가요.
       </p>
@@ -47,7 +47,7 @@ export default function AddHerbForm({
       />
       {preview.length > 0 && (
         <p className="muted-text" style={{ marginBottom: 8 }}>
-          추가될 약재 {preview.length}개: {preview.map((p) => `${p.name} ${p.stock}봉지`).join(', ')}
+          추가될 약재 {preview.length}개: {preview.map((p) => `${p.name} ${p.stock}`).join(', ')}
         </p>
       )}
       <div style={{ display: 'flex', gap: 8 }}>

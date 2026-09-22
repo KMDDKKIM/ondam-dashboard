@@ -48,7 +48,7 @@ export default function BulkStockForms({
         style={{ display: open ? 'grid' : 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 10 }}
       >
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>📥 일괄 입고 (봉지)</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>📥 일괄 입고</div>
           <p className="muted-text" style={{ marginBottom: 6 }}>
             예: 당귀 천궁 3 생강 대조 1
           </p>
@@ -65,7 +65,7 @@ export default function BulkStockForms({
           </button>
         </div>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>📤 일괄 사용 (봉지)</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>📤 일괄 사용</div>
           <p className="muted-text" style={{ marginBottom: 6 }}>
             예: 당귀 생지황 1
           </p>

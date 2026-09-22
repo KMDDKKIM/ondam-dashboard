@@ -17,8 +17,8 @@ interface Props {
 
 const CHIPS: { id: HerbFilter; label: string; key: keyof HerbCounts; title: string }[] = [
   { id: 'all', label: '전체', key: 'all', title: '모든 약재' },
-  { id: 'short', label: '부족', key: 'short', title: '부족 기준 이하(0봉지 포함)' },
-  { id: 'empty', label: '0봉지', key: 'empty', title: '재고가 다 떨어진 약재' },
+  { id: 'short', label: '부족', key: 'short', title: '부족 기준 이하(재고 0 포함)' },
+  { id: 'empty', label: '품절', key: 'empty', title: '재고가 다 떨어진 약재' },
 ];
 
 // 화면 위쪽에 붙어 있는 검색·필터 줄. 높이를 CSS 변수로 알려줘서 묶음 머리글이 그 아래에 붙는다.
