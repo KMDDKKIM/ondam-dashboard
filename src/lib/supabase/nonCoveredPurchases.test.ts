@@ -267,7 +267,7 @@ describe('updateNonCoveredPurchase', () => {
     await updateNonCoveredPurchase(client, purchase(), patch);
     const entryUpdates = calls.filter((c) => c.table === 'happy_call_manual_entries' && c.op === 'update');
     expect(entryUpdates.map((c) => c.filters.find(([k]) => k === 'id')?.[1])).toEqual(['e2', 'e3']);
-    expect(entryUpdates[0].payload).toEqual({ call_date: '2026-10-10', note: '공진단 수령 후속 2차' });
+    expect(entryUpdates[0].payload).toEqual({ call_date: '2026-10-05', note: '공진단 중간상담' });
     expect(entryUpdates[0].filters).toContainEqual(['done', false]);
     expect(entryUpdates[0].filters).toContainEqual(['attempts', 0]);
     const purchaseUpdate = calls.find((c) => c.table === 'non_covered_purchases' && c.op === 'update')!;

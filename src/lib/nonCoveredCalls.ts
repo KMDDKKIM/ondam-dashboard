@@ -26,9 +26,9 @@ export function desiredCalls(
   if (durationDays) {
     const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, durationDays);
     return [
-      { slot: 1, callDate: callDate1, note: `${productName} 수령 후속 1차` },
-      { slot: 2, callDate: callDate2, note: `${productName} 수령 후속 2차` },
-      { slot: 3, callDate: callDate3, note: `${productName} 수령 후속 3차(종료 임박)` },
+      { slot: 1, callDate: callDate1, note: `${productName} 수령확인` },
+      { slot: 2, callDate: callDate2, note: `${productName} 중간상담` },
+      { slot: 3, callDate: callDate3, note: `${productName} 연복권유` },
     ];
   }
   return [{ slot: 1, callDate: addDays(happyCallDate, 1), note: `비급여 구매 후속 - ${productName}` }];

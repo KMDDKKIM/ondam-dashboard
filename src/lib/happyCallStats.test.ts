@@ -15,26 +15,28 @@ import {
 import type { HappyCallPatient } from './types';
 
 describe('computeHerbCallDates', () => {
+  // 데스크 확인 공식(2026-09-22): 1차 수령확인 = 수령일+2일, 2차 중간상담 = 수령일+10일 고정,
+  // 3차 연복권유 = 수령일+처방일수-5일(한약 종료 5일 전).
   it('computes call dates for a 15-day prescription', () => {
     expect(computeHerbCallDates('2026-09-01', 15)).toEqual({
-      callDate1: '2026-09-02',
-      callDate2: '2026-09-08',
-      callDate3: '2026-09-13',
+      callDate1: '2026-09-03',
+      callDate2: '2026-09-11',
+      callDate3: '2026-09-11',
     });
   });
 
   it('computes call dates for a 30-day prescription', () => {
     expect(computeHerbCallDates('2026-09-01', 30)).toEqual({
-      callDate1: '2026-09-02',
-      callDate2: '2026-09-16',
-      callDate3: '2026-09-28',
+      callDate1: '2026-09-03',
+      callDate2: '2026-09-11',
+      callDate3: '2026-09-26',
     });
   });
 
-  it('clamps call_date_3 to call_date_1 when duration is very short', () => {
+  it('clamps call_date_3 to call_date_2 when duration is very short', () => {
     const result = computeHerbCallDates('2026-09-01', 2);
-    expect(result.callDate3 >= result.callDate1).toBe(true);
-    expect(result.callDate3).toBe(result.callDate1);
+    expect(result.callDate3 >= result.callDate2).toBe(true);
+    expect(result.callDate3).toBe(result.callDate2);
   });
 });
 
