@@ -3,9 +3,16 @@
 import { useRef, useState } from 'react';
 import { formatOrderLines, type ShortHerb } from '@/lib/herbOrder';
 
-// 부족 기준 이하인 약재 요약(접어둠) + "발주 목록 복사". 어떤 약재가 부족한지만 보여준다
+// 부족 기준 이하인 약재 요약(접어둠) + "발주 목록 복사". 어떤 약재가 부족한지만(이름만) 보여준다
 // (권장 발주량 제안은 없앴다 — 원장 결정, 2026-09-23: 주문 수량은 직접 정한다).
-export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
+// 여기서 바로 🔕 눌러 그 약재의 부족 알림을 끌 수 있다(자주 안 쓰는 약재는 목록에서 빼기).
+export default function LowStockPanel({
+  shorts,
+  onDisableAlarm,
+}: {
+  shorts: ShortHerb[];
+  onDisableAlarm: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
@@ -52,13 +59,44 @@ export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
       </div>
       {open && (
         <>
-          <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 2 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
             {shorts.map((s) => (
-              <li key={s.name} style={{ fontSize: 13 }}>
-                <strong>{s.name}</strong> — 현재 {s.currentStock}봉지
-              </li>
+              <span
+                key={s.id}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 6px 4px 10px',
+                  borderRadius: 999,
+                  border: '1px solid var(--color-line)',
+                  background: 'var(--color-surface)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {s.name}
+                <button
+                  type="button"
+                  onClick={() => onDisableAlarm(s.id)}
+                  title={`${s.name} 부족 알림 끄기(자주 안 쓰는 약재)`}
+                  aria-label={`${s.name} 부족 알림 끄기`}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    lineHeight: 1,
+                    padding: '2px 4px',
+                    borderRadius: 999,
+                    color: 'var(--color-muted)',
+                  }}
+                >
+                  🔕
+                </button>
+              </span>
             ))}
-          </ul>
+          </div>
           {fallbackText != null && (
             <div style={{ marginTop: 8 }}>
               <p className="muted-text" style={{ marginBottom: 6 }}>

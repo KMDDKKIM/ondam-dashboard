@@ -22,10 +22,12 @@ export function groupLabel(key: string): string {
   return key === OTHER_GROUP ? '기타' : key;
 }
 
-// 한 줄에 몇 칸이 들어갈지는 화면 너비에 맡긴다(180px 칸을 최대한 채우기) — 넓은 화면에서 3~5칸 정도.
+// 한 줄에 몇 칸이 들어갈지는 화면 너비에 맡긴다(200px 칸을 최대한 채우기).
+// 200px로 잡은 이유: "곡기생(약재용)"처럼 괄호 붙은 이름도 안 잘리고, 데스크 화면 너비에서
+// 보통 4~5칸 정도로 떨어진다(칸을 더 줄이면 6칸 이상도 가능하지만 이름이 자주 잘린다).
 const gridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
   gap: 0,
 } as const;
 

@@ -31,16 +31,19 @@ describe('isValidThreshold', () => {
 
 describe('listShortHerbs / formatOrderLines', () => {
   const items = [
-    { name: '천궁', currentStock: 9, lowStockThreshold: 5 },
-    { name: '당귀', currentStock: 2, lowStockThreshold: 5 },
-    { name: '감초', currentStock: 0, lowStockThreshold: null },
-    { name: '생강', currentStock: 1, lowStockThreshold: 1 },
+    { id: 'c', name: '천궁', currentStock: 9, lowStockThreshold: 5 },
+    { id: 'd', name: '당귀', currentStock: 2, lowStockThreshold: 5 },
+    { id: 'g', name: '감초', currentStock: 0, lowStockThreshold: null },
+    { id: 's', name: '생강', currentStock: 1, lowStockThreshold: 1 },
   ];
   it('부족한 것만 이름순으로', () => {
     expect(listShortHerbs(items).map((s) => s.name)).toEqual(['당귀', '생강']);
   });
-  it('요구된 형식으로 줄을 만든다', () => {
-    expect(formatOrderLines(listShortHerbs(items))).toBe('당귀 — 현재 2봉지\n생강 — 현재 1봉지');
+  it('id도 함께 담는다', () => {
+    expect(listShortHerbs(items).map((s) => s.id)).toEqual(['d', 's']);
+  });
+  it('이름만 한 줄씩', () => {
+    expect(formatOrderLines(listShortHerbs(items))).toBe('당귀\n생강');
   });
   it('부족한 게 없으면 빈 문자열', () => {
     expect(formatOrderLines([])).toBe('');

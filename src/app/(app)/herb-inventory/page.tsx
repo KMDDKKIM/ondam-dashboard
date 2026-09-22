@@ -70,6 +70,15 @@ export default function HerbInventoryPage() {
   const shorts = useMemo(() => listShortHerbs(items), [items]);
   const herbNames = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.name])), [items]);
 
+  // "부족한 약재" 칸에서 바로 🔕 눌러 끄기.
+  async function handleDisableAlarm(id: string) {
+    try {
+      await saveThreshold(id, null);
+    } catch {
+      patchMessages({ error: '알림을 끄지 못했습니다. 다시 시도해주세요.' });
+    }
+  }
+
   // 검색 결과가 딱 하나일 때 Enter → 그 행을 잠깐 강조한다.
   function handleSearchEnter() {
     if (visible.length !== 1) return;
@@ -177,7 +186,7 @@ export default function HerbInventoryPage() {
         </button>
       </div>
 
-      <LowStockPanel shorts={shorts} />
+      <LowStockPanel shorts={shorts} onDisableAlarm={handleDisableAlarm} />
       <BulkStockForms onSubmit={handleBulkSubmit} />
       {showAddForm && <AddHerbForm onSubmit={handleAddHerbs} onCancel={() => setShowAddForm(false)} />}
 

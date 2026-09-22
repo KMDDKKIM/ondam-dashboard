@@ -1,6 +1,7 @@
 // 한약재 재고는 "봉지" 단위 하나만 쓴다. 부족한 약재를 골라 발주(주문)할 때 쓰는 계산.
 
 export interface HerbStockLike {
+  id: string;
   name: string;
   currentStock: number;
   lowStockThreshold: number | null;
@@ -22,22 +23,22 @@ export function isShort(currentStock: number, threshold: number | null): boolean
 }
 
 export interface ShortHerb {
+  id: string;
   name: string;
-  currentStock: number;
 }
 
 // 권장 발주량 제안 기능은 없앴다(원장 결정, 2026-09-23: 주문 수량은 직접 정한다) —
-// 여기서는 부족한 약재가 "무엇인지"만 골라준다.
+// 여기서는 부족한 약재가 "무엇인지"만 골라준다. 재고 숫자도 안 보여준다(이름만).
 
 /** 부족한 약재만 골라 이름순(가나다)으로 정렬한다. */
 export function listShortHerbs(items: HerbStockLike[]): ShortHerb[] {
   return items
     .filter((i) => isShort(i.currentStock, i.lowStockThreshold))
-    .map((i) => ({ name: i.name, currentStock: i.currentStock }))
+    .map((i) => ({ id: i.id, name: i.name }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
-/** "당귀 — 현재 2봉지" 형식의 줄들. */
+/** 부족한 약재 이름들, 한 줄에 하나씩. */
 export function formatOrderLines(shorts: ShortHerb[]): string {
-  return shorts.map((s) => `${s.name} — 현재 ${s.currentStock}봉지`).join('\n');
+  return shorts.map((s) => s.name).join('\n');
 }
