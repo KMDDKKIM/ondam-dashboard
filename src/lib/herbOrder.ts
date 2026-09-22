@@ -21,39 +21,23 @@ export function isShort(currentStock: number, threshold: number | null): boolean
   return currentStock <= threshold;
 }
 
-/**
- * 권장 발주량(봉지) 제안: 기준의 2배까지 채우도록 max(1, 기준*2 - 현재).
- * 부족하지 않은 약재는 0(발주 불필요). 어디까지나 제안이다.
- */
-export function recommendOrderQty(currentStock: number, threshold: number | null): number {
-  if (!isShort(currentStock, threshold)) return 0;
-  const current = Math.max(0, currentStock); // 음수 재고가 들어와도 과대 제안하지 않는다
-  return Math.max(1, (threshold as number) * 2 - current);
-}
-
 export interface ShortHerb {
   name: string;
   currentStock: number;
-  threshold: number;
-  recommend: number;
 }
+
+// 권장 발주량 제안 기능은 없앴다(원장 결정, 2026-09-23: 주문 수량은 직접 정한다) —
+// 여기서는 부족한 약재가 "무엇인지"만 골라준다.
 
 /** 부족한 약재만 골라 이름순(가나다)으로 정렬한다. */
 export function listShortHerbs(items: HerbStockLike[]): ShortHerb[] {
   return items
     .filter((i) => isShort(i.currentStock, i.lowStockThreshold))
-    .map((i) => ({
-      name: i.name,
-      currentStock: i.currentStock,
-      threshold: i.lowStockThreshold as number,
-      recommend: recommendOrderQty(i.currentStock, i.lowStockThreshold),
-    }))
+    .map((i) => ({ name: i.name, currentStock: i.currentStock }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
-/** "당귀 — 현재 2봉지 (기준 5) — 권장 발주 8봉지" 형식의 줄들. */
+/** "당귀 — 현재 2봉지" 형식의 줄들. */
 export function formatOrderLines(shorts: ShortHerb[]): string {
-  return shorts
-    .map((s) => `${s.name} — 현재 ${s.currentStock}봉지 (기준 ${s.threshold}) — 권장 발주 ${s.recommend}봉지`)
-    .join('\n');
+  return shorts.map((s) => `${s.name} — 현재 ${s.currentStock}봉지`).join('\n');
 }

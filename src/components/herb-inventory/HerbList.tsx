@@ -29,7 +29,7 @@ const gridStyle = {
   gap: 0,
 } as const;
 
-function HerbListInner({ items, grouped, highlightId, onSaveThreshold, onDelete }: Props) {
+function HerbListInner({ items, grouped, highlightId, onSaveName, onSaveThreshold, onDelete }: Props) {
   const groups = useMemo(() => (grouped ? groupHerbsByInitial(items) : null), [grouped, items]);
 
   const renderRow = (item: HerbInventoryItem) => (
@@ -37,6 +37,7 @@ function HerbListInner({ items, grouped, highlightId, onSaveThreshold, onDelete 
       key={item.id}
       item={item}
       highlighted={item.id === highlightId}
+      onSaveName={onSaveName}
       onSaveThreshold={onSaveThreshold}
       onDelete={onDelete}
     />

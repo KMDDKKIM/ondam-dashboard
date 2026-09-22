@@ -6,6 +6,7 @@ import { bagCount, isEmptyHerb, isShortHerb } from '@/lib/herbList';
 import { MorePopover } from './RowMenus';
 
 export interface HerbRowHandlers {
+  onSaveName: (id: string, name: string) => Promise<void>;
   onSaveThreshold: (id: string, threshold: number | null) => Promise<void>;
   onDelete: (id: string) => void;
 }
@@ -17,7 +18,7 @@ interface Props extends HerbRowHandlers {
 
 // 카드 한 칸짜리 약재 행. 재고 조정(입고·사용)은 위의 "한꺼번에 입력"에서만 하므로,
 // 여기서는 이름·봉지 수·⋯(부족 기준·삭제)만 보여준다 — 여러 칸을 나란히 배치해도 좁다.
-function HerbRowInner({ item, highlighted, onSaveThreshold, onDelete }: Props) {
+function HerbRowInner({ item, highlighted, onSaveName, onSaveThreshold, onDelete }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const bags = bagCount(item.currentStock);
   const empty = isEmptyHerb(item);
@@ -62,9 +63,9 @@ function HerbRowInner({ item, highlighted, onSaveThreshold, onDelete }: Props) {
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
-          aria-label={`${item.name} 더 보기(부족 기준·삭제)`}
+          aria-label={`${item.name} 더 보기(이름·부족 기준·삭제)`}
           aria-expanded={menuOpen}
-          title="부족 기준 · 삭제"
+          title="이름 · 부족 기준 · 삭제"
           style={{
             height: 28,
             minWidth: 26,
@@ -82,6 +83,7 @@ function HerbRowInner({ item, highlighted, onSaveThreshold, onDelete }: Props) {
           <MorePopover
             name={item.name}
             threshold={threshold}
+            onSaveName={(n) => onSaveName(item.id, n)}
             onSaveThreshold={(t) => onSaveThreshold(item.id, t)}
             onDelete={() => onDelete(item.id)}
             onClose={() => setMenuOpen(false)}

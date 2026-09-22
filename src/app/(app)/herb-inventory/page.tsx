@@ -32,7 +32,7 @@ function blockingProblems(parsed: ReturnType<typeof parseBulkHerbEntry>): string
 }
 
 export default function HerbInventoryPage() {
-  const { supabase, items, itemsRef, loading, messages, patchMessages, logs, staffNames, load, saveThreshold, deleteHerb } =
+  const { supabase, items, itemsRef, loading, messages, patchMessages, logs, staffNames, load, saveThreshold, renameHerb, deleteHerb } =
     useHerbInventory();
 
   const [query, setQuery] = useState('');
@@ -206,6 +206,7 @@ export default function HerbInventoryPage() {
             items={visible}
             grouped={grouped}
             highlightId={highlight?.id ?? null}
+            onSaveName={renameHerb}
             onSaveThreshold={saveThreshold}
             onDelete={deleteHerb}
           />

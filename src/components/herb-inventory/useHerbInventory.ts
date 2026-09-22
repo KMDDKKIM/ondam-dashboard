@@ -7,6 +7,7 @@ import {
   listHerbInventory,
   deleteHerbInventoryItem,
   setHerbLowStockThreshold,
+  renameHerbInventoryItem,
   listRecentHerbInventoryLogs,
   listStaffNames,
 } from '@/lib/supabase/herbInventory';
@@ -80,6 +81,15 @@ export function useHerbInventory() {
     [supabase, commit]
   );
 
+  // 이름은 언제든 고칠 수 있다. 바뀌면 가나다 자리도 다시 맞춘다.
+  const renameHerb = useCallback(
+    async (id: string, name: string) => {
+      await renameHerbInventoryItem(supabase, id, name);
+      commit((prev) => sortHerbsKo(prev.map((i) => (i.id === id ? { ...i, name, updatedAt: new Date().toISOString() } : i))));
+    },
+    [supabase, commit]
+  );
+
   const deleteHerb = useCallback(
     async (id: string) => {
       const item = itemsRef.current.find((i) => i.id === id);
@@ -109,6 +119,7 @@ export function useHerbInventory() {
     staffNames,
     load,
     saveThreshold,
+    renameHerb,
     deleteHerb,
   };
 }

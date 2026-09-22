@@ -117,6 +117,20 @@ export async function setHerbLowStockThreshold(
   if (!data || data.length === 0) throw new Error('저장하지 못했습니다.');
 }
 
+// 약재 이름 수정. 이름은 unique라 이미 있는 이름으로 바꾸면 DB가 막는다(23505) — 안내 문구로 바꿔 던진다.
+export async function renameHerbInventoryItem(supabase: SupabaseClient, id: string, name: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('herb_inventory')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id');
+  if (error) {
+    if ((error as { code?: string }).code === '23505') throw new Error('이미 있는 이름이에요.');
+    throw error;
+  }
+  if (!data || data.length === 0) throw new Error('저장하지 못했습니다.');
+}
+
 interface HerbInventoryLogRow {
   id: string;
   herb_id: string;

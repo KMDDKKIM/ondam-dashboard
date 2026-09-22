@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import { formatOrderLines, type ShortHerb } from '@/lib/herbOrder';
 
-// 부족 기준 이하인 약재 요약(접어둠) + "발주 목록 복사". 권장 발주량은 제안일 뿐이다.
+// 부족 기준 이하인 약재 요약(접어둠) + "발주 목록 복사". 어떤 약재가 부족한지만 보여준다
+// (권장 발주량 제안은 없앴다 — 원장 결정, 2026-09-23: 주문 수량은 직접 정한다).
 export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -54,13 +55,10 @@ export default function LowStockPanel({ shorts }: { shorts: ShortHerb[] }) {
           <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 2 }}>
             {shorts.map((s) => (
               <li key={s.name} style={{ fontSize: 13 }}>
-                <strong>{s.name}</strong> — 현재 {s.currentStock}봉지 (기준 {s.threshold}) — 권장 발주 {s.recommend}봉지
+                <strong>{s.name}</strong> — 현재 {s.currentStock}봉지
               </li>
             ))}
           </ul>
-          <p className="muted-text" style={{ marginTop: 8 }}>
-            권장 발주량은 제안이에요: 부족 기준의 2배까지 채우도록 (기준×2 − 현재), 최소 1봉지. 실제 주문 수량은 직접 정해주세요.
-          </p>
           {fallbackText != null && (
             <div style={{ marginTop: 8 }}>
               <p className="muted-text" style={{ marginBottom: 6 }}>

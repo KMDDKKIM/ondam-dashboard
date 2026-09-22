@@ -57,41 +57,63 @@ function Popover({ onClose, children, label }: { onClose: () => void; children: 
   );
 }
 
-// "⋯": 부족 기준 수정, 삭제. 평소엔 숨겨 둔다.
+// "⋯": 이름 수정, 부족 기준(알림) 수정·끄기, 삭제. 평소엔 숨겨 둔다.
 export function MorePopover({
   name,
   threshold,
+  onSaveName,
   onSaveThreshold,
   onDelete,
   onClose,
 }: {
   name: string;
   threshold: number | null;
+  onSaveName: (name: string) => Promise<void>;
   onSaveThreshold: (threshold: number | null) => Promise<void>;
   onDelete: () => void;
   onClose: () => void;
 }) {
+  const [nameText, setNameText] = useState(name);
+  const [nameError, setNameError] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
   const current = threshold != null ? String(threshold) : '';
   const [text, setText] = useState(current);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  async function commit() {
-    const trimmed = text.trim();
-    if (trimmed === current || saving) return;
-    let next: number | null = null;
-    if (trimmed !== '') {
-      next = Number(trimmed);
-      if (!isValidThreshold(next)) {
-        setError('0 이상의 정수(봉지)만 입력할 수 있어요.');
-        setText(current);
-        return;
-      }
+  async function commitName() {
+    const trimmed = nameText.trim();
+    if (trimmed === name || savingName) return;
+    if (trimmed === '') {
+      setNameError('이름을 입력해주세요.');
+      setNameText(name);
+      return;
+    }
+    setNameError('');
+    setSavingName(true);
+    try {
+      await onSaveName(trimmed);
+    } catch (e) {
+      setNameError(e instanceof Error ? e.message : '저장하지 못했습니다. 다시 시도해주세요.');
+      setNameText(name);
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function commitThreshold(next: number | null) {
+    if (next === threshold || saving) return;
+    if (next != null && !isValidThreshold(next)) {
+      setError('0 이상의 정수(봉지)만 입력할 수 있어요.');
+      setText(current);
+      return;
     }
     setError('');
     setSaving(true);
     try {
       await onSaveThreshold(next);
+      setText(next != null ? String(next) : '');
     } catch {
       setError('저장하지 못했습니다. 다시 시도해주세요.');
       setText(current);
@@ -101,44 +123,88 @@ export function MorePopover({
   }
 
   return (
-    // 바깥을 눌러 닫을 때도 입력해 둔 기준을 저장한다(닫히면서 blur가 안 올 수 있다).
+    // 바깥을 눌러 닫을 때도 입력해 둔 이름·기준을 저장한다(닫히면서 blur가 안 올 수 있다).
     <Popover
       onClose={() => {
-        void commit();
+        void commitName();
+        void commitThreshold(text.trim() === '' ? null : Number(text.trim()));
         onClose();
       }}
       label={`${name} 설정`}
     >
-      <label className="muted-text" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        부족 기준
+      <label className="muted-text" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        이름
         <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          step={1}
+          type="text"
           autoFocus
-          value={text}
-          disabled={saving}
-          placeholder="없음"
-          aria-label={`${name} 부족 기준(봉지)`}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
+          value={nameText}
+          disabled={savingName}
+          aria-label={`${name} 이름 수정`}
+          onChange={(e) => setNameText(e.target.value)}
+          onBlur={commitName}
           onKeyDown={(e) => {
-            // Enter는 blur에만 기대지 않고 바로 저장한다(blur가 안 오는 환경에서도 저장되도록).
             if (e.key === 'Enter') {
-              void commit();
+              void commitName();
               e.currentTarget.blur();
             }
           }}
           className="input-field"
-          style={{ width: 72, padding: '4px 8px', fontSize: 13 }}
+          style={{ flex: 1, minWidth: 0, padding: '4px 8px', fontSize: 13 }}
         />
-        봉지 이하
       </label>
-      <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-        빈칸 = 알림 없음, 0 = 재고가 다 떨어지면 알림(새 약재 기본값)
-      </p>
-      {error && <p className="error-text" style={{ fontSize: 12, margin: '6px 0 0' }}>{error}</p>}
+      {nameError && <p className="error-text" style={{ fontSize: 12, margin: '4px 0 0' }}>{nameError}</p>}
+
+      <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>
+        <label className="muted-text" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          부족 기준
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={text}
+            disabled={saving}
+            placeholder="없음"
+            aria-label={`${name} 부족 기준(봉지)`}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={(e) => commitThreshold(e.target.value.trim() === '' ? null : Number(e.target.value.trim()))}
+            onKeyDown={(e) => {
+              // Enter는 blur에만 기대지 않고 바로 저장한다(blur가 안 오는 환경에서도 저장되도록).
+              if (e.key === 'Enter') {
+                void commitThreshold(text.trim() === '' ? null : Number(text.trim()));
+                e.currentTarget.blur();
+              }
+            }}
+            className="input-field"
+            style={{ width: 72, padding: '4px 8px', fontSize: 13 }}
+          />
+          봉지 이하
+        </label>
+        <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+          0 = 재고가 다 떨어지면 알림(새 약재 기본값)
+        </p>
+        {error && <p className="error-text" style={{ fontSize: 12, margin: '6px 0 0' }}>{error}</p>}
+        {threshold != null ? (
+          <button
+            type="button"
+            onClick={() => void commitThreshold(null)}
+            disabled={saving}
+            style={{ ...smallButton, marginTop: 8, width: '100%' }}
+          >
+            🔕 이 약재는 알림 끄기(자주 안 쓰는 약재)
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void commitThreshold(0)}
+            disabled={saving}
+            style={{ ...smallButton, marginTop: 8, width: '100%' }}
+          >
+            🔔 알림 켜기(재고 0이면 알림)
+          </button>
+        )}
+      </div>
+
       <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>
         <button
           type="button"

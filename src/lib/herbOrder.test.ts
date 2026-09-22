@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isShort, recommendOrderQty, listShortHerbs, formatOrderLines, isValidThreshold } from './herbOrder';
+import { isShort, listShortHerbs, formatOrderLines, isValidThreshold } from './herbOrder';
 
 describe('isShort', () => {
   it('현재 재고가 기준 이하면 부족', () => {
@@ -16,27 +16,6 @@ describe('isShort', () => {
   it('기준이 0이면 재고가 0일 때만 부족으로 본다', () => {
     expect(isShort(0, 0)).toBe(true);
     expect(isShort(1, 0)).toBe(false);
-  });
-});
-
-describe('recommendOrderQty', () => {
-  it('기준*2 - 현재', () => {
-    expect(recommendOrderQty(2, 5)).toBe(8);
-    expect(recommendOrderQty(0, 3)).toBe(6);
-  });
-  it('최소 1봉지', () => {
-    expect(recommendOrderQty(1, 1)).toBe(1);
-  });
-  it('부족하지 않으면 0', () => {
-    expect(recommendOrderQty(6, 5)).toBe(0);
-    expect(recommendOrderQty(3, null)).toBe(0);
-    expect(recommendOrderQty(1, 0)).toBe(0);
-  });
-  it('기준이 0이어도 재고가 0이면 최소 1봉지는 추천한다', () => {
-    expect(recommendOrderQty(0, 0)).toBe(1);
-  });
-  it('음수 재고는 0으로 보고 계산한다', () => {
-    expect(recommendOrderQty(-3, 5)).toBe(10);
   });
 });
 
@@ -61,9 +40,7 @@ describe('listShortHerbs / formatOrderLines', () => {
     expect(listShortHerbs(items).map((s) => s.name)).toEqual(['당귀', '생강']);
   });
   it('요구된 형식으로 줄을 만든다', () => {
-    expect(formatOrderLines(listShortHerbs(items))).toBe(
-      '당귀 — 현재 2봉지 (기준 5) — 권장 발주 8봉지\n생강 — 현재 1봉지 (기준 1) — 권장 발주 1봉지'
-    );
+    expect(formatOrderLines(listShortHerbs(items))).toBe('당귀 — 현재 2봉지\n생강 — 현재 1봉지');
   });
   it('부족한 게 없으면 빈 문자열', () => {
     expect(formatOrderLines([])).toBe('');
