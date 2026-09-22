@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupByDoctor, shouldStartPrint, visitMarkerFor, UNASSIGNED_DOCTOR } from './printSheet';
+import { countByDoctor, flattenForPrint, groupByDoctor, printFontPt, shouldStartPrint, visitMarkerFor, UNASSIGNED_DOCTOR } from './printSheet';
 import type { Reservation } from './types';
 import type { FirstVisitCandidateDto } from '../firstVisit';
 
@@ -89,5 +89,44 @@ describe('shouldStartPrint', () => {
 
   it('does nothing without a request (later date changes do not reopen the print dialog)', () => {
     expect(shouldStartPrint(null, '2026-09-22', false, 0)).toBe(false);
+  });
+});
+
+describe('flattenForPrint / countByDoctor / printFontPt (가로 A4 한 장 시트)', () => {
+  it('취소를 빼고 주치의 상관없이 예약시간 순 한 목록으로, 주치의 이름은 칸으로 붙인다', () => {
+    const rows = flattenForPrint([
+      res({ timeLabel: '11:00', patientName: '나', doctorName: '박소은' }),
+      res({ timeLabel: '09:30', patientName: '다', doctorName: '김동규' }),
+      res({ timeLabel: '09:30', patientName: '가', doctorName: '' }),
+      res({ timeLabel: '10:00', patientName: '취소자', visitStatus: '취소' }),
+    ]);
+    expect(rows.map((r) => r.patientName)).toEqual(['가', '다', '나']);
+    expect(rows.map((r) => r.printDoctor)).toEqual([UNASSIGNED_DOCTOR, '김동규', '박소은']);
+  });
+
+  it('주치의별 인원 요약은 이름순, 미지정은 맨 뒤', () => {
+    const rows = flattenForPrint([res({ doctorName: '박소은' }), res({ doctorName: '김동규' }), res({ doctorName: '김동규' }), res({ doctorName: '' })]);
+    expect(countByDoctor(rows)).toEqual([
+      { doctorName: '김동규', count: 2 },
+      { doctorName: '박소은', count: 1 },
+      { doctorName: UNASSIGNED_DOCTOR, count: 1 },
+    ]);
+  });
+
+  it('인원이 많을수록 글자가 작아지고 50명은 7pt', () => {
+    expect(printFontPt(10)).toBe(11);
+    expect(printFontPt(30)).toBe(10);
+    expect(printFontPt(36)).toBe(9);
+    expect(printFontPt(44)).toBe(8);
+    expect(printFontPt(50)).toBe(7);
+  });
+});
+
+describe('visitMarkerFor — 서버가 정한 판정(kind)을 우선한다', () => {
+  it('kind 가 재진이면 표시 없음, 재초진이면 재초진, 초진(추정)이면 초진', () => {
+    const row = res({ chartNo: '000002' });
+    expect(visitMarkerFor(row, [cand({ kind: '재진', previousVisitDates: [] })], '2026-09-22')).toBeNull();
+    expect(visitMarkerFor(row, [cand({ kind: '재초진' })], '2026-09-22')).toBe('재초진');
+    expect(visitMarkerFor(row, [cand({ kind: '초진(추정)' })], '2026-09-22')).toBe('초진');
   });
 });

@@ -4,6 +4,7 @@ import { diffDaysKst } from '@/lib/kst';
 import {
   addMonthsKst,
   baseChartNo,
+  exactChartKey,
   classifySettlementCandidate,
   dedupeSettlementVisits,
   dedupeVisitCandidates,
@@ -162,7 +163,15 @@ function numericChart(chartNo: string): number | null {
 async function loadBaseline(candidates: VisitCandidate[], date: string): Promise<BaselineInfo> {
   const empty: BaselineInfo = { rows: [], maxKnownChart: null, windowCovered: false };
   try {
-    const variants = [...new Set(candidates.map((c) => baseChartNo(c.chartNo)).filter(Boolean))].flatMap((b) => [b, `${b}-1`, `${b}-2`]);
+    // 같은 차트가 "6502"와 "006502" 두 모양으로 적혀 있을 수 있어 둘 다 찾는다(재등록 -1, -2 포함).
+    const variants = [
+      ...new Set(
+        candidates
+          .map((c) => baseChartNo(c.chartNo))
+          .filter(Boolean)
+          .flatMap((b) => (/^\d+$/.test(b) ? [b, String(Number(b)), String(Number(b)).padStart(6, '0')] : [b]))
+      ),
+    ].flatMap((b) => [b, `${b}-1`, `${b}-2`]);
     const rows: BaselineRow[] = [];
     for (let i = 0; i < variants.length; i += IN_CHUNK) {
       const { data, error } = await supabase
@@ -206,18 +215,20 @@ async function newPatientCountOn(date: string): Promise<number | null> {
 }
 
 /**
- * 일일결산에 저장된 그날 내원 환자를 후보로 삼는다(실제로 온 사람만: 예약 없이 온 환자 포함, 취소·노쇼 제외).
- * 이전 내원일 = 이전 일일결산 내원 기록 + 예약 기록의 내원. 연락처는 예약 기록에서 찾을 수 있을 때만 채운다.
- * 결산표의 신규환자수 N명이면 차트번호가 가장 큰 N명을 "새 차트"로 표시한다(likelyNewChart).
+ * 후보들의 이전 내원 기록(일일결산 명단 + 예약 기록의 내원 + 가져온 내원 이력)과 차트번호로 초진/재초진/재진을 판정해 붙인다.
+ * 일일결산 명단에서 뽑은 후보든 예약 명단(내일 예약 시트 인쇄, 오늘 아직 결산 전)에서 뽑은 후보든 똑같이 이 판정을 쓴다 —
+ * 예약 기록만으로 보면 이력이 짧아서 재진 환자까지 전부 "초진"으로 나오기 때문이다.
+ * 연락처·시간은 이미 있으면 그대로 두고, 비어 있을 때만 예약 기록에서 같은 차트번호의 것을 빌린다.
+ * newCount(결산표 신규환자수)를 알면 차트번호가 가장 큰 N명을 "새 차트"로 표시한다(likelyNewChart).
  */
-async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]): Promise<FirstVisitCandidatesResult> {
-  const candidates = dedupeSettlementVisits(
-    visits.map((v) => ({ patientName: v.patient_name, chartNo: v.chart_no, doctorName: v.doctor_name }))
-  );
-  const [priorDaily, priorReservation, newCount, record, baseline] = await Promise.all([
+async function classifyCandidates(
+  date: string,
+  candidates: VisitCandidate[],
+  newCount: number | null
+): Promise<FirstVisitCandidatesResult['candidates']> {
+  const [priorDaily, priorReservation, record, baseline] = await Promise.all([
     fetchPriorDailyVisits(candidates, date),
     loadReservationPrior(candidates, date),
-    newPatientCountOn(date),
     getDailyRecordByDate(date),
     loadBaseline(candidates, date),
   ]);
@@ -229,7 +240,6 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
   );
   const prior = [...priorDaily, ...priorReservation, ...priorBaseline];
 
-  // 연락처/예약 시간: 그날 예약 명단이 있으면 거기서, 없으면 예전 예약 기록에서 같은 차트번호의 번호를 빌린다.
   const phoneByChart = new Map<string, string>();
   const timeByChart = new Map<string, string>();
   for (const r of record?.reservations ?? []) {
@@ -250,37 +260,48 @@ async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]
     newCount
   );
 
+  return candidates.map((c) => {
+    const withContact: VisitCandidate = {
+      ...c,
+      phone: c.phone || (c.chartNo ? (phoneByChart.get(c.chartNo) ?? '') : ''),
+      timeLabel: c.timeLabel || (c.chartNo ? (timeByChart.get(c.chartNo) ?? '') : ''),
+    };
+    const previousVisitDates = previousVisitDatesFor(withContact, prior, date);
+    const { kind, reason, countedInNewCount } = classifySettlementCandidate({
+      chartNo: c.chartNo,
+      previousVisitDates,
+      date,
+      newChartNos: newCharts,
+      maxKnownChart: baseline.maxKnownChart,
+      registeredOnDate: baseline.rows.some((r) => exactChartKey(r.chart_no) === exactChartKey(c.chartNo) && r.registered_date === date),
+      windowCovered: baseline.windowCovered,
+    });
+    return {
+      ...withContact,
+      previousVisitDates,
+      possibleHomonym: hasPossibleHomonym(withContact, prior, date),
+      likelyNewChart: newCharts ? newCharts.has(c.chartNo) : null,
+      kind,
+      kindReason: reason,
+      countedInNewCount: countedInNewCount ?? false,
+    };
+  });
+}
+
+/**
+ * 일일결산에 저장된 그날 내원 환자를 후보로 삼는다(실제로 온 사람만: 예약 없이 온 환자 포함, 취소·노쇼 제외).
+ */
+async function getCandidatesFromSettlement(date: string, visits: DailyVisitRow[]): Promise<FirstVisitCandidatesResult> {
+  const candidates = dedupeSettlementVisits(
+    visits.map((v) => ({ patientName: v.patient_name, chartNo: v.chart_no, doctorName: v.doctor_name }))
+  );
+  const newCount = await newPatientCountOn(date);
   return {
     date,
     source: 'settlement',
     hasRecord: true,
     closingFirstVisitCount: newCount,
-    candidates: candidates.map((c) => {
-      const withContact: VisitCandidate = {
-        ...c,
-        phone: c.chartNo ? (phoneByChart.get(c.chartNo) ?? '') : '',
-        timeLabel: c.chartNo ? (timeByChart.get(c.chartNo) ?? '') : '',
-      };
-      const previousVisitDates = previousVisitDatesFor(withContact, prior, date);
-      const { kind, reason, countedInNewCount } = classifySettlementCandidate({
-        chartNo: c.chartNo,
-        previousVisitDates,
-        date,
-        newChartNos: newCharts,
-        maxKnownChart: baseline.maxKnownChart,
-        registeredOnDate: baseline.rows.some((r) => r.chart_no === c.chartNo && r.registered_date === date),
-        windowCovered: baseline.windowCovered,
-      });
-      return {
-        ...withContact,
-        previousVisitDates,
-        possibleHomonym: hasPossibleHomonym(withContact, prior, date),
-        likelyNewChart: newCharts ? newCharts.has(c.chartNo) : null,
-        kind,
-        kindReason: reason,
-        countedInNewCount: countedInNewCount ?? false,
-      };
-    }),
+    candidates: await classifyCandidates(date, candidates, newCount),
   };
 }
 
@@ -297,18 +318,14 @@ async function getBaseCandidates(date: string): Promise<FirstVisitCandidatesResu
   if (!record) return { date, source: 'reservation', hasRecord: false, closingFirstVisitCount: null, candidates: [] };
 
   const candidates = dedupeVisitCandidates(record.reservations);
-  const prior = await loadReservationPrior(candidates, date);
 
   return {
     date,
     source: 'reservation',
     hasRecord: true,
     closingFirstVisitCount: record.firstVisitCount,
-    candidates: candidates.map((c) => ({
-      ...c,
-      previousVisitDates: previousVisitDatesFor(c, prior, date),
-      possibleHomonym: hasPossibleHomonym(c, prior, date),
-    })),
+    // 예약 명단에서 뽑은 후보도 일일결산 명단과 같은 판정(이전 내원 이력 + 차트번호)을 쓴다.
+    candidates: await classifyCandidates(date, candidates, record.firstVisitCount),
   };
 }
 

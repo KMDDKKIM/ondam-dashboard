@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReservationTable } from './ReservationTable';
 import { ensureDailyRecord, getDailyRecordByDate, replaceReservations } from '@/lib/reservations/dailyRecords';
-import { groupByDoctor, shouldStartPrint, visitMarkerFor, type PrintRequest } from '@/lib/reservations/printSheet';
+import { countByDoctor, flattenForPrint, printFontPt, shouldStartPrint, visitMarkerFor, type PrintRequest } from '@/lib/reservations/printSheet';
 import type { FirstVisitCandidateDto, FirstVisitCandidatesResult } from '@/lib/firstVisit';
 import type { Reservation } from '@/lib/reservations/types';
 
@@ -115,7 +115,8 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
     void startPrint();
   }, [printRequest, loading, reservations, date, startPrint, onPrintHandled]);
 
-  const sheets = useMemo(() => groupByDoctor(reservations), [reservations]);
+  const printRows = useMemo(() => flattenForPrint(reservations), [reservations]);
+  const doctorCounts = useMemo(() => countByDoctor(printRows), [printRows]);
 
   if (loading) return <p style={{ padding: 12 }}>불러오는 중...</p>;
 
@@ -141,51 +142,49 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
         />
       </div>
 
-      {/* 인쇄용 예약 시트 — 주치의별로 페이지를 나눠 크게 인쇄한다(화면에는 안 보임). */}
-      <div className="print-only print-sheet">
-        {sheets.map((sheet, index) => (
-          <section
-            key={sheet.doctorName}
-            className={index > 0 ? 'print-sheet-doctor page-break' : 'print-sheet-doctor'}
-          >
-            <h3>
-              {date} 예약 · {sheet.doctorName} ({sheet.rows.length}명)
-            </h3>
-            <table className="print-sheet-table">
-              <thead>
-                <tr>
-                  <th className="col-time">예약시간</th>
-                  <th className="col-name">성함</th>
-                  <th className="col-chart">차트번호</th>
-                  <th className="col-phone">휴대전화</th>
-                  <th>치료부위</th>
-                  <th>치료</th>
-                  <th>특이사항</th>
+      {/* 인쇄용 예약 시트 — 가로 A4 한 장에 전체 예약을 시간순 한 표로(50명까지 한 장). 화면에는 안 보인다. */}
+      <div className="print-only print-sheet" style={{ ['--print-pt' as string]: `${printFontPt(printRows.length)}pt` }}>
+        <h3>
+          {date} 예약 ({printRows.length}명)
+          <span className="print-sheet-summary">
+            {doctorCounts.map((d) => `${d.doctorName} ${d.count}명`).join(' · ')}
+          </span>
+        </h3>
+        <table className="print-sheet-table">
+          <thead>
+            <tr>
+              <th className="col-time">예약시간</th>
+              <th className="col-name">성함</th>
+              <th className="col-chart">차트번호</th>
+              <th className="col-phone">휴대전화</th>
+              <th className="col-doctor">주치의</th>
+              <th>치료부위</th>
+              <th>치료</th>
+              <th>특이사항</th>
+            </tr>
+          </thead>
+          <tbody>
+            {printRows.map((row, i) => {
+              const marker = visitMarkerFor(row, candidates, date);
+              return (
+                <tr key={i}>
+                  <td>{row.timeLabel}</td>
+                  <td>
+                    {row.patientName}
+                    {marker && <span className="first-visit-mark">{marker}</span>}
+                  </td>
+                  <td>{row.chartNo}</td>
+                  <td>{row.mobile || row.phone}</td>
+                  <td>{row.printDoctor}</td>
+                  <td>{row.treatmentArea}</td>
+                  <td>{row.treatment}</td>
+                  {/* 붙여넣은 예약시트는 특이사항 칸이 비어 있고 예약메모가 비고로 들어오므로 함께 찍는다. */}
+                  <td>{[row.specialNotes, row.memo].filter(Boolean).join(' / ')}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {sheet.rows.map((row, i) => {
-                  const marker = visitMarkerFor(row, candidates, date);
-                  return (
-                    <tr key={i}>
-                      <td>{row.timeLabel}</td>
-                      <td>
-                        {row.patientName}
-                        {marker && <span className="first-visit-mark">{marker}</span>}
-                      </td>
-                      <td>{row.chartNo}</td>
-                      <td>{row.mobile || row.phone}</td>
-                      <td>{row.treatmentArea}</td>
-                      <td>{row.treatment}</td>
-                      {/* 붙여넣은 예약시트는 특이사항 칸이 비어 있고 예약메모가 비고로 들어오므로 함께 찍는다. */}
-                      <td>{[row.specialNotes, row.memo].filter(Boolean).join(' / ')}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-        ))}
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

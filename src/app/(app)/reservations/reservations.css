@@ -129,66 +129,79 @@
     border-bottom: 0.4pt solid #000 !important;
   }
 
+  /* 예약 시트가 가로 A4 한 장에 50명까지 들어가도록 머리쪽 요약은 작게(2줄, 8pt) 줄인다. */
   .reservation-app .weekly-dashboard .print-only {
-    padding: 1mm 0 !important;
-    font-size: 10pt !important;
+    padding: 0.3mm 0 0.6mm !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
     font-weight: 600;
   }
 
   .reservation-app .weekly-dashboard .print-only > div {
-    gap: 5mm !important;
-    margin-top: 0.5mm !important;
+    gap: 4mm !important;
+    margin-top: 0 !important;
   }
 
-  /* 인쇄용 예약 시트(DayDetail.tsx의 .print-sheet) — 주치의별로 한 페이지씩, 글씨는 10pt 이상.
-     화면용 편집 표(.reservation-table)는 .no-print 안에 있어서 인쇄에는 나오지 않는다. */
-  .reservation-app .print-sheet-doctor.page-break {
-    break-before: page;
-    page-break-before: always;
-  }
-
+  /* 인쇄용 예약 시트(DayDetail.tsx의 .print-sheet) — 가로 A4 한 장에 전체 예약을 시간순 한 표로 담는다(50명까지 한 장).
+     글자 크기는 인원수에 맞춰 --print-pt 로 정한다(printFontPt: 25명 이하 11pt … 50명 7pt).
+     한 줄이 두 줄로 꺾이면 50명이 한 장에 안 들어가므로 모든 칸은 줄바꿈 없이 자른다. */
   .reservation-app .print-sheet h3 {
-    margin: 0 0 2mm 0;
-    font-size: 13pt;
+    margin: 0 0 0.8mm 0;
+    font-size: 10pt;
+    line-height: 1.2;
+  }
+
+  .reservation-app .print-sheet-summary {
+    margin-left: 4mm;
+    font-size: 9pt;
+    font-weight: 500;
   }
 
   .reservation-app table.print-sheet-table {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
-    font-size: 10.5pt;
-    line-height: 1.25;
+    font-size: var(--print-pt, 9pt);
+    line-height: 1.12;
   }
 
   .reservation-app table.print-sheet-table th,
   .reservation-app table.print-sheet-table td {
-    border: 0.5pt solid #000;
-    padding: 1mm 1.5mm;
+    border: 0.4pt solid #000;
+    padding: 0.2mm 1mm;
     text-align: left;
-    vertical-align: top;
-    word-break: break-all;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .reservation-app table.print-sheet-table th {
     font-weight: 700;
-    font-size: 10.5pt;
   }
 
   .reservation-app table.print-sheet-table tr {
     break-inside: avoid;
   }
 
+  .reservation-app table.print-sheet-table thead {
+    display: table-header-group;
+  }
+
   .reservation-app table.print-sheet-table .col-time {
-    width: 17mm;
+    width: 13mm;
   }
   .reservation-app table.print-sheet-table .col-name {
-    width: 30mm;
+    width: 32mm;
   }
   .reservation-app table.print-sheet-table .col-chart {
-    width: 24mm;
+    width: 17mm;
   }
   .reservation-app table.print-sheet-table .col-phone {
-    width: 32mm;
+    width: 25mm;
+  }
+  .reservation-app table.print-sheet-table .col-doctor {
+    width: 15mm;
   }
 
   /* 색이 빠져도(흑백 인쇄) 눈에 띄도록 테두리+굵은 글씨. */
@@ -196,9 +209,10 @@
     display: inline-block;
     margin-left: 1.5mm;
     padding: 0 1.2mm;
-    border: 0.8pt solid #000;
-    border-radius: 1mm;
-    font-size: 10pt;
+    border: 0.6pt solid #000;
+    border-radius: 0.8mm;
+    font-size: 0.85em;
     font-weight: 700;
+    line-height: 1;
   }
 }

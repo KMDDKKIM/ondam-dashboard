@@ -58,6 +58,21 @@ export function baseChartNo(chartNo: string): string {
   return chartNo.trim().replace(/-\d+$/, '');
 }
 
+/**
+ * 차트번호를 같은 사람끼리 같은 값이 되게 다듬는다: 재등록 "-1"을 떼고, 숫자면 앞의 0도 뗀다.
+ * 예약 시트에는 "6502"로, OK차트 표에는 "006502"로 적혀 있는 일이 있어서 글자 그대로 비교하면 같은 차트가 다른 차트가 된다.
+ */
+/** chartKey 와 같지만 재등록 뒤의 "-1"은 남긴다(같은 환자의 다른 차트를 구분할 때). */
+export function exactChartKey(chartNo: string): string {
+  const m = chartNo.trim().match(/^(\d+)(-\d+)?$/);
+  return m ? `${Number(m[1])}${m[2] ?? ''}` : chartNo.trim();
+}
+
+export function chartKey(chartNo: string): string {
+  const base = baseChartNo(chartNo);
+  return /^\d+$/.test(base) ? String(Number(base)) : base;
+}
+
 function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
   return Boolean((a.chartNo ?? '').trim() && (b.chartNo ?? '').trim());
 }
@@ -68,7 +83,7 @@ function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
  * 번호가 한쪽이라도 없으면 같은 사람으로 보지 않는다 — 동명이인 때문에 진짜 초진이 가려지면 안 되므로.
  */
 export function isSamePatient(a: PersonKey, b: PersonKey): boolean {
-  if (bothHaveChart(a, b)) return baseChartNo(a.chartNo ?? '') === baseChartNo(b.chartNo ?? '');
+  if (bothHaveChart(a, b)) return chartKey(a.chartNo ?? '') === chartKey(b.chartNo ?? '');
   if (!a.name.trim() || a.name.trim() !== b.name.trim()) return false;
   const phonesA = phoneSet(a);
   const phonesB = phoneSet(b);
@@ -224,6 +239,10 @@ export function classifySettlementCandidate(input: SettlementClassifyInput): Set
   if (newChartNos?.has(chartNo)) return { kind: '초진(추정)', reason: '신규환자수 기준 새 차트예요' };
   if (windowCovered && chartNumber !== null) {
     return { kind: '재초진', reason: '예전 차트인데 최근 3개월 내원 기록이 없어요' };
+  }
+  // 이미 있던 차트(번호가 그날 이전의 가장 큰 차트번호 이하)는 초진일 수 없다. 3개월 기록이 부족해 재초진인지는 모르지만 새 환자는 아니다.
+  if (chartNumber !== null && maxKnownChart !== null && chartNumber <= maxKnownChart) {
+    return { kind: '재진', reason: '예전 차트예요(내원 기록이 부족해 재초진인지는 확인하지 못했어요)' };
   }
   if (newChartNos !== null) return { kind: '재진', reason: '새 차트가 아니고 이전 기록도 없어요(이전 내원 이력을 가져오면 더 정확해져요)' };
   return { kind: '초진(추정)', reason: '이전 내원 기록이 없어요' };

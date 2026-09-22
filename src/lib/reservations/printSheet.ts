@@ -58,7 +58,8 @@ export function visitMarkerFor(
     return isSamePatient(candidateKey, key);
   });
   if (!candidate) return null;
-  const kind = classifyVisit(candidate.previousVisitDates, date);
+  // 서버가 이전 내원 이력·차트번호로 정한 판정이 있으면 그것을, 없으면(옛 응답) 예약 기록의 이전 내원일로 판정한다.
+  const kind = candidate.kind ?? classifyVisit(candidate.previousVisitDates, date);
   if (kind === '재초진') return '재초진';
   if (kind === '초진(추정)') return candidate.possibleHomonym ? '초진?' : '초진';
   return null;
@@ -78,4 +79,44 @@ export function shouldStartPrint(
   handledId: number
 ): boolean {
   return request !== null && request.date === date && !loading && request.id !== handledId;
+}
+
+/** 인쇄 시트 한 줄(주치의 이름을 칸으로 붙인다). */
+export interface PrintRow extends Reservation {
+  printDoctor: string;
+}
+
+/**
+ * 가로 A4 한 장에 전체 예약을 예약시간 순으로 한 표에 담는다(주치의별로 페이지를 나누지 않는다).
+ * 취소된 예약은 뺀다. 같은 시간이면 성함 순.
+ */
+export function flattenForPrint(reservations: Reservation[]): PrintRow[] {
+  return reservations
+    .filter((r) => r.visitStatus !== '취소')
+    .map((r) => ({ ...r, printDoctor: r.doctorName.trim() || UNASSIGNED_DOCTOR }))
+    .sort((a, b) => a.timeLabel.localeCompare(b.timeLabel) || a.patientName.localeCompare(b.patientName, 'ko'));
+}
+
+/** 주치의별 인원 요약: [{ doctorName, count }] — 인쇄 머리글용(주치의 이름순, 미지정은 맨 뒤). */
+export function countByDoctor(rows: { printDoctor: string }[]): { doctorName: string; count: number }[] {
+  const map = new Map<string, number>();
+  for (const r of rows) map.set(r.printDoctor, (map.get(r.printDoctor) ?? 0) + 1);
+  return [...map.entries()]
+    .map(([doctorName, count]) => ({ doctorName, count }))
+    .sort((a, b) => {
+      if (a.doctorName === UNASSIGNED_DOCTOR) return 1;
+      if (b.doctorName === UNASSIGNED_DOCTOR) return -1;
+      return a.doctorName.localeCompare(b.doctorName, 'ko');
+    });
+}
+
+/** 가로 A4 한 장(위아래 여백 6mm)에 들어가도록 인원수에 따라 글자 크기(pt)를 정한다. 50명은 7pt. */
+export const PRINT_MAX_ONE_PAGE = 50;
+
+export function printFontPt(count: number): number {
+  if (count <= 25) return 11;
+  if (count <= 32) return 10;
+  if (count <= 38) return 9;
+  if (count <= 44) return 8;
+  return 7;
 }
