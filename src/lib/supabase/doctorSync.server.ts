@@ -22,8 +22,13 @@ interface DoctorRow {
  * 직원을 승인하거나, 등급을 바꾸거나, 퇴사시킬 때마다 이 함수를 부른다 — 그래야 초진환자 해피콜·한약 대기방
  * 같은 화면의 "진료의" 선택 칸이 따로 손대지 않아도 최신 상태로 유지된다. admin(service_role) 클라이언트로만
  * 불러야 한다(doctors 쓰기는 대표원장 role 에게만 RLS가 열려 있어서).
+ *
+ * justRemovedDoctorIds: 방금 삭제(퇴사 처리)된 직원에 연결돼 있던 진료의 행의 id(있으면).
+ * staff 행이 auth 계정과 함께 이미 지워진 뒤라 doctors.staff_id 도 "on delete set null" 로 이미 비어서,
+ * 아래에서 다시 읽어오는 doctors 행만으로는 그 직원이었다는 걸 더 이상 알 수 없다 — 그래서 호출자
+ * (staff/remove 라우트)가 지우기 전에 미리 조회해 둔 진료의 행 id를 넘겨서 확실히 숨긴다.
  */
-export async function syncDoctorsFromStaff(admin: SupabaseClient): Promise<void> {
+export async function syncDoctorsFromStaff(admin: SupabaseClient, justRemovedDoctorIds: string[] = []): Promise<void> {
   const [staffRes, doctorsRes] = await Promise.all([
     admin.from('staff').select('id, name, grade').eq('status', 'approved'),
     admin.from('doctors').select('id, name, staff_id, active, sort_order'),
@@ -42,7 +47,7 @@ export async function syncDoctorsFromStaff(admin: SupabaseClient): Promise<void>
     sortOrder: d.sort_order,
   }));
 
-  const plan = planDoctorSync(qualifying, existing);
+  const plan = planDoctorSync(qualifying, existing, justRemovedDoctorIds);
 
   if (plan.insert.length > 0) {
     const { error } = await admin

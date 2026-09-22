@@ -47,6 +47,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '대표원장 계정은 삭제할 수 없습니다.' }, { status: 400 });
   }
 
+  // auth 계정을 지우면 staff 행이 cascade로 같이 지워지고, doctors.staff_id 는 "on delete set null"로
+  // 곧바로 비어버린다 — 그 뒤엔 이 직원이 진료의였다는 연결을 더 이상 찾을 수 없다. 그래서 지우기 전에
+  // 미리 연결된 진료의 행 id를 알아두고, 아래 sync 호출에 넘겨서 확실히 숨긴다(비어 있으면 그냥 [] 로).
+  // doctors.staff_id 에는 unique 제약이 없어(migration_doctors.sql) 이론상 여러 행이 걸릴 수 있으니
+  // maybeSingle 대신 배열로 받는다. 이 조회 자체가 실패해도(네트워크 등) 삭제는 막지 않는다 — doctor sync와
+  // 마찬가지로 "동기화 관련 실패가 퇴사 처리 자체를 막으면 안 된다"는 원칙을 그대로 따른다(그 경우 진료의
+  // 목록만 이번엔 자동으로 안 숨겨질 뿐, 전과 동일한 상태).
+  let justRemovedDoctorIds: string[] = [];
+  try {
+    const { data: linkedDoctors, error: doctorLookupError } = await admin
+      .from('doctors')
+      .select('id')
+      .eq('staff_id', staffId);
+    if (doctorLookupError) throw doctorLookupError;
+    justRemovedDoctorIds = (linkedDoctors ?? []).map((d) => d.id as string);
+  } catch (err) {
+    console.error('staff.remove: linked doctor lookup failed', err);
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(staffId);
   if (deleteError) {
     // auth 계정은 이미 없는데 staff 행만 남은 경우(고아 행)는 staff 행을 직접 지워 정리한다.
@@ -68,7 +87,7 @@ export async function POST(request: Request) {
   }
 
   // 퇴사한 사람이 진료의였다면 진료의 목록에서 숨긴다(실패해도 삭제 자체는 이미 끝났다).
-  await syncDoctorsFromStaff(admin).catch((err) => console.error('staff.remove: doctor sync failed', err));
+  await syncDoctorsFromStaff(admin, justRemovedDoctorIds).catch((err) => console.error('staff.remove: doctor sync failed', err));
 
   return NextResponse.json({ ok: true });
 }

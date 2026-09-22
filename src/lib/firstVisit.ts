@@ -73,6 +73,28 @@ export function chartKey(chartNo: string): string {
   return /^\d+$/.test(base) ? String(Number(base)) : base;
 }
 
+/** chartKey 와 같은 규칙(재등록 "-N" 뗀 뒤 앞자리 0 무시)으로 숫자값을 본다. 숫자가 아니면 null. */
+export function numericChartNo(chartNo: string): number | null {
+  const base = baseChartNo(chartNo);
+  return /^\d+$/.test(base) ? Number(base) : null;
+}
+
+/**
+ * 차트번호 목록 중 가장 큰 숫자값을 구한다 — 반드시 numericChartNo 로 숫자를 만든 뒤 비교한다.
+ * chart_no는 TEXT 컬럼이라 DB의 텍스트 정렬(ORDER BY chart_no)은 "9" > "006502" 처럼 자릿수가 다른
+ * 패딩/비패딩 표기가 섞이면 숫자 크기와 어긋난다 — 그 순서로 상위 N개만 뽑아 최댓값을 구하면
+ * 진짜 최댓값이 샘플에서 빠질 수 있다. 그래서 반드시 전체(또는 충분히 큰) 목록을 여기서 숫자로 비교해야 한다.
+ * 숫자가 아닌 차트번호는 무시한다. 숫자인 게 하나도 없으면 null.
+ */
+export function maxChartNumber(chartNos: string[]): number | null {
+  let max: number | null = null;
+  for (const c of chartNos) {
+    const n = numericChartNo(c);
+    if (n !== null && (max === null || n > max)) max = n;
+  }
+  return max;
+}
+
 function bothHaveChart(a: PersonKey, b: PersonKey): boolean {
   return Boolean((a.chartNo ?? '').trim() && (b.chartNo ?? '').trim());
 }
@@ -166,7 +188,8 @@ export function dedupeSettlementVisits(rows: SettlementVisitLike[]): VisitCandid
     const name = row.patientName.trim();
     if (!name) continue;
     const chart = row.chartNo.trim();
-    const key = chart ? `c:${chart}` : `n:${name}`;
+    // chartKey로 정규화해야 "6502"와 "006502"가 한 결산 붙여넣기 안에서 서로 다른 사람으로 세지 않는다.
+    const key = chart ? `c:${chartKey(chart)}` : `n:${name}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push({ patientName: name, chartNo: chart, phone: '', doctorName: row.doctorName.trim(), timeLabel: '' });

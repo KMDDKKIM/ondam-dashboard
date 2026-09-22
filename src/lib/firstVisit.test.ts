@@ -15,6 +15,8 @@ import {
   isReissuedChart,
   chartKey,
   exactChartKey,
+  numericChartNo,
+  maxChartNumber,
 } from './firstVisit';
 
 describe('addMonthsKst', () => {
@@ -180,6 +182,67 @@ describe('dedupeSettlementVisits', () => {
       { patientName: ' ', chartNo: '1', doctorName: '' },
     ];
     expect(dedupeSettlementVisits(rows).map((c) => c.patientName)).toEqual(['가상하나', '가상둘']);
+  });
+
+  it('같은 차트를 패딩("006502")과 비패딩("6502")으로 섞어 적어도 한 명으로 묶는다(chartKey로 정규화)', () => {
+    const rows = [
+      { patientName: '가상하나', chartNo: '6502', doctorName: '김동규' },
+      { patientName: '가상하나', chartNo: '006502', doctorName: '김동규' },
+    ];
+    expect(dedupeSettlementVisits(rows)).toHaveLength(1);
+  });
+});
+
+describe('numericChartNo / maxChartNumber(텍스트 정렬이 아니라 숫자로 최댓값을 본다)', () => {
+  it('numericChartNo: 앞자리 0과 재등록 "-N"을 떼고 숫자로 본다', () => {
+    expect(numericChartNo('006502')).toBe(6502);
+    expect(numericChartNo('6502')).toBe(6502);
+    expect(numericChartNo('006366-1')).toBe(6366);
+    expect(numericChartNo('AB')).toBeNull();
+  });
+
+  it('패딩/비패딩이 섞여도 진짜 숫자 최댓값을 찾는다 — 텍스트 정렬(내림차순)이면 "9"가 "006502"보다 앞에 와서 진짜 최댓값을 가릴 수 있다', () => {
+    // 텍스트로 내림차순 정렬하면 "9"(값 9) 가 "089999"(값 89999)보다 앞에 온다 — 하지만 진짜 최댓값은 89999.
+    const chartNos = ['9', '089999', '000123', '45'];
+    expect(maxChartNumber(chartNos)).toBe(89999);
+  });
+
+  it('숫자가 아닌 차트번호는 무시하고, 숫자가 하나도 없으면 null', () => {
+    expect(maxChartNumber(['AB', 'CD-1'])).toBeNull();
+    expect(maxChartNumber([])).toBeNull();
+    expect(maxChartNumber(['AB', '006502'])).toBe(6502);
+  });
+
+  it('실제 분류에 적용: 패딩된 큰 차트("089999")가 섞여 있으면, 그보다 작은 새 차트는 재진으로 가려지면 안 된다', () => {
+    // 기존 차트: 비패딩 "9"(9번, 사실 작은 값) + 패딩 "089999"(89999번, 진짜 최댓값).
+    const maxKnownChart = maxChartNumber(['9', '089999']);
+    expect(maxKnownChart).toBe(89999); // 텍스트 정렬 top-30 샘플식이면 여기서 9로 잘못 나올 수 있었다.
+
+    // 새로 등록된 진짜 초진 환자: 차트번호 90000 (기존 최댓값보다 큼 → 초진이어야 함).
+    const newPatient = classifySettlementCandidate({
+      chartNo: '090000',
+      previousVisitDates: [],
+      date: '2026-09-22',
+      newChartNos: null,
+      maxKnownChart,
+      registeredOnDate: false,
+      windowCovered: false,
+    });
+    expect(newPatient.kind).toBe('초진(추정)');
+
+    // 반대로, 텍스트 정렬 버그처럼 maxKnownChart가 9로 잘못 계산됐다면 90000 > 9라서 여전히 초진으로 나오니
+    // 이 케이스만으로는 버그를 못 잡는다 — 실제 버그는 "새 환자 번호가 작아서 가려지는" 경우다.
+    // 예: 새 환자 번호가 50000이면, (버그 없이) 진짜 최댓값 89999보다 작으므로 재진(예전 차트)으로 봐야 정상이다.
+    const oldChart = classifySettlementCandidate({
+      chartNo: '050000',
+      previousVisitDates: [],
+      date: '2026-09-22',
+      newChartNos: null,
+      maxKnownChart,
+      registeredOnDate: false,
+      windowCovered: false,
+    });
+    expect(oldChart.kind).toBe('재진');
   });
 });
 
