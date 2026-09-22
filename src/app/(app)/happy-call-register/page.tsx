@@ -14,7 +14,6 @@ import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
-import { DoctorManager } from '@/components/happy-call/DoctorManager';
 import { VisitHistoryImport } from '@/components/happy-call/VisitHistoryImport';
 import { DateCell } from '@/components/happy-call/DateCell';
 import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
@@ -226,8 +225,6 @@ export default function HappyCallRegisterPage() {
           registered={registeredOnDate}
           onRegister={handleRegisterCandidate}
         />
-
-        <DoctorManager doctors={doctors} />
 
         <VisitHistoryImport onDone={() => load(candidateDate)} />
 
