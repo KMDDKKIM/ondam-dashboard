@@ -23,3 +23,5 @@ create policy "authenticated can read herb_order_memo" on herb_order_memo
 drop policy if exists "authenticated can update herb_order_memo" on herb_order_memo;
 create policy "authenticated can update herb_order_memo" on herb_order_memo
   for update to authenticated using (public.is_approved_staff()) with check (public.is_approved_staff());
+
+revoke all on herb_order_memo from anon;

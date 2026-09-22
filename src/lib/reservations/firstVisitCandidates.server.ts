@@ -10,6 +10,7 @@ import {
   dedupeVisitCandidates,
   hasPossibleHomonym,
   likelyNewChartNos,
+  maxChartNumber,
   mergeReceptionCandidates,
   previousVisitDatesFor,
   type FirstVisitCandidatesResult,
@@ -154,9 +155,29 @@ interface BaselineInfo {
   windowCovered: boolean;
 }
 
-function numericChart(chartNo: string): number | null {
-  const base = baseChartNo(chartNo);
-  return /^\d+$/.test(base) ? Number(base) : null;
+// date 이전(등록일·내원일 기준)의 차트번호를 표 하나에서 전부 모은다(정렬은 페이지가 안정적이게만, 값 비교는 숫자로 따로 한다).
+// chart_no는 TEXT라서 DB의 ORDER BY chart_no로 "상위 N개만" 뽑아 최댓값을 구하면 패딩 유무에 따라
+// 텍스트 순서가 숫자 순서와 어긋나(예: "9" > "006502") 진짜 최댓값이 샘플에서 빠질 수 있다 — 그래서
+// 전부 가져와 lib/firstVisit.ts의 maxChartNumber로 숫자 비교한다.
+async function fetchAllChartNos(
+  table: 'patient_visit_history' | 'daily_visits',
+  dateColumn: 'registered_date' | 'visit_date',
+  date: string
+): Promise<string[]> {
+  const out: string[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('chart_no')
+      .lt(dateColumn, date)
+      .order('chart_no', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as { chart_no: string }[];
+    out.push(...page.map((r) => r.chart_no));
+    if (page.length < PAGE) break;
+  }
+  return out;
 }
 
 // 가져온 내원 이력(patient_visit_history). 표가 없거나 비어 있으면(SQL 실행 전·아직 안 가져옴) 없는 것으로 본다.
@@ -188,15 +209,12 @@ async function loadBaseline(candidates: VisitCandidate[], date: string): Promise
     const periodEnd = (periodEndRes.data?.[0] as { period_end: string } | undefined)?.period_end ?? null;
     if (!periodStart || !periodEnd) return empty;
 
-    const registeredBefore = await supabase.from('patient_visit_history').select('chart_no').lt('registered_date', date).order('chart_no', { ascending: false }).limit(30);
-    const visitsBefore = await supabase.from('daily_visits').select('chart_no, visit_date').lt('visit_date', date).order('chart_no', { ascending: false }).limit(30);
-    const latestVisit = await supabase.from('daily_visits').select('visit_date').lt('visit_date', date).order('visit_date', { ascending: false }).limit(1);
-
-    const charts = [
-      ...((registeredBefore.data ?? []) as { chart_no: string }[]).map((r) => numericChart(r.chart_no)),
-      ...((visitsBefore.data ?? []) as { chart_no: string }[]).map((r) => numericChart(r.chart_no)),
-    ].filter((n): n is number => n !== null);
-    const maxKnownChart = charts.length > 0 ? Math.max(...charts) : null;
+    const [registeredChartNos, visitedChartNos, latestVisit] = await Promise.all([
+      fetchAllChartNos('patient_visit_history', 'registered_date', date),
+      fetchAllChartNos('daily_visits', 'visit_date', date),
+      supabase.from('daily_visits').select('visit_date').lt('visit_date', date).order('visit_date', { ascending: false }).limit(1),
+    ]);
+    const maxKnownChart = maxChartNumber([...registeredChartNos, ...visitedChartNos]);
 
     // 이력표 기간이 "내원일 3개월 전"부터 시작하고, 내원일 직전까지 기록이 이어져 있어야 "기록이 없다 = 3개월 안에 안 왔다"고 볼 수 있다.
     const latestRecorded = [periodEnd, (latestVisit.data?.[0] as { visit_date: string } | undefined)?.visit_date ?? ''].sort().pop() ?? periodEnd;

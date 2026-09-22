@@ -47,6 +47,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '대표원장 계정은 삭제할 수 없습니다.' }, { status: 400 });
   }
 
+  // auth 계정을 지우면 staff 행이 cascade로 같이 지워지고, doctors.staff_id 는 "on delete set null"로
+  // 곧바로 비어버린다 — 그 뒤엔 이 직원이 진료의였다는 연결을 더 이상 찾을 수 없다. 그래서 지우기 전에
+  // 미리 연결된 진료의 행 id를 알아두고, 아래 sync 호출에 넘겨서 확실히 숨긴다(비어 있으면 그냥 [] 로).
+  const { data: linkedDoctor, error: doctorLookupError } = await admin
+    .from('doctors')
+    .select('id')
+    .eq('staff_id', staffId)
+    .maybeSingle();
+  if (doctorLookupError) {
+    return NextResponse.json({ error: doctorLookupError.message }, { status: 500 });
+  }
+  const justRemovedDoctorIds = linkedDoctor ? [linkedDoctor.id as string] : [];
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(staffId);
   if (deleteError) {
     // auth 계정은 이미 없는데 staff 행만 남은 경우(고아 행)는 staff 행을 직접 지워 정리한다.
@@ -68,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   // 퇴사한 사람이 진료의였다면 진료의 목록에서 숨긴다(실패해도 삭제 자체는 이미 끝났다).
-  await syncDoctorsFromStaff(admin).catch((err) => console.error('staff.remove: doctor sync failed', err));
+  await syncDoctorsFromStaff(admin, justRemovedDoctorIds).catch((err) => console.error('staff.remove: doctor sync failed', err));
 
   return NextResponse.json({ ok: true });
 }

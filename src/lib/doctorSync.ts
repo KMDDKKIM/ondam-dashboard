@@ -37,8 +37,17 @@ function sortOrderFor(grade: StaffGrade): number {
  *    (직원 계정이 생기기 전부터 있던 진료의를 그대로 이어 쓰기 위해).
  *  - 그 무엇에도 안 걸리면 새로 만든다.
  *  - 더 이상 자격이 없어진(퇴사·강등) 사람의 진료의 행은 지우지 않고 숨긴다(예전 기록의 이름을 지키려고).
+ *
+ * justRemovedDoctorIds: 방금 삭제(퇴사 처리)된 직원에 연결돼 있던 진료의 행의 id(있으면).
+ * staff 행은 auth 계정과 함께 이미 지워졌고, doctors.staff_id 는 "on delete set null" 로 이미 null이 된 뒤이므로
+ * 이 목록의 existing 행에서는 그 직원을 더 이상 staffId 로 찾을 수 없다 — 그래서 호출자가 지우기 전에 미리
+ * 알아둔 진료의 행 id를 직접 넘겨서, staffId 매칭에 기대지 않고도 확실히 숨길 수 있게 한다.
  */
-export function planDoctorSync(qualifying: QualifyingStaff[], existing: ExistingDoctorRow[]): DoctorSyncPlan {
+export function planDoctorSync(
+  qualifying: QualifyingStaff[],
+  existing: ExistingDoctorRow[],
+  justRemovedDoctorIds: string[] = []
+): DoctorSyncPlan {
   const insert: DoctorSyncPlan['insert'] = [];
   const update: DoctorSyncPlan['update'] = [];
   const linked = new Set<string>();
@@ -65,8 +74,10 @@ export function planDoctorSync(qualifying: QualifyingStaff[], existing: Existing
   }
 
   const qualifyingIds = new Set(qualifying.map((s) => s.id));
+  const justRemovedIds = new Set(justRemovedDoctorIds);
   for (const d of existing) {
-    if (d.active && d.staffId && !qualifyingIds.has(d.staffId)) {
+    const stillLinkedButUnqualified = Boolean(d.staffId) && !qualifyingIds.has(d.staffId as string);
+    if (d.active && (stillLinkedButUnqualified || justRemovedIds.has(d.id))) {
       update.push({ id: d.id, active: false });
     }
   }

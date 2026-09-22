@@ -22,10 +22,14 @@ export async function getHerbOrderMemo(supabase: SupabaseClient): Promise<HerbOr
     : { text: '', updatedBy: null, updatedAt: new Date(0).toISOString() };
 }
 
+// 싱글턴 행이 없거나 RLS가 막으면 에러 없이 0행이 바뀌므로(=조용히 저장 안 됨, 새로고침하면 도로 예전 값)
+// 실제로 바뀌었는지 확인한다.
 export async function saveHerbOrderMemo(supabase: SupabaseClient, text: string, updatedBy: string | null): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('herb_order_memo')
     .update({ text, updated_by: updatedBy, updated_at: new Date().toISOString() })
-    .eq('id', true);
+    .eq('id', true)
+    .select('id');
   if (error) throw error;
+  if (!data || data.length === 0) throw new Error('저장하지 못했습니다.');
 }
