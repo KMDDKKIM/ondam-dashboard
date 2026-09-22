@@ -369,6 +369,10 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   const [copied, setCopied] = useState(false);
   // 다음예약 접수 환자수를 접수기록부로 미리 채웠을 때의 인원(직접 고치면 사라진다).
   const [receptionHint, setReceptionHint] = useState<number | null>(null);
+  // 저장된 결산의 추나 인원은 있는데(예: 이 기능이 생기기 전 날짜) 접수기록부의 추나 체크와
+  // 대조해 나온 이름이 없을 때 true — 이 경우는 진짜 불일치가 아니라서 아래 주의 표시를 끈다.
+  // 추나 인원·이름 칸을 직접 고치면 다시 정상적으로 대조한다.
+  const [chunaNamesUnavailable, setChunaNamesUnavailable] = useState(false);
   const supabase = createClient();
 
   // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
@@ -419,6 +423,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     if (!date) {
       setClosing(EMPTY_CLOSING);
       setReceptionHint(null);
+      setChunaNamesUnavailable(false);
       return;
     }
     let syncOnly = false;
@@ -452,14 +457,18 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         } catch {
           receptionKnown = false;
         }
+        // 못 읽었거나 접수기록부가 비어 있으면(접수기록부를 안 쓴 날과 구분이 안 돼서
+        // nextBookingPrefill·chunaPrefill과 같은 이유로) 값을 지어내지 않고 직접 입력하게 둔다.
+        const receptionUsable = receptionKnown && receptionRecords.length > 0;
         if (cancelled) return;
+        if (receptionUsable) setChunaNamesUnavailable(false);
         setClosing((prev) => {
           const next = {
             ...prev,
             reservationCount: String(rows.length),
             cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
           };
-          if (receptionKnown) {
+          if (receptionUsable) {
             const attendance = matchAttendance(rows, receptionRecords.map((r) => r.patientName));
             next.keptCount = String(attendance.keptCount);
             next.noshowCount = String(attendance.noshowCount);
@@ -486,32 +495,35 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       }
 
       let saved = null;
-      let savedKnown = true;
       try {
         saved = await getSavedDailyClosing(supabase, date);
       } catch {
-        // 저장된 값이 없으면 명단에서 센 값을 쓴다.
-        savedKnown = false;
+        // 저장된 값을 확인하지 못했으면 없는 것으로 보고 명단에서 센 값을 쓴다.
       }
 
-      // 접수기록부는 한 번만 불러와서 다음예약·추나·정상 이행/노쇼 대조에 함께 쓴다.
+      // 접수기록부는 한 번만 불러와서 다음예약·추나·정상 이행/노쇼 대조에 함께 쓴다. 저장된 결산
+      // 확인이 실패해도 접수기록부 자체는 별도로 읽어본다 — 서로 다른 실패를 섞어서 "접수기록부를
+      // 못 읽은 것"처럼 취급하면 안 된다(정상 이행 0명·노쇼 전원으로 잘못 보일 수 있다).
       let receptionRecords: ReceptionRecord[] = [];
       let receptionKnown = true;
-      if (savedKnown) {
-        try {
-          receptionRecords = await listReceptionRecords(supabase, date);
-        } catch {
-          receptionKnown = false;
-        }
+      try {
+        receptionRecords = await listReceptionRecords(supabase, date);
+      } catch {
+        receptionKnown = false;
       }
+      // 못 읽었거나 접수기록부가 비어 있으면(접수기록부를 안 쓴 날과 정말 0명인 날을 구분할 수
+      // 없어서 — nextBookingPrefill·chunaPrefill과 같은 이유) 값을 지어내지 않고 직접 입력하게 둔다.
+      const receptionUsable = receptionKnown && receptionRecords.length > 0;
 
-      if (receptionKnown && listRows.length > 0) {
-        // 이름은 띄어쓰기로 구분해서 채운다(멘트에는 쉼표로 나온다).
+      if (receptionUsable) {
+        // 추나는 예약 명단과 무관하게 접수기록부 체크만으로 채운다. 이름은 띄어쓰기로
+        // 구분해서 채운다(멘트에는 쉼표로 나온다).
         const chunaMatched = receptionRecords.filter((r) => r.chuna);
         next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
         next.chunaCount = String(chunaMatched.length);
       }
 
+      let chunaNamesUnavailableNext = false;
       if (saved) {
         next.reservationCount = str(saved.reservationCount);
         next.keptCount = str(saved.keptCount);
@@ -520,12 +532,17 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         next.nextBookingCount = str(saved.nextBookingCount);
         next.chunaCount = str(saved.chunaCount);
         next.excludedCount = str(saved.excludedCount);
+        // 이 기능이 생기기 전 날짜처럼, 저장된 추나 인원은 있는데 접수기록부에 대응하는 체크가
+        // 없어 이름을 하나도 못 채웠으면 진짜 불일치가 아니다 — 주의 표시를 끈다.
+        if (saved.chunaCount != null && saved.chunaCount > 0 && next.chunaNames.trim() === '') {
+          chunaNamesUnavailableNext = true;
+        }
       } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
         next.cancelCount = String(listRows.filter((r) => r.visitStatus === '취소').length);
-        // 정상 이행/노쇼는 접수기록부와 이름을 대조해서 센다 — 못 읽으면(표 없음·권한 없음 등)
-        // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
-        if (receptionKnown) {
+        // 정상 이행/노쇼는 접수기록부와 이름을 대조해서 센다 — 못 읽었거나 접수기록부가 비어
+        // 있으면 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
+        if (receptionUsable) {
           const attendance = matchAttendance(listRows, receptionRecords.map((r) => r.patientName));
           next.keptCount = String(attendance.keptCount);
           next.noshowCount = String(attendance.noshowCount);
@@ -546,6 +563,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       if (hint != null) next.nextBookingCount = String(hint);
       if (cancelled) return;
       setReceptionHint(hint);
+      setChunaNamesUnavailable(chunaNamesUnavailableNext);
       setClosing(next);
     })();
     return () => {
@@ -573,7 +591,9 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     [visitCount, closing]
   );
 
-  const chunaMismatch = countMismatch(n('chunaCount'), closing.chunaNames);
+  // 저장된 결산의 추나 인원이 접수기록부 체크 대조로는 이름을 하나도 못 찾은 경우(이 기능이 생기기
+  // 전 날짜 등)는 진짜 불일치가 아니라서 건너뛴다 — chunaNamesUnavailable 참고.
+  const chunaMismatch = chunaNamesUnavailable ? null : countMismatch(n('chunaCount'), closing.chunaNames);
   const excludedMismatch = countMismatch(n('excludedCount'), closing.excludedNames);
   const referralMismatch = countMismatch(n('referralCount'), closing.referralNames);
   const reservationEntered = n('reservationCount') != null;
@@ -585,6 +605,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
 
   function setField(key: keyof ClosingFields, value: string) {
     if (key === 'nextBookingCount') setReceptionHint(null);
+    if (key === 'chunaCount' || key === 'chunaNames') setChunaNamesUnavailable(false);
     setClosing((prev) => ({ ...prev, [key]: value }));
     setCopied(false);
     setResult('');
@@ -596,6 +617,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     setText('');
     setClosing(EMPTY_CLOSING);
     setReceptionHint(null);
+    setChunaNamesUnavailable(false);
     setCopied(false);
     setError('');
     setResult('');

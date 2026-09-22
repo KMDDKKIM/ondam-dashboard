@@ -12,8 +12,9 @@ export interface AttendanceMatch {
   noshowCount: number;
 }
 
-function normalizeName(name: string): string {
-  return name.replace(/\s+/g, '');
+// API 응답이 항상 깨끗한 문자열이라는 보장이 없어(누락·null 등) 방어적으로 문자열로 바꾼 뒤 다듬는다.
+function normalizeName(name: string | null | undefined): string {
+  return String(name ?? '').replace(/\s+/g, '');
 }
 
 export function matchAttendance(

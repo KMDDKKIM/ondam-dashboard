@@ -398,7 +398,7 @@ export default function ReceptionLogPage() {
         </table>
         {loading && <p className="muted-text" style={{ marginTop: 8, fontSize: 13 }}>불러오는 중…</p>}
         <p className="muted-text" style={{ marginTop: 8, fontSize: 12 }}>
-          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분은 초진 · 재초진 · 재진 중에서 골라요.
+          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 추나 칸의 체크는 그날 추나 치료를 받았는지예요(일일결산의 추나 인원·이름이 여기서 자동으로 채워져요). 구분은 초진 · 재초진 · 재진 중에서 골라요.
           결제의 &quot;제외&quot;는 린다이어트 상담·자보 환자처럼 결제 자체가 없는 경우예요.
         </p>
       </div>
@@ -411,7 +411,7 @@ export default function ReceptionLogPage() {
           예약 <b>{summary.reservedCount}</b>/{summary.count}
         </span>
         <span>
-          · 추나 <b>{summary.chunaCount}</b>
+          추나 <b>{summary.chunaCount}</b>
         </span>
         <span>
           진료비 합계 <b>{formatFee(summary.feeTotal) || 0}</b>원
