@@ -51,6 +51,7 @@ export function planDoctorSync(
   const insert: DoctorSyncPlan['insert'] = [];
   const update: DoctorSyncPlan['update'] = [];
   const linked = new Set<string>();
+  const justRemovedIds = new Set(justRemovedDoctorIds);
 
   for (const staff of qualifying) {
     const sortOrder = sortOrderFor(staff.grade);
@@ -64,7 +65,12 @@ export function planDoctorSync(
       if (Object.keys(patch).length > 1) update.push(patch);
       continue;
     }
-    const byName = existing.find((d) => d.staffId === null && d.name === staff.name && !linked.has(d.id));
+    // 방금 퇴사 처리로 숨길 예정인 행(justRemovedIds)은 이름이 같아도 재연결 후보에서 뺀다 —
+    // 안 그러면 같은 이름의 다른(신규 승인된) 직원이 그 행에 연결·활성화됐다가, 아래 숨김 루프에서
+    // 곧바로 다시 비활성화되는 순서 의존 버그가 생긴다.
+    const byName = existing.find(
+      (d) => d.staffId === null && d.name === staff.name && !linked.has(d.id) && !justRemovedIds.has(d.id)
+    );
     if (byName) {
       linked.add(byName.id);
       update.push({ id: byName.id, staffId: staff.id, active: true, sortOrder });
@@ -74,7 +80,6 @@ export function planDoctorSync(
   }
 
   const qualifyingIds = new Set(qualifying.map((s) => s.id));
-  const justRemovedIds = new Set(justRemovedDoctorIds);
   for (const d of existing) {
     const stillLinkedButUnqualified = Boolean(d.staffId) && !qualifyingIds.has(d.staffId as string);
     if (d.active && (stillLinkedButUnqualified || justRemovedIds.has(d.id))) {

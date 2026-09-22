@@ -21,6 +21,7 @@ import {
 import { getDailyRecordByDate } from './dailyRecords.server';
 import { createClient } from '@/lib/supabase/server';
 import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
+import { createTtlCache, getOrCompute } from '@/lib/ttlCache';
 
 // 예약관리 테이블(daily_records/reservations)은 다른 앱 소유라 RLS가 로그인 사용자를 막아 둔다.
 // 그래서 브라우저가 아니라 이 서버 함수(admin 클라이언트)로만 읽고, 호출하는 API 라우트가
@@ -180,6 +181,52 @@ async function fetchAllChartNos(
   return out;
 }
 
+interface ChartBaselineSnapshot {
+  maxKnownChart: number | null;
+  windowCovered: boolean;
+}
+
+// maxKnownChart 계산은 daily_visits/patient_visit_history 전체를 훑는다(1년에 약 2만5천 행씩 늘어남).
+// 이 값은 결산·일일결산 저장으로 차트번호가 새로 생길 때만 바뀌는데(하루 몇 차례), 메뉴 배지(사이드바,
+// 60초마다 탭별로 다시 부름)와 홈이 매번 다시 계산을 시키면 커지는 표를 계속 스캔하게 된다. 그래서
+// 날짜별로 5분만 재사용하는 인메모리 캐시를 둔다(Vercel 서버리스 함수가 가까운 요청 사이에 warm 상태로
+// 남는 걸 이용 — DB·Redis 아님, 콜드스타트·재배포되면 그냥 다시 계산된다). periodStart/periodEnd는
+// 이력표를 다시 가져오지 않는 한 거의 안 바뀌므로 캐시 키에는 안 넣는다(바뀌어도 TTL 안에서만 5분 정도
+// 오래된 windowCovered를 쓰는 정도라 허용).
+const CHART_BASELINE_CACHE_TTL_MS = 5 * 60 * 1000;
+const chartBaselineCache = createTtlCache<ChartBaselineSnapshot>(CHART_BASELINE_CACHE_TTL_MS);
+
+/** 테스트에서 캐시를 비우고 새로 계산되게 할 때 쓴다. */
+export function clearChartBaselineCacheForTests(): void {
+  chartBaselineCache.clear();
+}
+
+/** loadBaseline이 쓰는 캐시된 계산(테스트에서 직접 부르려고 export). now를 넘기면 벽시계 대신 그 값으로 TTL을 판단한다. */
+export async function loadChartBaselineSnapshot(
+  date: string,
+  periodStart: string,
+  periodEnd: string,
+  now: number = Date.now()
+): Promise<ChartBaselineSnapshot> {
+  return getOrCompute(
+    chartBaselineCache,
+    date,
+    async () => {
+      const [registeredChartNos, visitedChartNos, latestVisit] = await Promise.all([
+        fetchAllChartNos('patient_visit_history', 'registered_date', date),
+        fetchAllChartNos('daily_visits', 'visit_date', date),
+        supabase.from('daily_visits').select('visit_date').lt('visit_date', date).order('visit_date', { ascending: false }).limit(1),
+      ]);
+      const maxKnownChart = maxChartNumber([...registeredChartNos, ...visitedChartNos]);
+      // 이력표 기간이 "내원일 3개월 전"부터 시작하고, 내원일 직전까지 기록이 이어져 있어야 "기록이 없다 = 3개월 안에 안 왔다"고 볼 수 있다.
+      const latestRecorded = [periodEnd, (latestVisit.data?.[0] as { visit_date: string } | undefined)?.visit_date ?? ''].sort().pop() ?? periodEnd;
+      const windowCovered = periodStart <= addMonthsKst(date, -3) && diffDaysKst(latestRecorded, date) <= 4;
+      return { maxKnownChart, windowCovered };
+    },
+    now
+  );
+}
+
 // 가져온 내원 이력(patient_visit_history). 표가 없거나 비어 있으면(SQL 실행 전·아직 안 가져옴) 없는 것으로 본다.
 async function loadBaseline(candidates: VisitCandidate[], date: string): Promise<BaselineInfo> {
   const empty: BaselineInfo = { rows: [], maxKnownChart: null, windowCovered: false };
@@ -209,16 +256,7 @@ async function loadBaseline(candidates: VisitCandidate[], date: string): Promise
     const periodEnd = (periodEndRes.data?.[0] as { period_end: string } | undefined)?.period_end ?? null;
     if (!periodStart || !periodEnd) return empty;
 
-    const [registeredChartNos, visitedChartNos, latestVisit] = await Promise.all([
-      fetchAllChartNos('patient_visit_history', 'registered_date', date),
-      fetchAllChartNos('daily_visits', 'visit_date', date),
-      supabase.from('daily_visits').select('visit_date').lt('visit_date', date).order('visit_date', { ascending: false }).limit(1),
-    ]);
-    const maxKnownChart = maxChartNumber([...registeredChartNos, ...visitedChartNos]);
-
-    // 이력표 기간이 "내원일 3개월 전"부터 시작하고, 내원일 직전까지 기록이 이어져 있어야 "기록이 없다 = 3개월 안에 안 왔다"고 볼 수 있다.
-    const latestRecorded = [periodEnd, (latestVisit.data?.[0] as { visit_date: string } | undefined)?.visit_date ?? ''].sort().pop() ?? periodEnd;
-    const windowCovered = periodStart <= addMonthsKst(date, -3) && diffDaysKst(latestRecorded, date) <= 4;
+    const { maxKnownChart, windowCovered } = await loadChartBaselineSnapshot(date, periodStart, periodEnd);
 
     return { rows, maxKnownChart, windowCovered };
   } catch {

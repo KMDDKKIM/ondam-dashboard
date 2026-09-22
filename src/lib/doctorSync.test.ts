@@ -78,4 +78,27 @@ describe('planDoctorSync', () => {
     expect(plan.insert).toEqual([]);
     expect(plan.update).toEqual([{ id: 'd-park', staffId: 's-park', active: true, sortOrder: 1 }]);
   });
+
+  it('한 번의 호출에서: staff_id로 이미 연결된 진료의는 그대로 두고, 방금 퇴사한(justRemovedDoctorIds) 다른 진료의만 숨긴다', () => {
+    const plan = planDoctorSync(
+      [staff({ id: 's-kim', name: '김동규', grade: '대표원장' })],
+      [
+        row({ id: 'd-kim', staffId: 's-kim', name: '김동규', active: true, sortOrder: 0 }),
+        row({ id: 'd-removed', staffId: null, name: '퇴사원장', active: true }),
+      ],
+      ['d-removed']
+    );
+    expect(plan.update).toEqual([{ id: 'd-removed', active: false }]);
+  });
+
+  it('퇴사한 사람과 이름이 같은 새 직원이 같은 호출에서 승인돼도, 퇴사 처리 중(숨길 예정)인 행에 재연결되지 않고 새 행을 만든다' +
+    '(순서 의존 버그: 재연결 후 바로 숨김 루프에서 다시 꺼지는 것을 막는다)', () => {
+    const plan = planDoctorSync(
+      [staff({ id: 's-new', name: '박소은', grade: '부원장' })],
+      [row({ id: 'd-old', staffId: null, name: '박소은', active: true })],
+      ['d-old']
+    );
+    expect(plan.insert).toEqual([{ name: '박소은', staffId: 's-new', sortOrder: 1 }]);
+    expect(plan.update).toEqual([{ id: 'd-old', active: false }]);
+  });
 });
