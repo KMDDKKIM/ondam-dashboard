@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireOwner } from '@/lib/supabase/requireOwner';
+import { syncDoctorsFromStaff } from '@/lib/supabase/doctorSync.server';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -65,6 +66,9 @@ export async function POST(request: Request) {
       );
     }
   }
+
+  // 퇴사한 사람이 진료의였다면 진료의 목록에서 숨긴다(실패해도 삭제 자체는 이미 끝났다).
+  await syncDoctorsFromStaff(admin).catch((err) => console.error('staff.remove: doctor sync failed', err));
 
   return NextResponse.json({ ok: true });
 }

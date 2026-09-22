@@ -47,7 +47,6 @@ function emptyDraft() {
 export default function HappyCallRegisterPage() {
   const [patients, setPatients] = useState<HappyCallPatient[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState(emptyDraft());
@@ -75,17 +74,13 @@ export default function HappyCallRegisterPage() {
   async function load(forDate = candidateDate) {
     setLoading(true);
     try {
-      const [patientRows, doctorRows, registered, me] = await Promise.all([
+      const [patientRows, doctorRows, registered] = await Promise.all([
         listHappyCallPatients(supabase),
         listDoctors(supabase),
         listHappyCallPatientsByFirstVisitDate(supabase, forDate),
-        supabase.auth.getUser().then(async ({ data }) =>
-          data.user ? (await supabase.from('staff').select('role').eq('id', data.user.id).maybeSingle()).data : null
-        ),
       ]);
       setPatients(patientRows);
       setDoctors(doctorRows);
-      setIsOwner(me?.role === 'owner');
       setRegisteredOnDate(registered);
     } catch {
       setError('불러오기에 실패했습니다.');
@@ -232,7 +227,7 @@ export default function HappyCallRegisterPage() {
           onRegister={handleRegisterCandidate}
         />
 
-        <DoctorManager doctors={doctors} isOwner={isOwner} onChanged={() => load(candidateDate)} />
+        <DoctorManager doctors={doctors} />
 
         <VisitHistoryImport onDone={() => load(candidateDate)} />
 

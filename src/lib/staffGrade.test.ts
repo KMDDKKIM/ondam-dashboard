@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ASSIGNABLE_GRADES,
   canUseConsultChart,
+  isDoctorGrade,
   DEFAULT_GRADE,
   GRADES,
   gradeAtLeast,
@@ -74,5 +75,16 @@ describe('canUseConsultChart', () => {
     expect(canUseConsultChart('사원')).toBe(false);
     expect(canUseConsultChart(null)).toBe(false);
     expect(canUseConsultChart(undefined)).toBe(false);
+  });
+});
+
+describe('isDoctorGrade', () => {
+  it('대표원장·부원장만 진료의 자격', () => {
+    expect(isDoctorGrade('대표원장')).toBe(true);
+    expect(isDoctorGrade('부원장')).toBe(true);
+    expect(isDoctorGrade('팀장')).toBe(false);
+    expect(isDoctorGrade('사원')).toBe(false);
+    expect(isDoctorGrade(null)).toBe(false);
+    expect(isDoctorGrade(undefined)).toBe(false);
   });
 });

@@ -28,3 +28,11 @@ export const CONSULT_CHART_MIN_GRADE: StaffGrade = '부원장';
 export function canUseConsultChart(grade: StaffGrade | null | undefined): boolean {
   return grade != null && gradeAtLeast(grade, CONSULT_CHART_MIN_GRADE);
 }
+
+// "진료의" 자격 등급 — 이 등급의 승인된 직원은 자동으로 진료의 목록(doctors)에 올라간다.
+// 대표원장이 앞, 부원장이 뒤로 오도록 GRADES 순서를 그대로 쓴다.
+export const DOCTOR_GRADES: readonly StaffGrade[] = ['대표원장', '부원장'];
+
+export function isDoctorGrade(grade: StaffGrade | null | undefined): boolean {
+  return grade != null && (DOCTOR_GRADES as readonly string[]).includes(grade);
+}
