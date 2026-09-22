@@ -11,8 +11,10 @@ export interface TodayStatusProps {
   supply: { waitingOrder: number; waitingArrival: number } | null;
   /** 처리 대기 중인 비대면진료 신청 수. null 이면 조회 실패. */
   remoteNew: number | null;
-  /** 원장님 처리를 기다리는 한약 처방 신청 수. null 이면 조회 실패. */
+  /** 원장님 처리를 기다리는 한약 처방 신청 수 — 로그인한 사람이 진료의면 자기 앞으로 온 것만, 아니면 전체. null 이면 조회 실패. */
   herbWaiting?: number | null;
+  /** herbWaiting 이 로그인한 진료의 앞으로 온 것만 센 값이면 true(문구에 "내"를 붙인다). */
+  herbWaitingIsMine?: boolean;
   /** 등록된 한약재 전체 개수. 0이면 "재고 0 없음(정상)" 대신 "등록된 약재가 없어요". null 이면 조회 실패. */
   herbTotal?: number | null;
   /** 오늘 저장된 예약 명단 인원. null 이면 조회 실패. */
@@ -33,6 +35,7 @@ export function TodayStatus({
   supply,
   remoteNew,
   herbWaiting = 0,
+  herbWaitingIsMine = false,
   herbTotal,
   todayReservations,
   firstVisitMissing,
@@ -85,9 +88,10 @@ export function TodayStatus({
   if (herbWaiting == null) {
     rows.push({ key: 'herbQueue', icon: '🫖', text: '한약 처방 대기', state: 'unknown', badge: '확인 불가', href: '/herb-queue' });
   } else if (herbWaiting > 0) {
-    rows.push({ key: 'herbQueue', icon: '🫖', text: `한약 처방 ${herbWaiting}건이 출력을 기다려요`, state: 'todo', badge: '보기', href: '/herb-queue' });
+    const label = herbWaitingIsMine ? `내 앞으로 온 한약 처방 ${herbWaiting}건이 출력을 기다려요` : `한약 처방 ${herbWaiting}건이 출력을 기다려요`;
+    rows.push({ key: 'herbQueue', icon: '🫖', text: label, state: 'todo', badge: '보기', href: '/herb-queue' });
   } else {
-    rows.push({ key: 'herbQueue', icon: '🫖', text: '대기 중인 한약 처방 없음', state: 'ok', badge: '정상', href: '/herb-queue' });
+    rows.push({ key: 'herbQueue', icon: '🫖', text: herbWaitingIsMine ? '내 앞으로 온 한약 처방 없음' : '대기 중인 한약 처방 없음', state: 'ok', badge: '정상', href: '/herb-queue' });
   }
 
   const todoCount = rows.filter((r) => r.state === 'todo').length;

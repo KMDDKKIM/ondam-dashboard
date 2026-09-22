@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQueueTime, missingFields, sortDone, sortWaiting, type HerbQueueItem } from './herbQueue';
+import { formatQueueTime, missingFields, resolveHerbQueueDoctorFilter, sortDone, sortWaiting, type HerbQueueItem } from './herbQueue';
 
 function item(o: Partial<HerbQueueItem>): HerbQueueItem {
   return { id: 'a', patientName: '가상환자', chartNo: '', doctorName: '김동규', herbDesc: '일반한약 15일', note: '', status: 'waiting', requestedByName: '', createdAt: '2026-09-21T01:00:00Z', doneByName: '', doneAt: null, ...o };
@@ -26,5 +26,17 @@ describe('formatQueueTime', () => {
     expect(formatQueueTime('2026-09-21T05:05:00Z')).toBe('9/21 14:05');
     expect(formatQueueTime('2026-12-31T16:00:00Z')).toBe('1/1 01:00');
     expect(formatQueueTime(null)).toBe('');
+  });
+});
+
+describe('resolveHerbQueueDoctorFilter', () => {
+  it('로그인한 사람이 진료의 목록에 있으면 그 이름으로 거른다', () => {
+    expect(resolveHerbQueueDoctorFilter('김동규', ['김동규', '박소은'])).toBe('김동규');
+    expect(resolveHerbQueueDoctorFilter('박소은', ['김동규', '박소은'])).toBe('박소은');
+  });
+
+  it('진료의가 아니면(데스크 직원) 거르지 않는다(전체를 본다)', () => {
+    expect(resolveHerbQueueDoctorFilter('정지민', ['김동규', '박소은'])).toBeNull();
+    expect(resolveHerbQueueDoctorFilter(null, ['김동규', '박소은'])).toBeNull();
   });
 });

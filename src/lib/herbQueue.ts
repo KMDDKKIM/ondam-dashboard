@@ -53,3 +53,13 @@ export function formatQueueTime(iso: string | null): string {
   const mm = String(kst.getUTCMinutes()).padStart(2, '0');
   return `${m}/${d} ${hh}:${mm}`;
 }
+
+/**
+ * 왼쪽 메뉴·홈의 "한약 대기" 알림을 누구 기준으로 셀지 정한다.
+ * 로그인한 사람의 이름이 진료의 목록에 있으면(자신이 진료의) 그 진료의로 신청된 것만 세고,
+ * 진료의가 아니면(데스크 직원) 전체를 센다 — 데스크는 모든 신청을 알아야 하기 때문이다.
+ */
+export function resolveHerbQueueDoctorFilter(staffName: string | null, doctorNames: readonly string[]): string | null {
+  if (!staffName) return null;
+  return doctorNames.includes(staffName) ? staffName : null;
+}

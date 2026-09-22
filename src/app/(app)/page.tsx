@@ -9,6 +9,8 @@ import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countOpenSupplyRequests } from '@/lib/supabase/supplyCounts';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
+import { listDoctors } from '@/lib/supabase/doctors';
+import { resolveHerbQueueDoctorFilter } from '@/lib/herbQueue';
 import { todayKst } from '@/lib/kst';
 import { countReservationsByDates } from '@/lib/reservations/dailyRecords.server';
 import { getFirstVisitMissing } from '@/lib/reservations/firstVisitMissing.server';
@@ -25,13 +27,14 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
   const { data: staff } = user
-    ? await supabase.from('staff').select('role').eq('id', user.id).maybeSingle()
+    ? await supabase.from('staff').select('role, name').eq('id', user.id).maybeSingle()
     : { data: null };
   const isOwner = staff?.role === 'owner';
+  const staffName = staff?.name ?? null;
 
   // 이번 달 현황과 "오늘 확인할 것" 조회를 순서대로 기다리지 않고 한꺼번에 시작한다(화면이 뜨는 시간이 가장 느린 것 하나로 줄어든다).
   const today = todayKst();
-  const [summaryResult, missingClosing, zeroStock, herbTotal, supplyResult, remoteNew, herbWaiting, todayReservations, firstVisitMissing, calls] = await Promise.all([
+  const [summaryResult, missingClosing, zeroStock, herbTotal, supplyResult, remoteNew, doctorNames, todayReservations, firstVisitMissing, calls] = await Promise.all([
     getMonthlySummary().then(
       (value) => ({ value, error: '' }),
       () => ({ value: undefined, error: '이번달 현황을 불러오지 못했습니다.' })
@@ -55,7 +58,9 @@ export default async function HomePage() {
     })(),
     countOpenSupplyRequests(supabase),
     countNewRemoteRequests(supabase),
-    countWaitingHerbQueue(supabase),
+    listDoctors(supabase)
+      .then((doctors) => doctors.map((d) => d.name))
+      .catch(() => [] as string[]),
     // 아래 세 가지도 서로 독립이라 하나가 실패해도 그 항목만 "-"(null)로 보인다.
     withTimeout(countReservationsByDates([today]).then((counts) => counts[today] ?? 0), LOOKUP_TIMEOUT_MS),
     withTimeout(getFirstVisitMissing(today), LOOKUP_TIMEOUT_MS),
@@ -63,6 +68,8 @@ export default async function HomePage() {
   ]);
   const summary = summaryResult.value;
   const summaryError = summaryResult.error;
+  const herbDoctorFilter = resolveHerbQueueDoctorFilter(staffName, doctorNames);
+  const herbWaiting = await countWaitingHerbQueue(supabase, herbDoctorFilter);
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
@@ -99,6 +106,7 @@ export default async function HomePage() {
             supply={supplyResult.error ? null : supplyResult}
             remoteNew={remoteNew}
             herbWaiting={herbWaiting}
+            herbWaitingIsMine={herbDoctorFilter !== null}
             herbTotal={herbTotal}
             todayReservations={todayReservations}
             firstVisitMissing={firstVisitMissing}

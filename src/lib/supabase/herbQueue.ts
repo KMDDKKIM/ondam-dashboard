@@ -121,10 +121,12 @@ export async function deleteHerbQueueItem(supabase: SupabaseClient, id: string):
   if (!data || data.length === 0) throw new Error('지우지 못했어요.');
 }
 
-/** 대기 중인 신청 수(홈·메뉴 배지). 조회에 실패하면 null. */
-export async function countWaitingHerbQueue(supabase: SupabaseClient): Promise<number | null> {
+/** 대기 중인 신청 수(홈·메뉴 배지). doctorName 을 주면 그 진료의로 신청된 대기 건만, 주지 않으면(또는 null) 전체 대기 건수. 조회에 실패하면 null. */
+export async function countWaitingHerbQueue(supabase: SupabaseClient, doctorName?: string | null): Promise<number | null> {
   try {
-    const { count, error } = await supabase.from('herb_queue').select('id', { count: 'exact', head: true }).eq('status', 'waiting');
+    let query = supabase.from('herb_queue').select('id', { count: 'exact', head: true }).eq('status', 'waiting');
+    if (doctorName) query = query.eq('doctor_name', doctorName);
+    const { count, error } = await query;
     return error ? null : (count ?? 0);
   } catch {
     return null;
