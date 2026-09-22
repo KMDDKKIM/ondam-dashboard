@@ -12,11 +12,12 @@ export function isValidThreshold(value: number): boolean {
 }
 
 /**
- * 부족 여부: 현재 재고 <= 부족 기준. 기준이 없거나(null) 0이면 "관리 안 함"이라 부족으로 보지 않는다.
- * (기준 0은 "재고 0이어도 알림 필요 없음"으로 취급.)
+ * 부족 여부: 현재 재고 <= 부족 기준. 기준이 없으면(null) "관리 안 함"이라 부족으로 보지 않는다.
+ * 기준 0은 "재고가 다 떨어지면(0봉지) 부족"으로 취급한다 — 새 약재는 기본 기준이 0이라,
+ * 따로 기준을 안 정해둔 약재도 0봉지가 되면 자동으로 부족 목록에 뜬다.
  */
 export function isShort(currentStock: number, threshold: number | null): boolean {
-  if (threshold == null || !Number.isFinite(threshold) || threshold <= 0) return false;
+  if (threshold == null || !Number.isFinite(threshold)) return false;
   return currentStock <= threshold;
 }
 

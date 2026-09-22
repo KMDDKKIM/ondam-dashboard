@@ -32,7 +32,7 @@ function blockingProblems(parsed: ReturnType<typeof parseBulkHerbEntry>): string
 }
 
 export default function HerbInventoryPage() {
-  const { supabase, items, itemsRef, loading, messages, patchMessages, logs, staffNames, load, adjust, saveThreshold, deleteHerb } =
+  const { supabase, items, itemsRef, loading, messages, patchMessages, logs, staffNames, load, saveThreshold, deleteHerb } =
     useHerbInventory();
 
   const [query, setQuery] = useState('');
@@ -70,17 +70,11 @@ export default function HerbInventoryPage() {
   const shorts = useMemo(() => listShortHerbs(items), [items]);
   const herbNames = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.name])), [items]);
 
-  // 검색 결과가 딱 하나일 때 Enter → 그 행의 −1(0봉지면 +1)에 포커스.
+  // 검색 결과가 딱 하나일 때 Enter → 그 행을 잠깐 강조한다.
   function handleSearchEnter() {
     if (visible.length !== 1) return;
-    const id = visible[0].id;
-    const el =
-      document.querySelector<HTMLElement>(`[data-herb-minus="${id}"]:not(:disabled)`) ??
-      document.querySelector<HTMLElement>(`[data-herb-plus="${id}"]`);
-    el?.focus();
+    setHighlight((h) => ({ id: visible[0].id, seq: (h?.seq ?? 0) + 1 }));
   }
-
-  const handleAdjust = useCallback((id: string, type: 'use' | 'restock', amount: number) => adjust(id, type, amount), [adjust]);
 
   // 행의 버튼에서 Esc → 검색창으로 돌아가 검색어를 비운다(다음 약재를 바로 찾을 수 있게).
   function handleListKeyDown(e: React.KeyboardEvent) {
@@ -176,7 +170,7 @@ export default function HerbInventoryPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, marginBottom: 2 }}>한약재 재고 현황</h1>
-          <p className="muted-text">재고는 봉지 수로 관리해요. 봉지를 뜯을 때마다 −1을 눌러주세요.</p>
+          <p className="muted-text">재고는 봉지 수로 관리해요. 재고 조정은 위 &quot;한꺼번에 입력&quot;으로만 해주세요.</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
           + 약재 추가
@@ -212,7 +206,6 @@ export default function HerbInventoryPage() {
             items={visible}
             grouped={grouped}
             highlightId={highlight?.id ?? null}
-            onAdjust={handleAdjust}
             onSaveThreshold={saveThreshold}
             onDelete={deleteHerb}
           />

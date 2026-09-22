@@ -36,6 +36,8 @@ export async function createHerbInventoryItems(
       // 단위는 봉지 하나뿐이다(컬럼이 not null이라 명시).
       unit: '봉지',
       current_stock: i.currentStock,
+      // 부족 기준은 기본 0(=재고가 다 떨어지면 부족) — 필요하면 "⋯"에서 약재별로 따로 올릴 수 있다.
+      low_stock_threshold: 0,
       created_by: i.createdBy,
     }))
   );

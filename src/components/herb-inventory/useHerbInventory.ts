@@ -6,13 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import {
   listHerbInventory,
   deleteHerbInventoryItem,
-  applyHerbStockChanges,
   setHerbLowStockThreshold,
   listRecentHerbInventoryLogs,
   listStaffNames,
-  stockErrorMessage,
 } from '@/lib/supabase/herbInventory';
-import { bagCount, sortHerbsKo } from '@/lib/herbList';
+import { sortHerbsKo } from '@/lib/herbList';
 import type { HerbInventoryItem, HerbInventoryLog } from '@/lib/types';
 
 export interface HerbMessages {
@@ -33,10 +31,6 @@ export function useHerbInventory() {
   const [messages, setMessages] = useState<HerbMessages>({ error: '', notice: '', warning: '' });
   const [logs, setLogs] = useState<HerbInventoryLog[]>([]);
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
-
-  const queues = useRef(new Map<string, Promise<void>>());
-  const pendingByHerb = useRef(new Map<string, number>());
-  const pendingTotal = useRef(0);
 
   const commit = useCallback((updater: (prev: HerbInventoryItem[]) => HerbInventoryItem[]) => {
     itemsRef.current = updater(itemsRef.current);
@@ -62,12 +56,7 @@ export function useHerbInventory() {
   const load = useCallback(async () => {
     try {
       const fresh = sortHerbsKo(await listHerbInventory(supabase));
-      // 아직 서버에 보내는 중인 약재는 화면의 (낙관적) 봉지 수를 지킨다 — 서버 값은 아직 옛것이다(끝나면 다시 맞춘다).
-      commit((prev) => {
-        if (pendingByHerb.current.size === 0) return fresh;
-        const local = new Map(prev.map((i) => [i.id, i]));
-        return fresh.map((f) => (pendingByHerb.current.has(f.id) && local.has(f.id) ? { ...f, currentStock: local.get(f.id)!.currentStock } : f));
-      });
+      commit(() => fresh);
     } catch {
       patchMessages({ error: '불러오기에 실패했습니다.' });
     } finally {
@@ -79,56 +68,6 @@ export function useHerbInventory() {
   useEffect(() => {
     load();
   }, [load]);
-
-  // 한 약재의 봉지 수를 바꾼다. 사용은 현재 봉지 수를 넘길 수 없어 음수가 되지 않는다.
-  const adjust = useCallback(
-    (id: string, type: 'use' | 'restock', amount: number, note: string | null = null) => {
-      const item = itemsRef.current.find((i) => i.id === id);
-      if (!item || !Number.isInteger(amount) || amount < 1) return;
-      const before = bagCount(item.currentStock);
-      if (type === 'use' && before < amount) {
-        patchMessages({ error: `${item.name}은(는) ${before}봉지뿐이라 ${amount}봉지를 뺄 수 없어요.`, notice: '' });
-        return;
-      }
-      const delta = type === 'use' ? -amount : amount;
-      commit((prev) => prev.map((i) => (i.id === id ? { ...i, currentStock: bagCount(i.currentStock) + delta } : i)));
-      patchMessages({ error: '', notice: '' });
-
-      pendingByHerb.current.set(id, (pendingByHerb.current.get(id) ?? 0) + 1);
-      pendingTotal.current += 1;
-
-      const finish = (serverStock: number | null) => {
-        const left = (pendingByHerb.current.get(id) ?? 1) - 1;
-        if (left <= 0) pendingByHerb.current.delete(id);
-        else pendingByHerb.current.set(id, left);
-        pendingTotal.current -= 1;
-        if (left <= 0 && serverStock != null) {
-          commit((prev) => prev.map((i) => (i.id === id ? { ...i, currentStock: bagCount(serverStock) } : i)));
-        }
-        if (pendingTotal.current === 0) {
-          // 실패가 섞였다면(serverStock == null) 서버 기준으로 다시 맞추고, 이력도 새로 읽는다.
-          if (serverStock == null) load();
-          else loadHistory();
-        }
-      };
-
-      const previous = queues.current.get(id) ?? Promise.resolve();
-      const next = previous.then(async () => {
-        try {
-          const res = await applyHerbStockChanges(supabase, [
-            { herbId: id, name: item.name, changeType: type, amount, note },
-          ]);
-          finish(res[0]?.currentStock ?? null);
-        } catch (e) {
-          commit((prev) => prev.map((i) => (i.id === id ? { ...i, currentStock: bagCount(i.currentStock - delta) } : i)));
-          patchMessages({ error: `${item.name}: ${stockErrorMessage(e)}` });
-          finish(null);
-        }
-      });
-      queues.current.set(id, next);
-    },
-    [supabase, commit, patchMessages, load, loadHistory]
-  );
 
   // 실패하면 오류를 던져서 입력창이 메시지를 보여준다.
   const saveThreshold = useCallback(
@@ -169,7 +108,6 @@ export function useHerbInventory() {
     logs,
     staffNames,
     load,
-    adjust,
     saveThreshold,
     deleteHerb,
   };

@@ -22,7 +22,14 @@ export function groupLabel(key: string): string {
   return key === OTHER_GROUP ? '기타' : key;
 }
 
-function HerbListInner({ items, grouped, highlightId, onAdjust, onSaveThreshold, onDelete }: Props) {
+// 한 줄에 몇 칸이 들어갈지는 화면 너비에 맡긴다(180px 칸을 최대한 채우기) — 넓은 화면에서 3~5칸 정도.
+const gridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+  gap: 0,
+} as const;
+
+function HerbListInner({ items, grouped, highlightId, onSaveThreshold, onDelete }: Props) {
   const groups = useMemo(() => (grouped ? groupHerbsByInitial(items) : null), [grouped, items]);
 
   const renderRow = (item: HerbInventoryItem) => (
@@ -30,7 +37,6 @@ function HerbListInner({ items, grouped, highlightId, onAdjust, onSaveThreshold,
       key={item.id}
       item={item}
       highlighted={item.id === highlightId}
-      onAdjust={onAdjust}
       onSaveThreshold={onSaveThreshold}
       onDelete={onDelete}
     />
@@ -41,7 +47,7 @@ function HerbListInner({ items, grouped, highlightId, onAdjust, onSaveThreshold,
       role="table"
       aria-label="한약재 재고"
       className="card"
-      // 팝업(입고·⋯)이 잘리지 않도록 overflow는 두지 않는다.
+      // 팝업(⋯)이 잘리지 않도록 overflow는 두지 않는다.
       style={{ borderRadius: 14 }}
     >
       {groups
@@ -71,10 +77,12 @@ function HerbListInner({ items, grouped, highlightId, onAdjust, onSaveThreshold,
                   {g.items.length}
                 </span>
               </div>
-              {g.items.map(renderRow)}
+              <div style={gridStyle}>{g.items.map(renderRow)}</div>
             </section>
           ))
-        : items.map(renderRow)}
+        : (
+            <div style={gridStyle}>{items.map(renderRow)}</div>
+          )}
     </div>
   );
 }

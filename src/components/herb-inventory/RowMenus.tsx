@@ -26,6 +26,9 @@ const smallButton: CSSProperties = {
   background: 'var(--color-surface-2)',
 };
 
+// 재고 조정(입고·사용)은 더 이상 약재 행에서 하지 않는다 — "한꺼번에 입력"으로만 한다.
+// (원장 결정, 2026-09-23: 개별 -1/+1/+N 버튼과 그 팝업을 없앴다.)
+
 // 바깥을 누르거나 Esc를 누르면 닫는다.
 function Popover({ onClose, children, label }: { onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -51,61 +54,6 @@ function Popover({ onClose, children, label }: { onClose: () => void; children: 
     <div ref={ref} role="dialog" aria-label={label} style={popoverStyle}>
       {children}
     </div>
-  );
-}
-
-// "+N 입고": 한 번에 여러 봉지를 넣을 때.
-export function RestockPopover({
-  name,
-  onSubmit,
-  onClose,
-}: {
-  name: string;
-  onSubmit: (amount: number) => void;
-  onClose: () => void;
-}) {
-  const [text, setText] = useState('');
-  const [error, setError] = useState('');
-
-  function submit() {
-    const n = Number(text);
-    if (!Number.isInteger(n) || n < 1) {
-      setError('1 이상의 정수(봉지)를 입력해주세요.');
-      return;
-    }
-    onSubmit(n);
-    onClose();
-  }
-
-  return (
-    <Popover onClose={onClose} label={`${name} 입고`}>
-      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{name} 입고</div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={1}
-          step={1}
-          autoFocus
-          value={text}
-          placeholder="봉지 수"
-          aria-label={`${name} 입고 봉지 수`}
-          onChange={(e) => {
-            setText(e.target.value);
-            setError('');
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit();
-          }}
-          className="input-field"
-          style={{ padding: '6px 10px', fontSize: 14 }}
-        />
-        <button type="button" onClick={submit} className="btn-primary" style={{ padding: '6px 14px', whiteSpace: 'nowrap' }}>
-          입고
-        </button>
-      </div>
-      {error && <p className="error-text" style={{ fontSize: 12, margin: '6px 0 0' }}>{error}</p>}
-    </Popover>
   );
 }
 
@@ -188,7 +136,7 @@ export function MorePopover({
         봉지 이하
       </label>
       <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-        빈칸 또는 0 = 알림 없음
+        빈칸 = 알림 없음, 0 = 재고가 다 떨어지면 알림(새 약재 기본값)
       </p>
       {error && <p className="error-text" style={{ fontSize: 12, margin: '6px 0 0' }}>{error}</p>}
       <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>

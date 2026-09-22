@@ -10,9 +10,12 @@ describe('isShort', () => {
   it('기준보다 많으면 부족 아님', () => {
     expect(isShort(6, 5)).toBe(false);
   });
-  it('기준이 없거나 0이면 절대 부족으로 보지 않는다', () => {
+  it('기준이 없으면(null) 부족으로 보지 않는다', () => {
     expect(isShort(0, null)).toBe(false);
-    expect(isShort(0, 0)).toBe(false);
+  });
+  it('기준이 0이면 재고가 0일 때만 부족으로 본다', () => {
+    expect(isShort(0, 0)).toBe(true);
+    expect(isShort(1, 0)).toBe(false);
   });
 });
 
@@ -27,7 +30,10 @@ describe('recommendOrderQty', () => {
   it('부족하지 않으면 0', () => {
     expect(recommendOrderQty(6, 5)).toBe(0);
     expect(recommendOrderQty(3, null)).toBe(0);
-    expect(recommendOrderQty(0, 0)).toBe(0);
+    expect(recommendOrderQty(1, 0)).toBe(0);
+  });
+  it('기준이 0이어도 재고가 0이면 최소 1봉지는 추천한다', () => {
+    expect(recommendOrderQty(0, 0)).toBe(1);
   });
   it('음수 재고는 0으로 보고 계산한다', () => {
     expect(recommendOrderQty(-3, 5)).toBe(10);
