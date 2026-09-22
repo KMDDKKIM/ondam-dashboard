@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { formatOrderLines, type ShortHerb } from '@/lib/herbOrder';
 import type { HerbOrderMemo } from '@/lib/types';
 
-// "발주 요청 목록"(직접 적어두는 메모, 맨 위) + 부족 기준 이하인 약재 요약(자동 감지, 그 아래,
-// 접어둠) + "발주 목록 복사". 어떤 약재가 부족한지만(이름만) 보여준다(권장 발주량 제안은
-// 없앴다 — 원장 결정, 2026-09-23). 부족한 약재 칸에서 바로 🔕 눌러 그 약재의 부족 알림을
-// 끌 수 있다(자주 안 쓰는 약재는 목록에서 빼기).
+// "📝 발주 요청 목록"(직접 적어두는 메모) + 부족 기준 이하인 약재(자동 감지) + "발주 목록
+// 복사" — 하나의 접힘 토글로 같이 펴진다. 어떤 약재가 부족한지만(이름만) 보여준다(권장
+// 발주량 제안은 없앴다 — 원장 결정, 2026-09-23). 발주 요청 목록(메모)에 이미 이름을 적어둔
+// 약재는 부족 목록에서 빠진다(excludeMemoedHerbs, 부모가 계산해서 넘긴다). 부족한 약재
+// 칸에서 바로 🔕 눌러 그 약재의 부족 알림을 끌 수도 있다(자주 안 쓰는 약재는 목록에서 빼기).
 export default function LowStockPanel({
   shorts,
   onDisableAlarm,
@@ -44,31 +45,35 @@ export default function LowStockPanel({
 
   return (
     <div className="card" style={{ padding: '8px 12px', marginBottom: 10, borderColor: 'var(--color-gold)' }}>
-      <OrderMemo memo={memo} onSave={onSaveMemo} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 14, padding: 0, textAlign: 'left', flex: 1, minWidth: 0 }}
+        >
+          {open ? '▼' : '▶'} 📝 발주 요청 목록
+          {!open && (
+            <span className="muted-text" style={{ fontWeight: 500, marginLeft: 8 }}>
+              {hasShorts ? `부족한 약재 ${shorts.length}개: ${preview}` : '부족한 약재 없음'}
+            </span>
+          )}
+        </button>
+        {hasShorts && (
+          <button className="btn-primary" onClick={handleCopy} style={{ padding: '6px 12px', fontSize: 13 }}>
+            {copied ? '복사됨 ✓' : '발주 목록 복사'}
+          </button>
+        )}
+      </div>
 
-      {hasShorts && (
-        <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open}
-              style={{ border: 'none', background: 'transparent', fontWeight: 700, fontSize: 14, padding: 0, textAlign: 'left', flex: 1, minWidth: 0 }}
-            >
-              {open ? '▼' : '▶'} ⚠️ 부족한 약재 {shorts.length}개
-              {!open && (
-                <span className="muted-text" style={{ fontWeight: 500, marginLeft: 8 }}>
-                  {preview}
-                </span>
-              )}
-            </button>
-            <button className="btn-primary" onClick={handleCopy} style={{ padding: '6px 12px', fontSize: 13 }}>
-              {copied ? '복사됨 ✓' : '발주 목록 복사'}
-            </button>
-          </div>
-          {open && (
-            <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <OrderMemo memo={memo} onSave={onSaveMemo} />
+
+          {hasShorts && (
+            <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>⚠️ 부족한 약재 {shorts.length}개</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {shorts.map((s) => (
                   <span
                     key={s.id}
@@ -122,7 +127,7 @@ export default function LowStockPanel({
                   />
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       )}
@@ -132,7 +137,7 @@ export default function LowStockPanel({
 
 // 발주 요청 목록: 다음 주문 때 같이 시킬 약재를 직접 적어두는 메모 한 장. 지금 당장 자동으로
 // 부족 표시가 안 뜨는 약재도 여기 적어두면 된다 — 저장하면 새로고침해도, 다른 직원 화면에도
-// 그대로 남는다. 자주 볼 건 아니라 칸을 작게 뒀다.
+// 그대로 남는다. 여기 이름을 적어두면 아래 "부족한 약재" 목록에서는 빠진다(중복 방지).
 function OrderMemo({ memo, onSave }: { memo: HerbOrderMemo; onSave: (text: string) => Promise<void> }) {
   const [text, setText] = useState(memo.text);
   const [saving, setSaving] = useState(false);
@@ -158,7 +163,6 @@ function OrderMemo({ memo, onSave }: { memo: HerbOrderMemo; onSave: (text: strin
 
   return (
     <div>
-      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>📝 발주 요청 목록</div>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -174,7 +178,7 @@ function OrderMemo({ memo, onSave }: { memo: HerbOrderMemo; onSave: (text: strin
         <p className="error-text" style={{ fontSize: 11, margin: '4px 0 0' }}>{error}</p>
       ) : (
         <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-          {saving ? '저장 중...' : '적어두면 새로고침해도, 다른 직원 화면에도 그대로 남아요.'}
+          {saving ? '저장 중...' : '적어두면 새로고침해도, 다른 직원 화면에도 그대로 남아요. 여기 적은 약재는 아래 부족 목록에서 빠져요.'}
         </p>
       )}
     </div>

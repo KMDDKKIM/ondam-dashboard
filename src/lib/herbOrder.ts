@@ -42,3 +42,14 @@ export function listShortHerbs(items: HerbStockLike[]): ShortHerb[] {
 export function formatOrderLines(shorts: ShortHerb[]): string {
   return shorts.map((s) => s.name).join('\n');
 }
+
+/**
+ * 발주 요청 목록(메모)에 이름이 이미 적혀 있는 약재는 부족 목록에서 뺀다 — 이미 챙겨서
+ * 적어뒀는데 부족 목록에도 뜨면 중복으로 보이기 때문. 메모 글 안에 약재 이름이 부분
+ * 문자열로 들어 있는지만 본다(예: "당귀 다음에 같이 시키기" 메모가 있으면 "당귀"는 빠진다).
+ */
+export function excludeMemoedHerbs(shorts: ShortHerb[], memoText: string): ShortHerb[] {
+  const memo = memoText.trim();
+  if (memo === '') return shorts;
+  return shorts.filter((s) => !memo.includes(s.name));
+}

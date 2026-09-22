@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createHerbInventoryItems, applyHerbStockChanges, stockErrorMessage } from '@/lib/supabase/herbInventory';
 import { parseBulkHerbEntry, parseNewHerbs } from '@/lib/herbEntryParser';
-import { listShortHerbs } from '@/lib/herbOrder';
+import { excludeMemoedHerbs, listShortHerbs } from '@/lib/herbOrder';
 import { countHerbs, filterHerbs, findDuplicateHerb, groupHerbsByInitial, partitionNewHerbs, type HerbFilter } from '@/lib/herbList';
 import LowStockPanel from '@/components/herb-inventory/LowStockPanel';
 import BulkStockForms from '@/components/herb-inventory/BulkStockForms';
@@ -81,7 +81,8 @@ export default function HerbInventoryPage() {
   const visible = useMemo(() => filterHerbs(items, query, filter), [items, query, filter]);
   const grouped = query.trim() === '' && filter === 'all';
   const groupKeys = useMemo(() => (grouped ? groupHerbsByInitial(items).map((g) => g.key) : []), [grouped, items]);
-  const shorts = useMemo(() => listShortHerbs(items), [items]);
+  // 발주 요청 목록(메모)에 이미 적어둔 약재는 부족 목록에서 뺀다(중복 표시 방지).
+  const shorts = useMemo(() => excludeMemoedHerbs(listShortHerbs(items), orderMemo.text), [items, orderMemo.text]);
   const herbNames = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.name])), [items]);
 
   // "부족한 약재" 칸에서 바로 🔕 눌러 끄기.

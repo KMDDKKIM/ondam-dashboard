@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isShort, listShortHerbs, formatOrderLines, isValidThreshold } from './herbOrder';
+import { isShort, listShortHerbs, formatOrderLines, isValidThreshold, excludeMemoedHerbs } from './herbOrder';
 
 describe('isShort', () => {
   it('현재 재고가 기준 이하면 부족', () => {
@@ -47,5 +47,26 @@ describe('listShortHerbs / formatOrderLines', () => {
   });
   it('부족한 게 없으면 빈 문자열', () => {
     expect(formatOrderLines([])).toBe('');
+  });
+});
+
+describe('excludeMemoedHerbs', () => {
+  const shorts = [
+    { id: 'd', name: '당귀' },
+    { id: 's', name: '생강' },
+    { id: 'c', name: '천궁' },
+  ];
+  it('메모에 이름이 있는 약재는 뺀다', () => {
+    expect(excludeMemoedHerbs(shorts, '당귀 다음에 같이 시키기').map((s) => s.name)).toEqual(['생강', '천궁']);
+  });
+  it('메모가 비어 있으면 그대로', () => {
+    expect(excludeMemoedHerbs(shorts, '')).toEqual(shorts);
+    expect(excludeMemoedHerbs(shorts, '   ')).toEqual(shorts);
+  });
+  it('메모에 여러 개 적혀 있으면 여러 개를 뺀다', () => {
+    expect(excludeMemoedHerbs(shorts, '당귀, 천궁 주문').map((s) => s.name)).toEqual(['생강']);
+  });
+  it('메모에 없는 이름은 그대로 남는다', () => {
+    expect(excludeMemoedHerbs(shorts, '인삼 주문').map((s) => s.name)).toEqual(['당귀', '생강', '천궁']);
   });
 });
