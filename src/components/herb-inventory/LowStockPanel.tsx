@@ -12,11 +12,14 @@ import type { HerbOrderMemo } from '@/lib/types';
 export default function LowStockPanel({
   shorts,
   onDisableAlarm,
+  onAddToMemo,
   memo,
   onSaveMemo,
 }: {
   shorts: ShortHerb[];
   onDisableAlarm: (id: string) => void;
+  /** 부족한 약재 칩을 누르면 그 이름을 발주 요청 목록에 추가한다(자동으로 부족 목록에서 빠진다). */
+  onAddToMemo: (name: string) => void;
   memo: HerbOrderMemo;
   onSaveMemo: (text: string) => Promise<void>;
 }) {
@@ -72,7 +75,10 @@ export default function LowStockPanel({
 
           {hasShorts && (
             <div style={{ borderTop: '1px solid var(--color-line)', marginTop: 10, paddingTop: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>⚠️ 부족한 약재 {shorts.length}개</div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>⚠️ 부족한 약재 {shorts.length}개</div>
+              <p className="muted-text" style={{ fontSize: 11, margin: '0 0 8px' }}>
+                이름을 누르면 발주 요청 목록에 추가돼요.
+              </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {shorts.map((s) => (
                   <span
@@ -81,7 +87,7 @@ export default function LowStockPanel({
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 4,
-                      padding: '4px 6px 4px 10px',
+                      padding: '4px 6px 4px 4px',
                       borderRadius: 999,
                       border: '1px solid var(--color-line)',
                       background: 'var(--color-surface)',
@@ -89,7 +95,24 @@ export default function LowStockPanel({
                       fontWeight: 600,
                     }}
                   >
-                    {s.name}
+                    <button
+                      type="button"
+                      onClick={() => onAddToMemo(s.name)}
+                      title={`${s.name}을(를) 발주 요청 목록에 추가`}
+                      aria-label={`${s.name} 발주 요청 목록에 추가`}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        padding: '2px 4px 2px 8px',
+                        borderRadius: 999,
+                        color: 'var(--color-ink)',
+                      }}
+                    >
+                      {s.name}
+                    </button>
                     <button
                       type="button"
                       onClick={() => onDisableAlarm(s.id)}

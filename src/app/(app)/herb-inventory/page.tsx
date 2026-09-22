@@ -94,6 +94,17 @@ export default function HerbInventoryPage() {
     }
   }
 
+  // "부족한 약재" 칩을 누르면 발주 요청 목록에 이름을 추가한다 — 그러면 excludeMemoedHerbs가
+  // 자동으로 부족 목록에서 뺀다(반대로 목록에서 그 이름을 지우면 다시 부족 목록에 나타난다).
+  async function handleAddToMemo(name: string) {
+    const next = orderMemo.text.trim() === '' ? name : `${orderMemo.text}\n${name}`;
+    try {
+      await saveOrderMemo(next);
+    } catch {
+      patchMessages({ error: '발주 요청 목록에 추가하지 못했습니다. 다시 시도해주세요.' });
+    }
+  }
+
   // 검색 결과가 딱 하나일 때 Enter → 그 행을 잠깐 강조한다.
   function handleSearchEnter() {
     if (visible.length !== 1) return;
@@ -201,7 +212,13 @@ export default function HerbInventoryPage() {
         </button>
       </div>
 
-      <LowStockPanel shorts={shorts} onDisableAlarm={handleDisableAlarm} memo={orderMemo} onSaveMemo={saveOrderMemo} />
+      <LowStockPanel
+        shorts={shorts}
+        onDisableAlarm={handleDisableAlarm}
+        onAddToMemo={handleAddToMemo}
+        memo={orderMemo}
+        onSaveMemo={saveOrderMemo}
+      />
       {/* 입력 기록은 가끔 확인하면 되는 정보라 접어둔 채로 위쪽에 작게 둔다. */}
       <HistorySection logs={logs} herbNames={herbNames} staffNames={staffNames} />
       <BulkStockForms onSubmit={handleBulkSubmit} />
