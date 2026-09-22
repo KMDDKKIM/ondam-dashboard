@@ -40,6 +40,7 @@ function emptyDraft() {
     fee: '',
     payment: null as ReceptionPayment | null,
     reserved: false,
+    chuna: false,
     note: '',
   };
 }
@@ -189,6 +190,7 @@ export default function ReceptionLogPage() {
           fee: parseFee(draft.fee),
           payment: draft.payment,
           reserved: draft.reserved,
+          chuna: draft.chuna,
           note: draft.note.trim() || null,
           createdBy: user?.id ?? null,
         },
@@ -242,6 +244,7 @@ export default function ReceptionLogPage() {
         <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 920 }}>
           <colgroup>
             <col style={{ width: 46 }} />
+            <col style={{ width: 46 }} />
             <col style={{ width: 44 }} />
             <col style={{ width: 62 }} />
             <col style={{ width: 96 }} />
@@ -254,8 +257,8 @@ export default function ReceptionLogPage() {
           </colgroup>
           <thead>
             <tr style={{ background: '#f0f0f0' }}>
-              {['예약', '번호', '구분', '성명', '생년월일', '치료내역', '진료비', '결제', '비고', ''].map((h, i) => (
-                <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: i === 0 || i === 1 ? 'center' : 'left', fontSize: 13 }}>
+              {['예약', '추나', '번호', '구분', '성명', '생년월일', '치료내역', '진료비', '결제', '비고', ''].map((h, i) => (
+                <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: i === 0 || i === 1 || i === 2 ? 'center' : 'left', fontSize: 13 }}>
                   {h}
                 </th>
               ))}
@@ -270,6 +273,15 @@ export default function ReceptionLogPage() {
                     checked={r.reserved}
                     onChange={(e) => save(r.id, { reserved: e.target.checked })}
                     aria-label={`${r.patientName} 예약 여부`}
+                    style={{ width: 18, height: 18 }}
+                  />
+                </td>
+                <td style={{ ...cellStyle, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={r.chuna}
+                    onChange={(e) => save(r.id, { chuna: e.target.checked })}
+                    aria-label={`${r.patientName} 추나 여부`}
                     style={{ width: 18, height: 18 }}
                   />
                 </td>
@@ -325,6 +337,15 @@ export default function ReceptionLogPage() {
                   style={{ width: 18, height: 18 }}
                 />
               </td>
+              <td style={{ ...cellStyle, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={draft.chuna}
+                  onChange={(e) => setDraft((d) => ({ ...d, chuna: e.target.checked }))}
+                  aria-label="추나 여부"
+                  style={{ width: 18, height: 18 }}
+                />
+              </td>
               <td style={{ ...cellStyle, textAlign: 'center', color: '#999' }}>{records.length + 1}</td>
               <td style={cellStyle}>
                 <select value={draft.visitKind} onChange={(e) => setDraft((d) => ({ ...d, visitKind: e.target.value as ReceptionVisitKind }))} style={selectStyle}>
@@ -377,7 +398,7 @@ export default function ReceptionLogPage() {
         </table>
         {loading && <p className="muted-text" style={{ marginTop: 8, fontSize: 13 }}>불러오는 중…</p>}
         <p className="muted-text" style={{ marginTop: 8, fontSize: 12 }}>
-          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 구분은 초진 · 재초진 · 재진 중에서 골라요.
+          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 추나 칸의 체크는 그날 추나 치료를 받았는지예요(일일결산의 추나 인원·이름이 여기서 자동으로 채워져요). 구분은 초진 · 재초진 · 재진 중에서 골라요.
           결제의 &quot;제외&quot;는 린다이어트 상담·자보 환자처럼 결제 자체가 없는 경우예요.
         </p>
       </div>
@@ -388,6 +409,9 @@ export default function ReceptionLogPage() {
         </span>
         <span>
           예약 <b>{summary.reservedCount}</b>/{summary.count}
+        </span>
+        <span>
+          추나 <b>{summary.chunaCount}</b>
         </span>
         <span>
           진료비 합계 <b>{formatFee(summary.feeTotal) || 0}</b>원

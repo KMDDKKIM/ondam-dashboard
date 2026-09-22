@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { countReservedRecords, formatFee, formatLogHeader, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
+import { chunaPrefill, countChunaRecords, countReservedRecords, formatFee, formatLogHeader, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
 
 function rec(o: Partial<ReceptionRecord>): ReceptionRecord {
-  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, note: null, ...o };
+  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, chuna: false, note: null, ...o };
 }
 
 describe('날짜 머리글', () => {
@@ -39,14 +39,14 @@ describe('진료비 입력', () => {
 });
 
 describe('하루 합계', () => {
-  it('결제 방법별 금액, 초진·예약 수를 센다', () => {
+  it('결제 방법별 금액, 초진·예약·추나 수를 센다', () => {
     const s = summarize([
-      rec({ fee: 2400, payment: '카드', reserved: true }),
+      rec({ fee: 2400, payment: '카드', reserved: true, chuna: true }),
       rec({ fee: 47700, payment: '카드', visitKind: '초진' }),
       rec({ fee: 1500, payment: '현금' }),
-      rec({ fee: 3000, payment: '미수', visitKind: '재초진', reserved: true }),
+      rec({ fee: 3000, payment: '미수', visitKind: '재초진', reserved: true, chuna: true }),
     ]);
-    expect(s).toMatchObject({ count: 4, firstVisitCount: 2, reservedCount: 2, feeTotal: 54600, cash: 1500, card: 50100, unpaid: 3000, excluded: 0, paymentMissing: 0 });
+    expect(s).toMatchObject({ count: 4, firstVisitCount: 2, reservedCount: 2, chunaCount: 2, feeTotal: 54600, cash: 1500, card: 50100, unpaid: 3000, excluded: 0, paymentMissing: 0 });
   });
 
   it('진료비는 있는데 결제 방법이 빈 줄을 알려 준다(금액 없는 줄은 제외)', () => {
@@ -97,5 +97,26 @@ describe('다음예약 접수 환자수 미리 채우기', () => {
   it('체크가 없거나 기록이 없으면 채우지 않는다', () => {
     expect(nextBookingPrefill([rec({}), rec({})], fresh)).toBeNull();
     expect(nextBookingPrefill([], fresh)).toBeNull();
+  });
+});
+
+describe('추나 인원·이름 미리 채우기', () => {
+  const records = [rec({ chuna: true, patientName: '홍길동' }), rec({ chuna: false, patientName: '성춘향' }), rec({ chuna: true, patientName: '이몽룡' })];
+  const fresh = { savedClosingExists: false, currentValue: '' };
+
+  it('추나 체크된 줄 수를 센다', () => {
+    expect(countChunaRecords(records)).toBe(2);
+    expect(countChunaRecords([])).toBe(0);
+  });
+  it('저장된 결산도 손으로 넣은 값도 없을 때만 채운다', () => {
+    expect(chunaPrefill(records, fresh)).toEqual({ count: 2, names: ['홍길동', '이몽룡'] });
+    expect(chunaPrefill(records, { savedClosingExists: true, currentValue: '' })).toBeNull();
+    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '5' })).toBeNull();
+    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '0' })).toBeNull();
+    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '  ' })).toEqual({ count: 2, names: ['홍길동', '이몽룡'] });
+  });
+  it('체크가 없거나 기록이 없으면 채우지 않는다', () => {
+    expect(chunaPrefill([rec({}), rec({})], fresh)).toBeNull();
+    expect(chunaPrefill([], fresh)).toBeNull();
   });
 });
