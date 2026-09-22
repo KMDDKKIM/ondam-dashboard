@@ -9,12 +9,12 @@ import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
 import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
-import { nextBookingPrefill } from '@/lib/receptionLog';
+import { nextBookingPrefill, type ReceptionRecord } from '@/lib/receptionLog';
 import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/sectionMessages';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
-import { computeDerivedStats } from '@/lib/reservations/reservationStats';
+import { matchAttendance } from '@/lib/reservationReceptionMatch';
 import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
@@ -407,11 +407,12 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
 
   // 새 결산표가 붙여넣어져 날짜가 정해지면 칸을 미리 채운다(모두 직접 고칠 수 있다).
   //  1) 그 날짜에 이미 저장해 둔 일일 결산 숫자가 있으면 그것을,
-  //  2) 없으면 저장된 예약 명단에서 예약·정상 이행(내원)·취소·추나를 세서,
+  //  2) 없으면 저장된 예약 명단과 접수기록부를 대조해서 예약·정상 이행·노쇼·취소를, 접수기록부의
+  //     추나 체크로 추나 인원·이름을 채운다,
   //  3) 한약·비급여 판매는 그 날 비급여 현황 등록분으로, 초진은 결산표의 신규환자수로.
-  // 노쇼와 제외환자는 명단만으로 알 수 없어 직접 입력한다.
+  // 제외환자는 명단만으로 알 수 없어 직접 입력한다.
   // 예약 명단이 새로 저장되면(reservationSync.version) 그 날짜가 지금 결산 날짜일 때만, 그리고 명단에서
-  // 나오는 칸(예약·정상 이행·취소·추나)만 다시 채운다 — 손으로 넣은 노쇼·제외환자·판매·초진 등은
+  // 나오는 칸(예약·정상 이행·노쇼·취소·추나)만 다시 채운다 — 손으로 넣은 제외환자·판매·초진 등은
   // 그대로 둔다. 이미 저장해 둔 결산이 있으면 그 값이 우선이라 아무것도 바꾸지 않는다.
   const handledSyncVersion = useRef(reservationSync.version);
   useEffect(() => {
@@ -429,7 +430,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
     let cancelled = false;
     (async () => {
       if (syncOnly) {
-        let rows: { visitStatus: string }[] = [];
+        let rows: { visitStatus: string; patientName: string }[] = [];
         try {
           const response = await fetch(`/api/records/${encodeURIComponent(date)}`);
           const record = response.ok ? await response.json() : null;
@@ -443,37 +444,45 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         } catch {
           // 저장된 값을 확인하지 못해도 명단에서 센 값으로 채운다.
         }
-        const stats = computeDerivedStats(rows as Parameters<typeof computeDerivedStats>[0]);
+        // 접수기록부는 한 번만 불러와서 정상 이행/노쇼 대조와 추나 집계에 함께 쓴다.
+        let receptionRecords: ReceptionRecord[] = [];
+        let receptionKnown = true;
+        try {
+          receptionRecords = await listReceptionRecords(supabase, date);
+        } catch {
+          receptionKnown = false;
+        }
         if (cancelled) return;
-        setClosing((prev) => ({
-          ...prev,
-          reservationCount: String(rows.length),
-          keptCount: String(rows.filter((r) => r.visitStatus === '내원').length),
-          cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
-          chunaCount: String(stats.chunaCount),
-          chunaNames: stats.chunaNames.join(' '),
-        }));
+        setClosing((prev) => {
+          const next = {
+            ...prev,
+            reservationCount: String(rows.length),
+            cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
+          };
+          if (receptionKnown) {
+            const attendance = matchAttendance(rows, receptionRecords.map((r) => r.patientName));
+            next.keptCount = String(attendance.keptCount);
+            next.noshowCount = String(attendance.noshowCount);
+            const chunaMatched = receptionRecords.filter((r) => r.chuna);
+            next.chunaCount = String(chunaMatched.length);
+            next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
+          }
+          return next;
+        });
         return;
       }
       const next: ClosingFields = { ...EMPTY_CLOSING, firstVisitCount: newPatientCount ? String(newPatientCount) : '' };
       const str = (v: number | null) => (v != null ? String(v) : '');
 
-      let derived: ReturnType<typeof computeDerivedStats> | null = null;
-      let listRows: { visitStatus: string }[] = [];
+      let listRows: { visitStatus: string; patientName: string }[] = [];
       try {
         const response = await fetch(`/api/records/${encodeURIComponent(date)}`);
         const record = response.ok ? await response.json() : null;
         if (record && Array.isArray(record.reservations) && record.reservations.length > 0) {
-          derived = computeDerivedStats(record.reservations);
           listRows = record.reservations;
         }
       } catch {
         // 예약 명단이 없어도 직접 입력하면 된다.
-      }
-      if (derived) {
-        // 이름은 띄어쓰기로 구분해서 채운다(멘트에는 쉼표로 나온다).
-        next.chunaNames = derived.chunaNames.join(' ');
-        next.chunaCount = String(derived.chunaCount);
       }
 
       let saved = null;
@@ -484,6 +493,25 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         // 저장된 값이 없으면 명단에서 센 값을 쓴다.
         savedKnown = false;
       }
+
+      // 접수기록부는 한 번만 불러와서 다음예약·추나·정상 이행/노쇼 대조에 함께 쓴다.
+      let receptionRecords: ReceptionRecord[] = [];
+      let receptionKnown = true;
+      if (savedKnown) {
+        try {
+          receptionRecords = await listReceptionRecords(supabase, date);
+        } catch {
+          receptionKnown = false;
+        }
+      }
+
+      if (receptionKnown && listRows.length > 0) {
+        // 이름은 띄어쓰기로 구분해서 채운다(멘트에는 쉼표로 나온다).
+        const chunaMatched = receptionRecords.filter((r) => r.chuna);
+        next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
+        next.chunaCount = String(chunaMatched.length);
+      }
+
       if (saved) {
         next.reservationCount = str(saved.reservationCount);
         next.keptCount = str(saved.keptCount);
@@ -492,14 +520,16 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         next.nextBookingCount = str(saved.nextBookingCount);
         next.chunaCount = str(saved.chunaCount);
         next.excludedCount = str(saved.excludedCount);
-      } else if (derived) {
-        const kept = listRows.filter((r) => r.visitStatus === '내원').length;
-        const cancelled = listRows.filter((r) => r.visitStatus === '취소').length;
+      } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
-        next.keptCount = String(kept);
-        next.cancelCount = String(cancelled);
-        // 노쇼는 명단에 "내원" 표시가 빠진 예약과 구분이 안 돼서 자동으로 세지 않는다 —
+        next.cancelCount = String(listRows.filter((r) => r.visitStatus === '취소').length);
+        // 정상 이행/노쇼는 접수기록부와 이름을 대조해서 센다 — 못 읽으면(표 없음·권한 없음 등)
         // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
+        if (receptionKnown) {
+          const attendance = matchAttendance(listRows, receptionRecords.map((r) => r.patientName));
+          next.keptCount = String(attendance.keptCount);
+          next.noshowCount = String(attendance.noshowCount);
+        }
       }
 
       try {
@@ -510,15 +540,10 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
 
       // 다음예약 접수 환자수: 저장된 결산이 없고 칸이 비어 있을 때만, 접수기록부에서 "예약" 체크된 환자 수로 미리 채운다.
       // 못 읽어도(표 없음·권한 없음 등) 조용히 건너뛴다 — 직접 입력하면 된다.
-      let hint: number | null = null;
-      if (savedKnown) {
-        try {
-          hint = nextBookingPrefill(await listReceptionRecords(supabase, date), { savedClosingExists: saved != null, currentValue: next.nextBookingCount });
-        } catch {
-          hint = null;
-        }
-        if (hint != null) next.nextBookingCount = String(hint);
-      }
+      const hint = receptionKnown
+        ? nextBookingPrefill(receptionRecords, { savedClosingExists: saved != null, currentValue: next.nextBookingCount })
+        : null;
+      if (hint != null) next.nextBookingCount = String(hint);
       if (cancelled) return;
       setReceptionHint(hint);
       setClosing(next);
@@ -700,23 +725,29 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
           <div style={groupTitle}>예약</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
             <div>
-              <label className="muted-text" style={label}>오늘 예약 환자수</label>
+              <label className="muted-text" style={label}>오늘 예약된 환자수</label>
               {numberInput('reservationCount')}
             </div>
             <div>
               <label className="muted-text" style={label}>예약 정상 이행</label>
               {numberInput('keptCount')}
+              <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                접수기록부와 이름을 대조해 자동 입력돼요
+              </p>
             </div>
             <div>
               <label className="muted-text" style={label}>예약 노쇼</label>
               {numberInput('noshowCount')}
+              <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                접수기록부와 이름을 대조해 자동 입력돼요
+              </p>
             </div>
             <div>
               <label className="muted-text" style={label}>예약 취소</label>
               {numberInput('cancelCount')}
             </div>
             <div>
-              <label className="muted-text" style={label}>다음예약 접수 환자수</label>
+              <label className="muted-text" style={label}>오늘 다음 예약 하신 환자수</label>
               {numberInput('nextBookingCount')}
               {receptionHint != null && (
                 <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
@@ -736,6 +767,9 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             <div>
               <label className="muted-text" style={label}>추나 인원</label>
               {numberInput('chunaCount')}
+              <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                접수기록부의 추나 체크로 자동 입력돼요
+              </p>
             </div>
             <div>
               <label className="muted-text" style={label}>추나 환자 이름</label>
