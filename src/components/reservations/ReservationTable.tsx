@@ -22,11 +22,11 @@ const EMPTY_ROW: Reservation = {
   memo: '',
 };
 
-// Column order matches the clinic's own spreadsheet template. 앞쪽 5개(예약시간~주치의)는
-// 실제 들어가는 내용 길이에 맞춘 고정폭, "결과"(정상이행/노쇼/취소, AttendancePicker)는
-// 별도 컬럼으로 다룬다(일반 텍스트칸이 아니라서 EDITABLE_FIELDS에 안 넣는다). 치료부위
-// 이후는 폭을 지정하지 않아 남는 공간을 나눠 갖는다 (table-layout: fixed의 나머지-폭 분배).
-// 삭제 버튼 컬럼도 폭을 명시해야 한다 — 안 그러면 이 컬럼도 "폭 미지정" 취급되어 치료부위~비고와
+// Column order matches the clinic's own spreadsheet template, plus "결과"(정상이행/노쇼/취소,
+// AttendancePicker) 맨 오른쪽(삭제 버튼 바로 앞) — 일반 텍스트칸이 아니라서 EDITABLE_FIELDS엔
+// 안 넣는다. 앞쪽 5개(예약시간~주치의)는 실제 들어가는 내용 길이에 맞춘 고정폭, 치료부위~비고는
+// 폭을 지정하지 않아 남는 공간을 나눠 갖는다 (table-layout: fixed의 나머지-폭 분배). 결과·삭제
+// 컬럼도 폭을 명시해야 한다 — 안 그러면 이 컬럼들도 "폭 미지정" 취급되어 치료부위~비고와
 // 똑같이 나머지 공간을 나눠 갖게 되어 그만큼을 뺏어간다.
 const EDITABLE_FIELDS: { key: keyof Reservation; label: string; width?: string }[] = [
   { key: 'timeLabel', label: '예약시간', width: '56px' },
@@ -121,14 +121,17 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
                 {field.label}
               </th>
             ))}
-            <th className="no-print" style={{ textAlign: 'left', padding: '3px 4px', width: RESULT_COL_WIDTH }}>
-              결과
-            </th>
             {AFTER_DOCTOR_FIELDS.map((field) => (
               <th key={field.key} style={{ textAlign: 'left', padding: '3px 4px' }}>
                 {field.label}
               </th>
             ))}
+            {/* 화면에는 맨 오른쪽(삭제 바로 앞)에 두되, 인쇄에는 안 나온다 — 이 칸도 no-print,
+                이 표를 담은 div 전체도 no-print라 이중으로 인쇄에서 빠진다(인쇄는 아래 별도
+                .print-sheet 표를 쓴다). */}
+            <th className="no-print" style={{ textAlign: 'left', padding: '3px 4px', width: RESULT_COL_WIDTH }}>
+              결과
+            </th>
             <th className="no-print" style={{ width: DELETE_COL_WIDTH }} />
           </tr>
         </thead>
@@ -144,9 +147,6 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
                   />
                 </td>
               ))}
-              <td className="no-print" style={{ padding: '1px 2px' }}>
-                <AttendancePicker value={row.visitStatus} onChange={(v) => updateRow(index, 'visitStatus', v)} />
-              </td>
               {AFTER_DOCTOR_FIELDS.map((field) => (
                 <td key={field.key} style={{ padding: '1px 2px' }}>
                   <input
@@ -156,6 +156,9 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
                   />
                 </td>
               ))}
+              <td className="no-print" style={{ padding: '1px 2px' }}>
+                <AttendancePicker value={row.visitStatus} onChange={(v) => updateRow(index, 'visitStatus', v)} />
+              </td>
               <td className="no-print" style={{ padding: '2px 4px', textAlign: 'right' }}>
                 <button onClick={() => removeRow(index)} style={{ padding: '3px 7px', fontSize: 12 }}>
                   삭제
