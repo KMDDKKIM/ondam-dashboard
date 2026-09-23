@@ -29,6 +29,14 @@ function formatMatureBased(rate: number, stats: { patientCount: number; matureCo
     : formatPercent(rate);
 }
 
+// 재진율은 전체(초진 후 3주가 안 지난 환자 포함)를 분모로 쳐서 항상 바로 보여 준다 — 3주가 안
+// 지난 환자도 그새 재진할 수 있어서 이탈률처럼 아예 숨길 필요는 없다. 다만 그 안에 아직
+// 3주가 안 지난 환자가 섞여 있으면(matureCount < patientCount) 앞으로 더 오를 수 있는, 아직
+// 판단하기 이른 숫자라는 뜻이라 옅게 보여 준다(원장 요청, 2026-09-24).
+function revisitCellStyle(stats: { patientCount: number; matureCount: number }) {
+  return stats.matureCount < stats.patientCount ? { ...cellStyle, color: 'var(--color-muted)' } : cellStyle;
+}
+
 const cellStyle = { border: '1px solid #eee', padding: '3px 6px', fontSize: 11 };
 const weekButtonStyle = { padding: '3px 10px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', fontSize: 11, fontWeight: 600 } as const;
 const cardStyle = { flex: '1 1 260px', minWidth: 260, padding: 10 } as const;
@@ -188,8 +196,8 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
               </tr>
               <tr>
                 <td style={cellStyle}>재진율</td>
-                <td style={cellStyle}>{formatPercent(doctorStats.revisitRate)}</td>
-                <td style={cellStyle}>{formatPercent(clinicStats.revisitRate)}</td>
+                <td style={revisitCellStyle(doctorStats)}>{formatPercent(doctorStats.revisitRate)}</td>
+                <td style={revisitCellStyle(clinicStats)}>{formatPercent(clinicStats.revisitRate)}</td>
               </tr>
               <tr>
                 <td style={cellStyle}>이탈률</td>
@@ -224,7 +232,7 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
                 <tr key={id} style={id === 'all' ? { fontWeight: 700, background: '#fafafa' } : undefined}>
                   <td style={cellStyle}>{name}</td>
                   <td style={cellStyle}>{stats.patientCount}</td>
-                  <td style={cellStyle}>{stats.patientCount === 0 ? '-' : formatPercent(stats.revisitRate)}</td>
+                  <td style={stats.patientCount === 0 ? cellStyle : revisitCellStyle(stats)}>{stats.patientCount === 0 ? '-' : formatPercent(stats.revisitRate)}</td>
                   <td style={cellStyle}>{formatMatureBased(stats.dropoutRate, stats)}</td>
                   <td style={cellStyle}>{formatMatureBased(stats.tripleVisitRate, stats)}</td>
                 </tr>
@@ -257,7 +265,7 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
                 <tr>
                   <td style={cellStyle}>재진율</td>
                   {weeklyTrend.map((point) => (
-                    <td key={point.start} style={cellStyle}>{point.stats.patientCount === 0 ? '-' : formatPercent(point.stats.revisitRate)}</td>
+                    <td key={point.start} style={point.stats.patientCount === 0 ? cellStyle : revisitCellStyle(point.stats)}>{point.stats.patientCount === 0 ? '-' : formatPercent(point.stats.revisitRate)}</td>
                   ))}
                 </tr>
                 <tr>
@@ -293,7 +301,7 @@ export function HappyCallStatsPanel({ patients, staffList, onDateClick }: HappyC
                 <tr key={type}>
                   <td style={cellStyle}>{type}</td>
                   <td style={cellStyle}>{stats.patientCount}</td>
-                  <td style={cellStyle}>{formatPercent(stats.revisitRate)}</td>
+                  <td style={revisitCellStyle(stats)}>{formatPercent(stats.revisitRate)}</td>
                   <td style={cellStyle}>{formatMaturityGatedPercent(stats.dropoutRate, stats.matureCount)}</td>
                 </tr>
               ))}

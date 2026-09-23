@@ -782,14 +782,14 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
               <label className="muted-text" style={label}>예약 정상 이행</label>
               {numberInput('keptCount')}
               <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-                접수기록부와 이름을 대조해 자동 입력돼요
+                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해 자동 입력돼요
               </p>
             </div>
             <div>
               <label className="muted-text" style={label}>예약 노쇼</label>
               {numberInput('noshowCount')}
               <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-                접수기록부와 이름을 대조해 자동 입력돼요
+                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해 자동 입력돼요
               </p>
             </div>
             <div>

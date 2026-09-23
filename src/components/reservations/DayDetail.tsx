@@ -223,7 +223,7 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
                     {marker && <span className="first-visit-mark">{marker}</span>}
                   </td>
                   <td>{row.chartNo}</td>
-                  <td>{row.mobile || row.phone}</td>
+                  <td>{row.mobile}</td>
                   <td>{row.printDoctor}</td>
                   <td>{row.treatmentArea}</td>
                   <td>{row.treatment}</td>
