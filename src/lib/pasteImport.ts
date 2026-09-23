@@ -3,6 +3,8 @@
 // 헤더 이름으로 컬럼을 찾기 때문에 컬럼 순서가 달라져도 동작한다(kh-ondam-reservation의
 // xlsxParser와 같은 방식).
 
+import { todayKst } from './kst';
+
 export interface ParsedReservationRow {
   doctorName: string;
   timeLabel: string;
@@ -149,12 +151,17 @@ function tryParseReservation(rows: string[][]): PasteAnalysis | null {
 }
 
 // 월말결산표 아래쪽의 일자별 행("2026-09-19  18  1610250 ...")에서 그 달의 가장 늦은 날짜.
-// 월말결산 값이 어느 날짜까지의 누계인지(기준일)를 알아내는 데 쓴다.
-function latestDateInMonth(rows: string[][], month: string): string | null {
+// 월말결산 값이 어느 날짜까지의 누계인지(기준일)를 알아내는 데 쓴다. OK차트 내보내기가
+// 아직 안 온 날짜까지 빈 값으로 행을 채워두는 경우가 있어(2026-09-24 실사례: 기준일이
+// 월말로 잡혀 그 뒤 일일 마감이 전혀 합산되지 않았다), 기준일은 오늘(today)보다 늦을 수
+// 없다 — 오늘 이후 날짜 행이 있어도 오늘로 잘라낸다.
+function latestDateInMonth(rows: string[][], month: string, today: string): string | null {
   let latest: string | null = null;
   for (const row of rows) {
     const cell = (row[0] ?? '').trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(cell) && cell.startsWith(`${month}-`) && (latest == null || cell > latest)) latest = cell;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cell) && cell.startsWith(`${month}-`) && cell <= today && (latest == null || cell > latest)) {
+      latest = cell;
+    }
   }
   return latest;
 }
@@ -162,7 +169,7 @@ function latestDateInMonth(rows: string[][], month: string): string | null {
 // 일일/월말 결산표 둘 다 "내원환자수 ... 총진료비 ... 환자부담계 ... 미수금" 헤더
 // 바로 아래에 합계 한 줄이 온다. 제목 줄(헤더보다 위)의 "진료날짜:YYYY-MM-DD"면
 // 당일결산, "월:YYYY-MM"(또는 "(YYYY-MM)월", "월말")이면 월결산으로 구분한다.
-function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnalysis | null {
+function trySettlement(rows: string[][], fallbackDate: string | null, today: string): PasteAnalysis | null {
   const headerIdx = findHeaderIndex(rows, SETTLEMENT_HEADER);
   if (headerIdx === -1) return null;
 
@@ -200,7 +207,7 @@ function trySettlement(rows: string[][], fallbackDate: string | null): PasteAnal
   if (monthlyMatch || context.includes('월말')) {
     const month = monthlyMatch?.[1] ?? context.match(/\d{4}-\d{2}/)?.[0];
     if (month) {
-      return { format: 'monthly', month, totalRevenue, avgDailyVisits, latestDate: latestDateInMonth(rows.slice(headerIdx + 2), month), invalidCells };
+      return { format: 'monthly', month, totalRevenue, avgDailyVisits, latestDate: latestDateInMonth(rows.slice(headerIdx + 2), month, today), invalidCells };
     }
   }
 
@@ -249,7 +256,7 @@ export function analyzePasteText(text: string, fallbackDate: string | null = nul
   const reservation = tryParseReservation(rows);
   if (reservation) return reservation;
 
-  const settlement = trySettlement(rows, fallbackDate);
+  const settlement = trySettlement(rows, fallbackDate, todayKst());
   if (settlement) return settlement;
 
   return {
