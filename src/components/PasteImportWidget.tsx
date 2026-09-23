@@ -9,7 +9,7 @@ import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
 import { todayKst } from '@/lib/kst';
 import { listReceptionRecords } from '@/lib/supabase/receptionRecords';
-import { nextBookingPrefill, type ReceptionRecord } from '@/lib/receptionLog';
+import { matchByFlag, nextBookingPrefill, type ReceptionRecord } from '@/lib/receptionLog';
 import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/sectionMessages';
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
@@ -461,7 +461,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
           receptionKnown = false;
         }
         // 못 읽었거나 접수기록부가 비어 있으면(접수기록부를 안 쓴 날과 구분이 안 돼서
-        // nextBookingPrefill·chunaPrefill과 같은 이유로) 값을 지어내지 않고 직접 입력하게 둔다.
+        // nextBookingPrefill과 같은 이유로) 값을 지어내지 않고 직접 입력하게 둔다.
         const receptionUsable = receptionKnown && receptionRecords.length > 0;
         if (cancelled) return;
         if (receptionUsable) setChunaNamesUnavailable(false);
@@ -483,12 +483,12 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             next.noshowCount = String(attendance.noshowCount);
           }
           if (receptionUsable) {
-            const chunaMatched = receptionRecords.filter((r) => r.chuna);
-            next.chunaCount = String(chunaMatched.length);
-            next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
-            const excludedMatched = receptionRecords.filter((r) => r.excluded);
-            next.excludedCount = String(excludedMatched.length);
-            next.excludedNames = excludedMatched.map((r) => r.patientName).join(' ');
+            const chuna = matchByFlag(receptionRecords, 'chuna');
+            next.chunaCount = String(chuna.count);
+            next.chunaNames = chuna.names.join(' ');
+            const excluded = matchByFlag(receptionRecords, 'excluded');
+            next.excludedCount = String(excluded.count);
+            next.excludedNames = excluded.names.join(' ');
           }
           return next;
         });
@@ -527,18 +527,18 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         receptionKnown = false;
       }
       // 못 읽었거나 접수기록부가 비어 있으면(접수기록부를 안 쓴 날과 정말 0명인 날을 구분할 수
-      // 없어서 — nextBookingPrefill·chunaPrefill과 같은 이유) 값을 지어내지 않고 직접 입력하게 둔다.
+      // 없어서 — nextBookingPrefill과 같은 이유) 값을 지어내지 않고 직접 입력하게 둔다.
       const receptionUsable = receptionKnown && receptionRecords.length > 0;
 
       if (receptionUsable) {
         // 추나·제외환자는 예약 명단과 무관하게 접수기록부 체크만으로 채운다. 이름은 띄어쓰기로
         // 구분해서 채운다(멘트에는 쉼표로 나온다).
-        const chunaMatched = receptionRecords.filter((r) => r.chuna);
-        next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
-        next.chunaCount = String(chunaMatched.length);
-        const excludedMatched = receptionRecords.filter((r) => r.excluded);
-        next.excludedNames = excludedMatched.map((r) => r.patientName).join(' ');
-        next.excludedCount = String(excludedMatched.length);
+        const chuna = matchByFlag(receptionRecords, 'chuna');
+        next.chunaNames = chuna.names.join(' ');
+        next.chunaCount = String(chuna.count);
+        const excluded = matchByFlag(receptionRecords, 'excluded');
+        next.excludedNames = excluded.names.join(' ');
+        next.excludedCount = String(excluded.count);
       }
 
       let chunaNamesUnavailableNext = false;

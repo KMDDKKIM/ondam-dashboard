@@ -115,9 +115,14 @@ export function countReservedRecords(records: Pick<ReceptionRecord, 'reserved'>[
   return records.filter((r) => r.reserved).length;
 }
 
-/** 접수기록부에서 "추나" 칸에 체크된 줄 수. */
-export function countChunaRecords(records: Pick<ReceptionRecord, 'chuna'>[]): number {
-  return records.filter((r) => r.chuna).length;
+/** 접수기록부에서 특정 체크(추나·제외 등)가 된 줄의 수와 이름 목록. 일일결산 칸을
+ * 접수기록부로 채울 때(추나·제외환자) 공통으로 쓴다. */
+export function matchByFlag<K extends 'chuna' | 'excluded'>(
+  records: Pick<ReceptionRecord, K | 'patientName'>[],
+  flag: K
+): { count: number; names: string[] } {
+  const matched = records.filter((r) => r[flag]);
+  return { count: matched.length, names: matched.map((r) => r.patientName) };
 }
 
 /**
@@ -132,19 +137,4 @@ export function nextBookingPrefill(
   if (state.savedClosingExists || state.currentValue.trim() !== '') return null;
   const count = countReservedRecords(records);
   return count > 0 ? count : null;
-}
-
-/**
- * 일일결산 "추나 인원 / 추나 환자 이름"을 접수기록부로 미리 채울 값. 채우지 않을 때는 null:
- * 이미 저장해 둔 결산이 있거나, 칸에 이미 값이 있거나, 체크된 줄이 하나도 없을 때
- * (nextBookingPrefill과 같은 규칙 — 체크가 0개면 접수기록부를 안 쓴 날과 정말 0명인 날을 구분할 수 없어서 채우지 않는다).
- */
-export function chunaPrefill(
-  records: Pick<ReceptionRecord, 'chuna' | 'patientName'>[],
-  state: { savedClosingExists: boolean; currentValue: string }
-): { count: number; names: string[] } | null {
-  if (state.savedClosingExists || state.currentValue.trim() !== '') return null;
-  const matched = records.filter((r) => r.chuna);
-  if (matched.length === 0) return null;
-  return { count: matched.length, names: matched.map((r) => r.patientName) };
 }

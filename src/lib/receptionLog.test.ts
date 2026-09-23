@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunaPrefill, countChunaRecords, countReservedRecords, formatFee, formatLogHeader, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
+import { countReservedRecords, formatFee, formatLogHeader, matchByFlag, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
 
 function rec(o: Partial<ReceptionRecord>): ReceptionRecord {
   return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, chuna: false, excluded: false, note: null, ...o };
@@ -105,23 +105,15 @@ describe('다음예약 접수 환자수 미리 채우기', () => {
   });
 });
 
-describe('추나 인원·이름 미리 채우기', () => {
-  const records = [rec({ chuna: true, patientName: '홍길동' }), rec({ chuna: false, patientName: '성춘향' }), rec({ chuna: true, patientName: '이몽룡' })];
-  const fresh = { savedClosingExists: false, currentValue: '' };
+describe('추나·제외 체크로 수·이름 채우기', () => {
+  const records = [rec({ chuna: true, patientName: '홍길동' }), rec({ chuna: false, excluded: true, patientName: '성춘향' }), rec({ chuna: true, patientName: '이몽룡' })];
 
-  it('추나 체크된 줄 수를 센다', () => {
-    expect(countChunaRecords(records)).toBe(2);
-    expect(countChunaRecords([])).toBe(0);
+  it('체크된 줄의 수와 이름을 센다', () => {
+    expect(matchByFlag(records, 'chuna')).toEqual({ count: 2, names: ['홍길동', '이몽룡'] });
+    expect(matchByFlag(records, 'excluded')).toEqual({ count: 1, names: ['성춘향'] });
   });
-  it('저장된 결산도 손으로 넣은 값도 없을 때만 채운다', () => {
-    expect(chunaPrefill(records, fresh)).toEqual({ count: 2, names: ['홍길동', '이몽룡'] });
-    expect(chunaPrefill(records, { savedClosingExists: true, currentValue: '' })).toBeNull();
-    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '5' })).toBeNull();
-    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '0' })).toBeNull();
-    expect(chunaPrefill(records, { savedClosingExists: false, currentValue: '  ' })).toEqual({ count: 2, names: ['홍길동', '이몽룡'] });
-  });
-  it('체크가 없거나 기록이 없으면 채우지 않는다', () => {
-    expect(chunaPrefill([rec({}), rec({})], fresh)).toBeNull();
-    expect(chunaPrefill([], fresh)).toBeNull();
+  it('체크가 없거나 기록이 없으면 빈 값', () => {
+    expect(matchByFlag([rec({}), rec({})], 'chuna')).toEqual({ count: 0, names: [] });
+    expect(matchByFlag([], 'chuna')).toEqual({ count: 0, names: [] });
   });
 });
