@@ -279,48 +279,48 @@ describe('elapsedDaysForMonth', () => {
 describe('revenueMotivation', () => {
   const base = { month: '2026-09', today: '2026-09-20', totalRevenue: 47338780, goal: 60000000, dataThrough: '2026-09-19', previous: null };
 
-  it('9/20 실제 숫자: 남은 금액·필요 일평균·월말 예상', () => {
-    const { reached, lines } = revenueMotivation(base);
+  it('9/20 실제 숫자: 남은 금액·필요 일평균 문구는 없고, 월말 예상 %만 숫자로 나온다', () => {
+    const { reached, lines, projectedPercent, projectedPace } = revenueMotivation(base);
     expect(reached).toBe(false);
-    expect(lines).toEqual([
-      '목표까지 12,661,220원 남았어요',
-      '남은 11일 동안 하루 평균 1,151,020원이 필요해요',
-      '이 속도(일평균 2,491,515원)면 월말 예상 74,745,442원 (목표의 125%)',
-    ]);
+    expect(lines).toEqual([]);
+    expect(projectedPercent).toBe(125);
+    expect(projectedPace).toBe('onTrack');
   });
 
-  it('오늘 마감까지 들어왔으면 오늘은 남은 일수에서 뺀다', () => {
-    const { lines } = revenueMotivation({ ...base, totalRevenue: 49338780, dataThrough: '2026-09-20' });
-    expect(lines[1]).toBe('남은 10일 동안 하루 평균 1,066,122원이 필요해요');
+  it('오늘 마감까지 들어왔으면 오늘도 진행 일수에 넣어 월말 예상을 다시 잡는다', () => {
+    const { projectedPercent } = revenueMotivation({ ...base, totalRevenue: 49338780, dataThrough: '2026-09-20' });
+    expect(projectedPercent).toBe(123);
   });
 
-  it('목표 달성이면 축하 문구만(남은 금액·필요액 문구 없음)', () => {
-    const { reached, lines } = revenueMotivation({ ...base, goal: 47000000 });
+  it('목표 달성이면 축하 문구만(월말 예상은 계산하지 않는다)', () => {
+    const { reached, lines, projectedPercent } = revenueMotivation({ ...base, goal: 47000000 });
     expect(reached).toBe(true);
     expect(lines).toEqual(['🎉 목표 달성!']);
+    expect(projectedPercent).toBeNull();
   });
 
-  it('목표가 없거나 0이면 목표 관련 문구가 없다', () => {
-    expect(revenueMotivation({ ...base, goal: null }).lines).toEqual([]);
-    expect(revenueMotivation({ ...base, goal: 0 }).lines).toEqual([]);
+  it('목표가 없거나 0이면 목표 관련 문구·예상이 없다', () => {
+    expect(revenueMotivation({ ...base, goal: null })).toMatchObject({ lines: [], projectedPercent: null });
+    expect(revenueMotivation({ ...base, goal: 0 })).toMatchObject({ lines: [], projectedPercent: null });
   });
 
   it('매출 데이터가 없으면 아무것도 보여주지 않는다', () => {
     expect(revenueMotivation({ ...base, totalRevenue: null, dataThrough: null }).lines).toEqual([]);
   });
 
-  it('매월 1일(데이터 없음)에는 진행일수가 0이라 월말 예상을 내지 않고, 남은 일수는 그 달 전체', () => {
-    const { lines } = revenueMotivation({ ...base, today: '2026-09-01', totalRevenue: 0, dataThrough: null });
-    expect(lines).toEqual(['목표까지 60,000,000원 남았어요', '남은 30일 동안 하루 평균 2,000,000원이 필요해요']);
+  it('매월 1일(데이터 없음)에는 진행일수가 0이라 월말 예상을 계산하지 않는다', () => {
+    const { lines, projectedPercent } = revenueMotivation({ ...base, today: '2026-09-01', totalRevenue: 0, dataThrough: null });
+    expect(lines).toEqual([]);
+    expect(projectedPercent).toBeNull();
   });
 
-  it('말일: 오늘 마감 전에는 남은 1일, 마감이 들어오면 필요액 문구를 뺀다', () => {
+  it('말일: 오늘 마감 전/후로 진행 일수가 달라져 월말 예상도 달라진다', () => {
     const open = revenueMotivation({ ...base, today: '2026-09-30', totalRevenue: 58000000, dataThrough: '2026-09-29' });
-    expect(open.lines[0]).toBe('목표까지 2,000,000원 남았어요');
-    expect(open.lines[1]).toBe('남은 1일 동안 하루 평균 2,000,000원이 필요해요');
+    expect(open.projectedPercent).toBe(100);
+    expect(open.projectedPace).toBe('onTrack');
     const closed = revenueMotivation({ ...base, today: '2026-09-30', totalRevenue: 58000000, dataThrough: '2026-09-30' });
-    expect(closed.lines.some((l) => l.startsWith('남은'))).toBe(false);
-    expect(closed.lines.at(-1)).toBe('이 속도(일평균 1,933,333원)면 월말 예상 58,000,000원 (목표의 97%)');
+    expect(closed.projectedPercent).toBe(97);
+    expect(closed.projectedPace).toBe('behind');
   });
 
   it('지난 달을 볼 때는 달성 여부만 본다', () => {

@@ -12,8 +12,8 @@ export interface MonthlySummary {
   averageTicket: number | null;
   // 월말결산 값은 있는데 기준일이 없어 일일 마감이 합산되지 않는 옛 행이면 true(화면에 경고).
   legacyOverride: boolean;
-  // 총매출 아래에 보여줄 동기부여 문구(목표 달성 여부 + 문구 목록). 항상 모든 직원에게 보인다.
-  motivation: { reached: boolean; lines: string[] };
+  // 총매출 아래에 보여줄 동기부여 정보(목표 달성 여부 + 문구 목록 + 월말 예상%). 항상 모든 직원에게 보인다.
+  motivation: { reached: boolean; lines: string[]; projectedPercent: number | null; projectedPace: 'behind' | 'onTrack' | null };
   // 총매출 / 일평균 환자수 목표(대표원장이 입력). 없으면 null.
   totalRevenueGoal: number | null;
   avgDailyVisitsGoal: number | null;

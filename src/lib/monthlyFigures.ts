@@ -245,9 +245,13 @@ export interface RevenueMotivationInput {
 export interface RevenueMotivation {
   reached: boolean;
   lines: string[];
+  /** 지금까지의 일평균 속도로 갈 때 월말 예상 매출이 목표의 몇 %일지(반올림) — 막대에 얹는 예상
+   * 표시용 숫자다. 계산할 수 없으면(이번 달이 아니거나·목표가 없거나·이미 달성했거나·진행 0일)
+   * null. 문장으로 풀어 쓰던 "목표까지 남은 금액"·"필요한 하루 평균"은 없앴다(원장 결정,
+   * 2026-09-24: 글로 늘어놓지 말고 막대만 보고 알 수 있게). */
+  projectedPercent: number | null;
+  projectedPace: Pace | null;
 }
-
-const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 
 // 이번 달 진행 일수(달력 기준 — 한의원은 매일 진료한다). 마지막 데이터 날짜까지, 모르면
 // 어제까지(결산은 그날이 끝난 뒤 들어오므로). 오늘보다 앞선 날만 센다.
@@ -256,9 +260,8 @@ export function elapsedDaysForMonth(today: string, dataThrough: string | null): 
   return Math.max(0, dayOfMonth(today) - 1);
 }
 
-// 총매출 아래에 보여줄 동기부여 문구. 이번 달(month === today의 달)에는 남은 금액/필요
-// 일평균/월말 예상/지난달 같은 날 대비를 보여주고, 지난 달에는 목표 달성 여부만 본다.
-//  - 남은 일수 = 오늘을 포함한 이번 달 남은 날. 단 오늘 마감까지 이미 들어왔으면(dataThrough ≥ today) 오늘은 뺀다.
+// 총매출 아래에 보여줄 동기부여 문구. 이번 달(month === today의 달)에는 월말 예상(%)·지난달
+// 같은 날 대비를 보여주고, 지난 달에는 목표 달성 여부만 본다.
 //  - 현재 일평균 매출 = 총매출 ÷ 진행 일수(달력 기준). 월말 예상 = 일평균 × 그 달 일수.
 export function revenueMotivation(input: RevenueMotivationInput): RevenueMotivation {
   const { month, today, totalRevenue, goal, dataThrough, previous } = input;
@@ -266,25 +269,20 @@ export function revenueMotivation(input: RevenueMotivationInput): RevenueMotivat
   const hasGoal = goal != null && goal > 0;
   const reached = hasGoal && totalRevenue != null && totalRevenue >= goal;
   const isCurrent = today.startsWith(`${month}-`);
+  let projectedPercent: number | null = null;
+  let projectedPace: Pace | null = null;
 
   if (reached) lines.push('🎉 목표 달성!');
-  if (!isCurrent || totalRevenue == null) return { reached, lines };
+  if (!isCurrent || totalRevenue == null) return { reached, lines, projectedPercent, projectedPace };
 
   const dim = daysInMonth(month);
   const elapsed = elapsedDaysForMonth(today, dataThrough);
 
-  if (hasGoal && !reached) {
-    const remaining = goal - totalRevenue;
-    lines.push(`목표까지 ${won(remaining)} 남았어요`);
-    const remainingDays = dim - dayOfMonth(today) + (dataThrough != null && dataThrough >= today ? 0 : 1);
-    if (remainingDays > 0) {
-      lines.push(`남은 ${remainingDays}일 동안 하루 평균 ${won(Math.ceil(remaining / remainingDays))}이 필요해요`);
-    }
-    if (elapsed > 0) {
-      const dailyPace = totalRevenue / elapsed;
-      const projected = Math.round(dailyPace * dim);
-      lines.push(`이 속도(일평균 ${won(dailyPace)})면 월말 예상 ${won(projected)} (목표의 ${Math.round((projected / goal) * 100)}%)`);
-    }
+  if (hasGoal && !reached && elapsed > 0) {
+    const dailyPace = totalRevenue / elapsed;
+    const projected = dailyPace * dim;
+    projectedPercent = Math.round((projected / goal) * 100);
+    projectedPace = projectedPercent >= 100 ? 'onTrack' : 'behind';
   }
 
   if (previous && elapsed > 0) {
@@ -295,5 +293,5 @@ export function revenueMotivation(input: RevenueMotivationInput): RevenueMotivat
     }
   }
 
-  return { reached, lines };
+  return { reached, lines, projectedPercent, projectedPace };
 }

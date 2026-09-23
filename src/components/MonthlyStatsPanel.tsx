@@ -277,6 +277,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
             goal={summary.totalRevenueGoal}
             unit="원"
             pace={showPace ? revenuePace(summary.totalRevenue, summary.totalRevenueGoal, summary.month, new Date()) : null}
+            projectedPercent={summary.motivation.projectedPercent}
             footer={<RevenueNotes summary={summary} compact={compact && !large} big={large} />}
           >
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
@@ -374,6 +375,7 @@ export function StatTile({
   goal = null,
   unit = '',
   pace = null,
+  projectedPercent = null,
   title,
   footer,
 }: {
@@ -386,6 +388,8 @@ export function StatTile({
   goal?: number | null;
   unit?: string;
   pace?: 'behind' | 'onTrack' | null;
+  /** 지금 속도로 갈 때 월말 예상(목표 대비 %) — 막대 위에 옅은 색으로 얹어서 글 없이 보여준다. */
+  projectedPercent?: number | null;
   title?: string;
   footer?: ReactNode;
 }) {
@@ -408,14 +412,30 @@ export function StatTile({
         <div style={{ marginTop: compact ? 3 : 8 }}>
           <div
             style={{
+              position: 'relative',
               height: 6,
               borderRadius: 999,
               background: 'var(--color-line)',
               overflow: 'hidden',
             }}
           >
+            {/* 월말 예상(옅은 색, 목표 도달 예상이면 초록·아니면 빨강) — 실제 달성 막대가 그 위를 덮는다. */}
+            {projectedPercent != null && projectedPercent > (percent ?? 0) && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: `${Math.min(projectedPercent, 100)}%`,
+                  height: '100%',
+                  background: projectedPercent >= 100 ? 'var(--color-green)' : 'var(--color-error)',
+                  opacity: 0.3,
+                }}
+              />
+            )}
             <div
               style={{
+                position: 'absolute',
+                inset: 0,
                 width: `${Math.min(percent ?? 0, 100)}%`,
                 height: '100%',
                 background: (percent ?? 0) >= 100 ? 'var(--color-green)' : 'var(--color-brand-b)',
@@ -426,6 +446,12 @@ export function StatTile({
           <div className="muted-text" style={{ marginTop: 3, fontSize: compact ? 10 : big ? 13 : 12 }}>
             목표 {goal.toLocaleString()}
             {unit} · {percent != null ? `${percent}%` : '-'}
+            {projectedPercent != null && (
+              <span style={{ fontWeight: 700, color: projectedPercent >= 100 ? 'var(--color-green)' : 'var(--color-error)' }}>
+                {' '}
+                · 예상 {projectedPercent}%
+              </span>
+            )}
           </div>
           {pace && (
             <div

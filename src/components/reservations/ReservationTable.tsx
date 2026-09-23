@@ -43,7 +43,7 @@ const AFTER_DOCTOR_FIELDS: { key: keyof Reservation; label: string }[] = [
   { key: 'memo', label: '비고' },
 ];
 
-const RESULT_COL_WIDTH = '156px';
+const RESULT_COL_WIDTH = '120px';
 const DELETE_COL_WIDTH = '50px';
 
 // "결과": 정상이행/노쇼/취소를 고른다. 같은 걸 다시 누르면 미정으로 되돌린다(붙여넣은 명단에
@@ -54,7 +54,7 @@ const DELETE_COL_WIDTH = '50px';
 // 일일결산의 예약 정상 이행/노쇼를 여기서 직접 센다(countMarkedAttendance,
 // reservationReceptionMatch.ts) — 이름 대조보다 훨씬 정확해서, 하나라도 표시해 두면 그 값이 우선한다.
 const ATTENDANCE_OPTIONS: { value: string; label: string; color: string }[] = [
-  { value: '정상이행', label: '정상이행', color: 'var(--color-green)' },
+  { value: '정상이행', label: '정상', color: 'var(--color-green)' },
   { value: '노쇼', label: '노쇼', color: 'var(--color-error)' },
   { value: '취소', label: '취소', color: 'var(--color-muted)' },
 ];
