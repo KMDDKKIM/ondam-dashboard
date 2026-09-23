@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { DURATION_PRESETS, defaultHappyCallDate, suggestGoalCategory, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
+import { DOCTOR_NAMES, type DoctorName } from '@/lib/doctors';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
 import { PatientSearch } from './PatientSearch';
@@ -15,6 +16,7 @@ export interface PurchaseFormValues {
   patientName: string;
   chartNo: string;
   phone: string | null;
+  doctorName: string | null;
   category: string;
   productName: string;
   amount: number | null;
@@ -45,6 +47,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const [name, setName] = useState('');
   const [chartNo, setChartNo] = useState('');
   const [phone, setPhone] = useState('');
+  const [doctorName, setDoctorName] = useState(DOCTOR_NAMES[0]);
   const [category, setCategory] = useState(defaultCategory);
   const [newCategory, setNewCategory] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
@@ -88,6 +91,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
       patientName: name.trim(),
       chartNo: chartNo.trim(),
       phone: phone.trim() || null,
+      doctorName,
       category: category.trim() || '일반',
       productName: productName.trim(),
       amount: amount ? Number(amount) : null,
@@ -126,6 +130,15 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
 
       <h3 style={sectionTitle}>② 구매 내용</h3>
       <div style={fieldGrid}>
+        <Field label="진료의">
+          <select value={doctorName} onChange={(e) => setDoctorName(e.target.value as DoctorName)} className="input-field" style={inputBig}>
+            {DOCTOR_NAMES.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="구분">
           {!addingCategory ? (
             <div style={{ display: 'flex', gap: 6 }}>

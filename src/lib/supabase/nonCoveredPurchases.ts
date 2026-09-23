@@ -17,6 +17,7 @@ interface NonCoveredPurchaseRow {
   patient_name: string;
   chart_no: string;
   phone: string | null;
+  doctor_name: string | null;
   category: string;
   product_name: string;
   amount: number | null;
@@ -38,6 +39,7 @@ function rowToPurchase(row: NonCoveredPurchaseRow): NonCoveredPurchase {
     patientName: row.patient_name,
     chartNo: row.chart_no,
     phone: row.phone,
+    doctorName: row.doctor_name,
     category: row.category,
     productName: row.product_name,
     amount: row.amount != null ? Number(row.amount) : null,
@@ -107,6 +109,7 @@ export interface NewNonCoveredPurchase {
   patientName: string;
   chartNo: string;
   phone: string | null;
+  doctorName: string | null;
   category: string;
   productName: string;
   amount: number | null;
@@ -148,6 +151,7 @@ export async function createNonCoveredPurchase(
       patient_name: input.patientName,
       chart_no: input.chartNo,
       phone: input.phone,
+      doctor_name: input.doctorName,
       category: input.category,
       product_name: input.productName,
       amount: input.amount,
@@ -218,6 +222,7 @@ export interface EditableNonCoveredPurchase {
   patientName: string;
   chartNo: string;
   phone: string | null;
+  doctorName: string | null;
   category: string;
   productName: string;
   amount: number | null;
@@ -275,6 +280,7 @@ export async function updateNonCoveredPurchase(
         patient_name: patch.patientName,
         chart_no: patch.chartNo,
         phone: patch.phone,
+        doctor_name: patch.doctorName,
         category: patch.category,
         product_name: patch.productName,
         amount: patch.amount,

@@ -353,6 +353,9 @@ alter table non_covered_purchases add column if not exists happy_call_entry_id_3
 alter table non_covered_purchases add column if not exists goal_category text
   check (goal_category in ('herb', 'diet', 'special_herb', 'chuna'));
 
+-- 이 비급여를 처방/판매한 원장(src/lib/doctors.ts의 DOCTOR_NAMES, 등록 폼 드롭다운).
+alter table non_covered_purchases add column if not exists doctor_name text;
+
 -- 당일결산표 붙여넣기로 매일 채우는 날짜별 매출. daily_records(예약관리 앱 소유,
 -- RLS 전체 차단이라 이 앱은 admin 클라이언트로만 접근)와 달리 이 테이블은 이 앱
 -- 자신의 데이터라 authenticated RLS로 둔다.

@@ -1,4 +1,7 @@
-import type { DoctorName, Dose, DoseMode, Temperature } from "./types";
+import { DOCTOR_NAMES } from "@/lib/doctors";
+import type { Dose, DoseMode, Temperature } from "./types";
+
+export { DOCTOR_NAMES };
 
 export const CLINIC = {
   name: "경희온담한의원",
@@ -6,8 +9,6 @@ export const CLINIC = {
   phone: "031-205-0310",
   kakaoChatUrl: "http://pf.kakao.com/_QixblG/chat",
 };
-
-export const DOCTOR_NAMES: DoctorName[] = ["김동규", "박소은"];
 
 export const TEMPERATURES: Temperature[] = [
   "따뜻하게",

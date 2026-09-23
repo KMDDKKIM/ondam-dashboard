@@ -112,6 +112,7 @@ export interface NonCoveredPurchase {
   patientName: string;
   chartNo: string;
   phone: string | null;
+  doctorName: string | null;
   category: string;
   productName: string;
   amount: number | null;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { DURATION_PRESETS } from '@/lib/supabase/nonCoveredPurchases';
 import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
+import { DOCTOR_NAMES } from '@/lib/doctors';
 import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
 import { GOAL_CATEGORY_LABEL, formatAmount, monthDay, shortDate } from './shared';
@@ -22,6 +23,7 @@ interface Draft {
   patientName: string;
   chartNo: string;
   phone: string;
+  doctorName: string;
   category: string;
   productName: string;
   amount: string;
@@ -32,7 +34,7 @@ interface Draft {
   memo: string;
 }
 
-const HEADERS = ['구매일', '환자', '차트', '구분', '상품', '금액', '해피콜', '목표', '메모', '등록자', ''];
+const HEADERS = ['구매일', '환자', '차트', '구분', '상품', '금액', '해피콜', '목표', '메모', '진료의', '등록자', ''];
 
 // 한 줄로 깔끔하게: 모든 칸을 줄바꿈 없이 한 줄에 보여 주고, 화면이 좁으면 표를 옆으로 밀어 본다.
 const cell = { padding: '12px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap' } as const;
@@ -43,6 +45,7 @@ function toDraft(p: NonCoveredPurchase): Draft {
     patientName: p.patientName,
     chartNo: p.chartNo,
     phone: p.phone ?? '',
+    doctorName: p.doctorName ?? '',
     category: p.category,
     productName: p.productName,
     amount: p.amount != null ? String(p.amount) : '',
@@ -59,6 +62,7 @@ function toPatch(d: Draft): EditableNonCoveredPurchase {
     patientName: d.patientName.trim(),
     chartNo: d.chartNo.trim(),
     phone: d.phone.trim() || null,
+    doctorName: d.doctorName || null,
     category: d.category.trim() || '일반',
     productName: d.productName.trim(),
     amount: d.amount ? Number(d.amount) : null,
@@ -137,6 +141,16 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
             </Field>
             <Field label="휴대전화번호">
               <input value={d.phone} onChange={(e) => field('phone', e.target.value)} placeholder="선택" className="input-field" style={inputBig} />
+            </Field>
+            <Field label="진료의">
+              <select value={d.doctorName} onChange={(e) => field('doctorName', e.target.value)} className="input-field" style={inputBig}>
+                <option value="">미지정</option>
+                {DOCTOR_NAMES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="구분">
               <input value={d.category} onChange={(e) => field('category', e.target.value)} className="input-field" style={inputBig} />
@@ -245,6 +259,9 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
         </td>
         <td style={{ ...cell, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }} className="muted-text" title={p.memo ?? ''}>
           {p.memo ?? ''}
+        </td>
+        <td style={cell} className="muted-text">
+          {p.doctorName ?? '-'}
         </td>
         <td style={{ ...cell, fontSize: 13 }} className="muted-text">
           {creatorLabel(p.createdBy, staffNames)}
