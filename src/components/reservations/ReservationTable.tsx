@@ -7,6 +7,9 @@ interface ReservationTableProps {
   reservations: Reservation[];
   onChange: (rows: Reservation[]) => void;
   onSave: (rows: Reservation[]) => void;
+  /** "결과"(정상/노쇼/취소)를 누르면 바로 호출된다 — 새로고침·핀셋포인트 재조회로 잃어버리지
+   * 않도록 그 자리에서 바로 저장한다("저장" 버튼과 별개). */
+  onResultChange: (rows: Reservation[]) => void;
 }
 
 const EMPTY_ROW: Reservation = {
@@ -91,9 +94,18 @@ function AttendancePicker({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
-export function ReservationTable({ reservations, onChange, onSave }: ReservationTableProps) {
+export function ReservationTable({ reservations, onChange, onSave, onResultChange }: ReservationTableProps) {
   function updateRow(index: number, field: keyof Reservation, value: string) {
     onChange(reservations.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  }
+
+  // "결과"만 별도로: 화면 상태를 바꾸는 동시에 그 자리에서 바로 저장을 요청한다(자리 이동·재조회로
+  // 잃어버리지 않게). 시간순 재배치는 하지 않는다 — 여기서 줄 순서가 바뀌면 다른 텍스트칸을
+  // 입력하던 포커스가 엉뚱한 줄로 넘어갈 수 있다(handleTimeBlur와 같은 이유).
+  function updateResult(index: number, value: string) {
+    const updated = reservations.map((row, i) => (i === index ? { ...row, visitStatus: value } : row));
+    onChange(updated);
+    onResultChange(updated);
   }
 
   // 예약시간칸에서 포커스를 벗어나면 "930"·"9:30" 같은 입력을 "09:30"로 바꾼다. 줄 순서는 여기서
@@ -175,7 +187,7 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
                 </td>
               ))}
               <td className="no-print" style={{ padding: '1px 2px' }}>
-                <AttendancePicker value={row.visitStatus} onChange={(v) => updateRow(index, 'visitStatus', v)} />
+                <AttendancePicker value={row.visitStatus} onChange={(v) => updateResult(index, v)} />
               </td>
               <td className="no-print" style={{ padding: '2px 4px', textAlign: 'right' }}>
                 <button onClick={() => removeRow(index)} style={{ padding: '3px 7px', fontSize: 12 }}>

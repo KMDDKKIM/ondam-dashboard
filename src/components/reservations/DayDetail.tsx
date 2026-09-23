@@ -28,6 +28,10 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
   const [pendingPrint, setPendingPrint] = useState(false);
   const [syncingGrowthMate, setSyncingGrowthMate] = useState(false);
   const handledRequestId = useRef(0);
+  // "결과" 자동저장을 순서대로 처리한다 — 여러 줄을 빠르게 잇달아 누르면 저장 응답이 요청
+  // 순서와 다르게 돌아올 수 있어, 앞 저장이 끝난 뒤에만 다음 저장을 보낸다(먼저 누른 게
+  // 나중에 도착해 최신 결과를 덮어쓰는 일이 없게).
+  const resultSaveChain = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
@@ -76,11 +80,30 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
     }
   }
 
+  // "결과"(정상/노쇼/취소)를 누르면 바로 저장한다 — 날짜를 옮기거나 핀셋포인트에서 다시
+  // 가져와도 방금 누른 표시가 사라지지 않게. "저장" 버튼과 달리 조용히 처리하고(문구 없음),
+  // 실패했을 때만 알린다. 시간순 재배치는 하지 않는다(handleReservationsSave에서만).
+  function handleResultAutoSave(rows: Reservation[]) {
+    resultSaveChain.current = resultSaveChain.current.then(async () => {
+      if (!dailyRecordId) return;
+      try {
+        await replaceReservations(dailyRecordId, rows);
+        setReservations(rows);
+        setStatusMessage(null);
+      } catch {
+        setStatusMessage({ type: 'error', text: '결과 저장에 실패했어요. 다시 눌러 주세요.' });
+      }
+    });
+  }
+
   // 핀셋포인트(growth-mate.co.kr)의 정상이행/노쇼/취소를 이름으로 대조해 채운다. 서버가 이미
   // 저장까지 끝내고 최신 명단을 돌려주므로, 여기서는 화면 상태만 그 값으로 바꾼다.
   async function handleGrowthMateSync() {
     setSyncingGrowthMate(true);
     setStatusMessage(null);
+    // 방금 누른 "결과" 자동저장이 아직 진행 중이면 먼저 끝내고 나서 가져온다 — 순서가
+    // 엇갈려 방금 누른 결과가 덮어써지지 않게.
+    await resultSaveChain.current;
     try {
       const response = await fetch('/api/growth-mate-sync', {
         method: 'POST',
@@ -179,6 +202,7 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
           reservations={reservations}
           onChange={setReservations}
           onSave={handleReservationsSave}
+          onResultChange={handleResultAutoSave}
         />
       </div>
 
