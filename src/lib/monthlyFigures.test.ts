@@ -143,13 +143,15 @@ describe('computeMonthFigures', () => {
     it('기준일이 1일이거나 말일이어도 경과일수가 맞다', () => {
       const first = computeMonthFigures('2026-09', [], { totalRevenue: 100, avgDailyVisits: 10, asOfDate: '2026-09-01' }, null);
       expect(first).toMatchObject({ totalVisits: 10, avgDailyVisits: 10, dataThrough: '2026-09-01' });
+      // 9월은 30일이지만 추석 휴진일(9/24~26) 3일을 빼면 진료일 27일 → 10명 × 27일 = 270명.
       const last = computeMonthFigures('2026-09', [], { totalRevenue: 3000, avgDailyVisits: 10, asOfDate: '2026-09-30' }, null);
-      expect(last).toMatchObject({ totalVisits: 300, dataThrough: '2026-09-30' });
+      expect(last).toMatchObject({ totalVisits: 270, dataThrough: '2026-09-30' });
     });
 
     it('기준일이 그 달 밖이면 값이 깨지지 않는다(다음 달 날짜면 말일로, 이전 달이면 일일결산 전부를 더함)', () => {
+      // 말일(9/30)로 클램프되므로 위 케이스와 같은 이유로 진료일 27일 기준 270명.
       const late = computeMonthFigures('2026-09', [sept19], { totalRevenue: 100, avgDailyVisits: 10, asOfDate: '2026-10-03' }, null);
-      expect(late).toMatchObject({ totalRevenue: 100, totalVisits: 300, avgDailyVisits: 10, dataThrough: '2026-09-30' });
+      expect(late).toMatchObject({ totalRevenue: 100, totalVisits: 270, avgDailyVisits: 10, dataThrough: '2026-09-30' });
       const early = computeMonthFigures('2026-09', [sept19], { totalRevenue: 100, avgDailyVisits: 10, asOfDate: '2026-08-31' }, null);
       expect(early).toMatchObject({ totalRevenue: 1610350, totalVisits: 18, dataThrough: '2026-09-19' });
     });
@@ -188,7 +190,8 @@ describe('achievementPercent', () => {
 });
 
 describe('revenuePace', () => {
-  // 9월은 30일. 9/19 기준이면 어제까지 18일 지났으니 진도는 18/30 = 60%.
+  // 9월은 30일이지만 추석 휴진일(9/24~26) 3일을 빼면 진료일 27일. 9/19 기준이면 어제까지
+  // (휴진 전) 18일 지났으니 진도는 18/27 ≈ 66.7%.
   const today = new Date(2026, 8, 19);
 
   it('목표 진도보다 늦으면 behind', () => {
@@ -196,9 +199,9 @@ describe('revenuePace', () => {
   });
 
   it('진도에 맞거나 앞서면 onTrack, 진도의 95% 이상이면 여유로 본다', () => {
-    expect(revenuePace(36_000_000, 60_000_000, '2026-09', today)).toBe('onTrack');
-    expect(revenuePace(34_200_000, 60_000_000, '2026-09', today)).toBe('onTrack');
-    expect(revenuePace(34_000_000, 60_000_000, '2026-09', today)).toBe('behind');
+    expect(revenuePace(40_000_000, 60_000_000, '2026-09', today)).toBe('onTrack');
+    expect(revenuePace(38_000_000, 60_000_000, '2026-09', today)).toBe('onTrack');
+    expect(revenuePace(37_000_000, 60_000_000, '2026-09', today)).toBe('behind');
   });
 
   it('이번 달이 아니거나 목표·실적이 없거나 1일이면 null', () => {
@@ -210,11 +213,11 @@ describe('revenuePace', () => {
 });
 
 describe('goalPace / shortfallCount', () => {
-  const today = new Date(2026, 8, 19); // 어제까지 18일/30일 = 60%
+  const today = new Date(2026, 8, 19); // 어제까지 18일 지났고 9월 진료일은 27일(추석 3일 제외) → 18/27
 
   it('건수 목표의 진도(expected)와 상태를 돌려준다', () => {
-    expect(goalPace(3, 15, '2026-09', today)).toEqual({ status: 'behind', expected: 9 });
-    expect(goalPace(9, 15, '2026-09', today)?.status).toBe('onTrack');
+    expect(goalPace(3, 15, '2026-09', today)).toEqual({ status: 'behind', expected: 10 });
+    expect(goalPace(10, 15, '2026-09', today)?.status).toBe('onTrack');
     expect(goalPace(3, 15, '2026-08', today)).toBeNull();
   });
 
@@ -280,16 +283,17 @@ describe('revenueMotivation', () => {
   const base = { month: '2026-09', today: '2026-09-20', totalRevenue: 47338780, goal: 60000000, dataThrough: '2026-09-19', previous: null };
 
   it('9/20 실제 숫자: 남은 금액·필요 일평균 문구는 없고, 월말 예상 %만 숫자로 나온다', () => {
+    // 9월 진료일 27일(추석 3일 제외) 기준: 47,338,780 ÷ 19일 × 27일 ÷ 60,000,000 ≈ 112%.
     const { reached, lines, projectedPercent, projectedPace } = revenueMotivation(base);
     expect(reached).toBe(false);
     expect(lines).toEqual([]);
-    expect(projectedPercent).toBe(125);
+    expect(projectedPercent).toBe(112);
     expect(projectedPace).toBe('onTrack');
   });
 
   it('오늘 마감까지 들어왔으면 오늘도 진행 일수에 넣어 월말 예상을 다시 잡는다', () => {
     const { projectedPercent } = revenueMotivation({ ...base, totalRevenue: 49338780, dataThrough: '2026-09-20' });
-    expect(projectedPercent).toBe(123);
+    expect(projectedPercent).toBe(111);
   });
 
   it('목표 달성이면 축하 문구만(월말 예상은 계산하지 않는다)', () => {

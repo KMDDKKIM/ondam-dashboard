@@ -1,3 +1,4 @@
+import { countHolidaysInRange } from './clinicHolidays';
 import { currentMonthKst, diffDaysKst, todayKst } from './kst';
 
 // 일일결산 한 줄(날짜별). 내원 수를 안 넣은 옛 기록은 visitCount가 null이다.
@@ -26,6 +27,12 @@ function roundOne(n: number): number {
 export function daysInMonth(month: string): number {
   const [y, m] = month.split('-').map(Number);
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/** 'YYYY-MM' 달의 진료일수 — 달력 일수에서 그 달에 든 휴진일(추석·설)을 뺀다. */
+export function workingDaysInMonth(month: string): number {
+  const dim = daysInMonth(month);
+  return dim - countHolidaysInRange(`${month}-01`, `${month}-${String(dim).padStart(2, '0')}`);
 }
 
 /** 'YYYY-MM-DD' 의 일(1~31). */
@@ -70,7 +77,7 @@ function ticketOf(revenue: number, visits: number | null): number | null {
 //        총 내원 = 기준 내원 합계 + 기준일 이후 일일결산 내원 합계
 //        일평균 = 총 내원 ÷ (1일부터 "내원 수가 적힌 마지막 날짜"까지의 경과일수)
 //     (내원 수를 안 적은 날은 "모름"이라 내원 합계·나눗셈 일수·객단가에서 뺀다. 총매출에는 그대로 더한다.)
-//     한의원은 공휴일·주말 포함 매일 진료하므로 달력 기준 경과일수가 맞다.
+//     "경과일수"는 진료일수다 — 추석·설 휴진일(clinicHolidays.ts)은 빼고 센다(주말은 진료하므로 안 뺀다).
 //     기준일 이후 일일결산이 없으면 override의 값을 그대로 쓴다(반올림 오차를 피하려고).
 //     예) 2026-09: 27.4명 × 19일 ≈ 521명 → 9/20에 30명이 오면 (521+30) ÷ 20 = 27.6명.
 //  B) 기준일이 없는 옛 override — 예전처럼 override 값만 쓴다(일일결산은 더하지 않는다).
@@ -92,7 +99,12 @@ export function computeMonthFigures(
     const dim = daysInMonth(month);
     const monthStart = `${month}-01`;
     const asOf = override.asOfDate;
-    const clampDays = (date: string) => Math.min(dim, Math.max(0, diffDaysKst(monthStart, date) + 1));
+    // 월초부터 date까지의 달력 일수(1~dim)에서, 그 안에 든 휴진일을 뺀 진료일수.
+    const clampDays = (date: string) => {
+      const raw = Math.min(dim, Math.max(0, diffDaysKst(monthStart, date) + 1));
+      if (raw === 0) return 0;
+      return raw - countHolidaysInRange(monthStart, `${month}-${String(raw).padStart(2, '0')}`);
+    };
     const after = rows.filter((d) => d.date > asOf);
 
     const totalRevenue = override.totalRevenue + after.reduce((acc, d) => acc + d.totalRevenue, 0);
@@ -165,6 +177,8 @@ export type Pace = 'behind' | 'onTrack';
 // - 이번 달에만 의미가 있다(지난달·다음달은 null). 목표가 없어도 null.
 // - 결산·기록은 그날이 끝난 뒤 들어오므로, 오늘은 아직 없다고 보고 어제까지 지난 날
 //   (오늘 날짜 - 1)만큼의 목표 진도(expected)와 비교한다. 매월 1일은 null.
+// - 진도는 달력일이 아니라 진료일 기준이다 — 추석·설 휴진일은 "그 달의 진행률"에서도,
+//   "지금까지 지난 날"에서도 뺀다. 그래야 휴진일이 낀 달을 뒤처진 것으로 오해하지 않는다.
 // - "조금 늦다 싶으면" 알려주려고 여유는 5%만 둔다(진도의 95%에 못 미치면 behind).
 export function goalPace(
   achieved: number | null,
@@ -177,12 +191,16 @@ export function goalPace(
   // 서버(UTC)에서 먼저 그려질 때도 한국 날짜 기준으로 같은 값이 나오게 한다.
   if (month !== currentMonthKst(today)) return null;
 
-  const [y, m, d] = todayKst(today).split('-').map(Number);
-  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const [, , d] = todayKst(today).split('-').map(Number);
   const daysPassed = d - 1;
   if (daysPassed <= 0) return null;
 
-  const expected = goal * (daysPassed / daysInMonth);
+  const workingDim = workingDaysInMonth(month);
+  if (workingDim <= 0) return null;
+  const yesterday = `${month}-${String(daysPassed).padStart(2, '0')}`;
+  const workingDaysPassed = daysPassed - countHolidaysInRange(`${month}-01`, yesterday);
+
+  const expected = goal * (workingDaysPassed / workingDim);
   return { status: achieved < expected * 0.95 ? 'behind' : 'onTrack', expected };
 }
 
@@ -253,8 +271,9 @@ export interface RevenueMotivation {
   projectedPace: Pace | null;
 }
 
-// 이번 달 진행 일수(달력 기준 — 한의원은 매일 진료한다). 마지막 데이터 날짜까지, 모르면
-// 어제까지(결산은 그날이 끝난 뒤 들어오므로). 오늘보다 앞선 날만 센다.
+// 이번 달 진행 일수(달력일 기준 — "며칠째"라는 날짜 자체를 가리키는 값이라, 지난달 같은
+// 날 대비(previousSameDayTotal)에는 이 달력일 인덱스를 그대로 쓴다). 마지막 데이터 날짜까지,
+// 모르면 어제까지(결산은 그날이 끝난 뒤 들어오므로). 오늘보다 앞선 날만 센다.
 export function elapsedDaysForMonth(today: string, dataThrough: string | null): number {
   if (dataThrough) return dayOfMonth(dataThrough < today ? dataThrough : today);
   return Math.max(0, dayOfMonth(today) - 1);
@@ -262,7 +281,9 @@ export function elapsedDaysForMonth(today: string, dataThrough: string | null): 
 
 // 총매출 아래에 보여줄 동기부여 문구. 이번 달(month === today의 달)에는 월말 예상(%)·지난달
 // 같은 날 대비를 보여주고, 지난 달에는 목표 달성 여부만 본다.
-//  - 현재 일평균 매출 = 총매출 ÷ 진행 일수(달력 기준). 월말 예상 = 일평균 × 그 달 일수.
+//  - 월말 예상은 진료일 기준이다(추석·설 휴진일은 빼고 계산) — 현재 일평균 매출 = 총매출 ÷
+//    지금까지의 진료일수, 월말 예상 = 일평균 × 그 달 진료일수. 지난달 같은 날 대비는 날짜
+//    자체를 비교하는 것이라 달력일(elapsed)을 그대로 쓴다.
 export function revenueMotivation(input: RevenueMotivationInput): RevenueMotivation {
   const { month, today, totalRevenue, goal, dataThrough, previous } = input;
   const lines: string[] = [];
@@ -275,14 +296,18 @@ export function revenueMotivation(input: RevenueMotivationInput): RevenueMotivat
   if (reached) lines.push('🎉 목표 달성!');
   if (!isCurrent || totalRevenue == null) return { reached, lines, projectedPercent, projectedPace };
 
-  const dim = daysInMonth(month);
   const elapsed = elapsedDaysForMonth(today, dataThrough);
 
   if (hasGoal && !reached && elapsed > 0) {
-    const dailyPace = totalRevenue / elapsed;
-    const projected = dailyPace * dim;
-    projectedPercent = Math.round((projected / goal) * 100);
-    projectedPace = projectedPercent >= 100 ? 'onTrack' : 'behind';
+    const monthStart = `${month}-01`;
+    const workingElapsed = elapsed - countHolidaysInRange(monthStart, `${month}-${String(elapsed).padStart(2, '0')}`);
+    const workingDim = workingDaysInMonth(month);
+    if (workingElapsed > 0 && workingDim > 0) {
+      const dailyPace = totalRevenue / workingElapsed;
+      const projected = dailyPace * workingDim;
+      projectedPercent = Math.round((projected / goal) * 100);
+      projectedPace = projectedPercent >= 100 ? 'onTrack' : 'behind';
+    }
   }
 
   if (previous && elapsed > 0) {

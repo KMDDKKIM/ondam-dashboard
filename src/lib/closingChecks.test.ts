@@ -25,6 +25,12 @@ describe('missingClosingDates', () => {
   it('a closing saved for today does not count as yesterday', () => {
     expect(missingClosingDates(['2026-09-20'], '2026-09-20')).toEqual(['2026-09-19']);
   });
+
+  it('does not flag a clinic holiday (추석·설) as a missing closing', () => {
+    expect(missingClosingDates([], '2026-09-25')).toEqual([]); // 어제(9/24)가 추석 연휴 첫날
+    expect(missingClosingDates([], '2026-09-27')).toEqual([]); // 어제(9/26)도 연휴 마지막날
+    expect(missingClosingDates([], '2026-09-28')).toEqual(['2026-09-27']); // 연휴 끝나고 첫 진료일부터는 다시 확인
+  });
 });
 
 describe('missingClosingMessage', () => {
