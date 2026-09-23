@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatMonthDay } from '@/lib/closingChecks';
-import { callsRow, firstVisitRow, herbStockRow, reservationRow, type FirstVisitMissingProp, type TodayRow } from '@/lib/todayChecks';
+import { callsRow, firstVisitRow, herbStockRow, reservationRow, sortTodayRows, type FirstVisitMissingProp, type TodayRow } from '@/lib/todayChecks';
 
 export interface TodayStatusProps {
   /** 어제 마감이 없으면 [어제 날짜], 있으면 [] . null 이면 조회 실패. */
@@ -95,6 +95,7 @@ export function TodayStatus({
   }
 
   const todoCount = rows.filter((r) => r.state === 'todo').length;
+  const sortedRows = sortTodayRows(rows);
 
   return (
     <div className="card" style={{ padding: 18, marginBottom: 20 }}>
@@ -115,7 +116,7 @@ export function TodayStatus({
         </span>
       </div>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {rows.map((row) => (
+        {sortedRows.map((row) => (
           <li key={row.key} style={{ borderTop: '1px solid var(--color-line)' }}>
             <Link href={row.href} className="status-row">
               <span style={{ fontSize: 16 }}>{row.icon}</span>

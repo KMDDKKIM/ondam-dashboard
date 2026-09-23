@@ -58,3 +58,12 @@ export function herbStockRow(zeroStockCount: number | null, totalCount: number |
   if (totalCount === 0) return { ...base, text: '등록된 약재가 없어요', state: 'info', badge: '등록하기' };
   return { ...base, text: '재고가 0인 약재 없음', state: 'ok', badge: '정상' };
 }
+
+// 해야 할 일(todo)을 맨 위로, 정상(ok)을 맨 아래로 옮긴다(원장 결정, 2026-09-24) — 그 사이는
+// 확인 불가(unknown, 뭔가 잘못됐을 수 있어 todo 바로 다음)·안내(info) 순. 같은 상태끼리는
+// 원래 순서를 지킨다(Array.sort는 안정 정렬이라 매번 화면이 쓸데없이 뒤섞이지 않는다).
+const STATE_PRIORITY: Record<TodayRowState, number> = { todo: 0, unknown: 1, info: 2, ok: 3 };
+
+export function sortTodayRows(rows: readonly TodayRow[]): TodayRow[] {
+  return [...rows].sort((a, b) => STATE_PRIORITY[a.state] - STATE_PRIORITY[b.state]);
+}

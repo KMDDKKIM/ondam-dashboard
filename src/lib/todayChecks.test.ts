@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callsRow, firstVisitRow, herbStockRow, reservationRow } from './todayChecks';
+import { callsRow, firstVisitRow, herbStockRow, reservationRow, sortTodayRows, type TodayRow, type TodayRowState } from './todayChecks';
 
 describe('reservationRow', () => {
   it('저장된 명단이 있으면 인원을 안내로 보여 준다(할 일 아님)', () => {
@@ -46,6 +46,24 @@ describe('callsRow', () => {
   it('없으면 정상, 실패는 -', () => {
     expect(callsRow({ open: 0, overdue: 0 })?.state).toBe('ok');
     expect(callsRow(null)).toMatchObject({ text: '오늘 걸 해피콜 -', state: 'unknown' });
+  });
+});
+
+describe('sortTodayRows', () => {
+  const row = (key: string, state: TodayRowState): TodayRow => ({ key, icon: '', text: key, state, badge: '', href: '' });
+
+  it('할 일을 맨 위로, 정상을 맨 아래로 옮긴다', () => {
+    const rows = [row('a', 'ok'), row('b', 'todo'), row('c', 'info'), row('d', 'unknown')];
+    expect(sortTodayRows(rows).map((r) => r.key)).toEqual(['b', 'd', 'c', 'a']);
+  });
+  it('같은 상태끼리는 원래 순서를 지킨다(안정 정렬)', () => {
+    const rows = [row('a', 'ok'), row('b', 'todo'), row('c', 'ok'), row('d', 'todo')];
+    expect(sortTodayRows(rows).map((r) => r.key)).toEqual(['b', 'd', 'a', 'c']);
+  });
+  it('원본 배열을 바꾸지 않는다', () => {
+    const rows = [row('a', 'ok'), row('b', 'todo')];
+    sortTodayRows(rows);
+    expect(rows.map((r) => r.key)).toEqual(['a', 'b']);
   });
 });
 
