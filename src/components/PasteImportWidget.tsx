@@ -373,6 +373,9 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   // 대조해 나온 이름이 없을 때 true — 이 경우는 진짜 불일치가 아니라서 아래 주의 표시를 끈다.
   // 추나 인원·이름 칸을 직접 고치면 다시 정상적으로 대조한다.
   const [chunaNamesUnavailable, setChunaNamesUnavailable] = useState(false);
+  // 저장된 결산의 제외환자 수는 있는데(예: 이 기능이 생기기 전 날짜) 접수기록부의 제외 체크와
+  // 대조해 나온 이름이 없을 때 true — chunaNamesUnavailable과 같은 이유.
+  const [excludedNamesUnavailable, setExcludedNamesUnavailable] = useState(false);
   const supabase = createClient();
 
   // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
@@ -412,11 +415,10 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   // 새 결산표가 붙여넣어져 날짜가 정해지면 칸을 미리 채운다(모두 직접 고칠 수 있다).
   //  1) 그 날짜에 이미 저장해 둔 일일 결산 숫자가 있으면 그것을,
   //  2) 없으면 저장된 예약 명단과 접수기록부를 대조해서 예약·정상 이행·노쇼·취소를, 접수기록부의
-  //     추나 체크로 추나 인원·이름을 채운다,
+  //     추나 체크로 추나 인원·이름을, 접수기록부의 제외 체크로 제외환자 수·이름을 채운다,
   //  3) 한약·비급여 판매는 그 날 비급여 현황 등록분으로, 초진은 결산표의 신규환자수로.
-  // 제외환자는 명단만으로 알 수 없어 직접 입력한다.
   // 예약 명단이 새로 저장되면(reservationSync.version) 그 날짜가 지금 결산 날짜일 때만, 그리고 명단에서
-  // 나오는 칸(예약·정상 이행·노쇼·취소·추나)만 다시 채운다 — 손으로 넣은 제외환자·판매·초진 등은
+  // 나오는 칸(예약·정상 이행·노쇼·취소·추나·제외환자)만 다시 채운다 — 손으로 넣은 판매·초진 등은
   // 그대로 둔다. 이미 저장해 둔 결산이 있으면 그 값이 우선이라 아무것도 바꾸지 않는다.
   const handledSyncVersion = useRef(reservationSync.version);
   useEffect(() => {
@@ -424,6 +426,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       setClosing(EMPTY_CLOSING);
       setReceptionHint(null);
       setChunaNamesUnavailable(false);
+      setExcludedNamesUnavailable(false);
       return;
     }
     let syncOnly = false;
@@ -483,9 +486,13 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             const chunaMatched = receptionRecords.filter((r) => r.chuna);
             next.chunaCount = String(chunaMatched.length);
             next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
+            const excludedMatched = receptionRecords.filter((r) => r.excluded);
+            next.excludedCount = String(excludedMatched.length);
+            next.excludedNames = excludedMatched.map((r) => r.patientName).join(' ');
           }
           return next;
         });
+        if (receptionUsable) setExcludedNamesUnavailable(false);
         return;
       }
       const next: ClosingFields = { ...EMPTY_CLOSING, firstVisitCount: newPatientCount ? String(newPatientCount) : '' };
@@ -524,14 +531,18 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       const receptionUsable = receptionKnown && receptionRecords.length > 0;
 
       if (receptionUsable) {
-        // 추나는 예약 명단과 무관하게 접수기록부 체크만으로 채운다. 이름은 띄어쓰기로
+        // 추나·제외환자는 예약 명단과 무관하게 접수기록부 체크만으로 채운다. 이름은 띄어쓰기로
         // 구분해서 채운다(멘트에는 쉼표로 나온다).
         const chunaMatched = receptionRecords.filter((r) => r.chuna);
         next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
         next.chunaCount = String(chunaMatched.length);
+        const excludedMatched = receptionRecords.filter((r) => r.excluded);
+        next.excludedNames = excludedMatched.map((r) => r.patientName).join(' ');
+        next.excludedCount = String(excludedMatched.length);
       }
 
       let chunaNamesUnavailableNext = false;
+      let excludedNamesUnavailableNext = false;
       if (saved) {
         next.reservationCount = str(saved.reservationCount);
         next.keptCount = str(saved.keptCount);
@@ -540,10 +551,13 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         next.nextBookingCount = str(saved.nextBookingCount);
         next.chunaCount = str(saved.chunaCount);
         next.excludedCount = str(saved.excludedCount);
-        // 이 기능이 생기기 전 날짜처럼, 저장된 추나 인원은 있는데 접수기록부에 대응하는 체크가
-        // 없어 이름을 하나도 못 채웠으면 진짜 불일치가 아니다 — 주의 표시를 끈다.
+        // 이 기능이 생기기 전 날짜처럼, 저장된 추나 인원·제외환자 수는 있는데 접수기록부에
+        // 대응하는 체크가 없어 이름을 하나도 못 채웠으면 진짜 불일치가 아니다 — 주의 표시를 끈다.
         if (saved.chunaCount != null && saved.chunaCount > 0 && next.chunaNames.trim() === '') {
           chunaNamesUnavailableNext = true;
+        }
+        if (saved.excludedCount != null && saved.excludedCount > 0 && next.excludedNames.trim() === '') {
+          excludedNamesUnavailableNext = true;
         }
       } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
@@ -577,6 +591,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       if (cancelled) return;
       setReceptionHint(hint);
       setChunaNamesUnavailable(chunaNamesUnavailableNext);
+      setExcludedNamesUnavailable(excludedNamesUnavailableNext);
       setClosing(next);
     })();
     return () => {
@@ -607,7 +622,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
   // 저장된 결산의 추나 인원이 접수기록부 체크 대조로는 이름을 하나도 못 찾은 경우(이 기능이 생기기
   // 전 날짜 등)는 진짜 불일치가 아니라서 건너뛴다 — chunaNamesUnavailable 참고.
   const chunaMismatch = chunaNamesUnavailable ? null : countMismatch(n('chunaCount'), closing.chunaNames);
-  const excludedMismatch = countMismatch(n('excludedCount'), closing.excludedNames);
+  const excludedMismatch = excludedNamesUnavailable ? null : countMismatch(n('excludedCount'), closing.excludedNames);
   const referralMismatch = countMismatch(n('referralCount'), closing.referralNames);
   const reservationEntered = n('reservationCount') != null;
   const outcomeSum = (n('keptCount') ?? 0) + (n('noshowCount') ?? 0) + (n('cancelCount') ?? 0);
@@ -822,6 +837,9 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             <div>
               <label className="muted-text" style={label}>제외환자 수</label>
               {numberInput('excludedCount')}
+              <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                접수기록부의 제외 체크로 자동 입력돼요
+              </p>
             </div>
             <div>
               <label className="muted-text" style={label}>제외환자 이름</label>

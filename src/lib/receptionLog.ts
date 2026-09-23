@@ -1,12 +1,14 @@
 // 접수기록부의 순수 로직(날짜 머리글, 진료비 입력, 하루 합계). 화면/DB 코드는 따로 있다.
 
-/** "제외"는 결제 자체가 없는 경우(린다이어트 상담, 자보 환자 등) — 원장 결정, 2026-09-23. */
-export type ReceptionPayment = '현금' | '카드' | '미수' | '제외';
+/** "없음"은 결제 자체가 없는 경우(린다이어트 상담, 자보 환자 등) — 원장 결정, 2026-09-23.
+ * 처음엔 "제외"라 불렀지만, 예약률 계산에서 빼는 "제외"(ReceptionRecord.excluded)와
+ * 헷갈려서 "없음"으로 바꿨다(원장 결정, 2026-09-23). */
+export type ReceptionPayment = '현금' | '카드' | '미수' | '없음';
 export type ReceptionVisitKind = '초진' | '재초진' | '재진';
 
 export const VISIT_KINDS: ReceptionVisitKind[] = ['초진', '재초진', '재진'];
 
-export const PAYMENTS: ReceptionPayment[] = ['현금', '카드', '미수', '제외'];
+export const PAYMENTS: ReceptionPayment[] = ['현금', '카드', '미수', '없음'];
 
 export interface ReceptionRecord {
   id: string;
@@ -20,6 +22,9 @@ export interface ReceptionRecord {
   payment: ReceptionPayment | null;
   reserved: boolean;
   chuna: boolean;
+  /** 오늘 오셨지만 예약률 계산(내원환자수 − 제외환자수)에서 빼야 하는 분 — 진단서만 받아가신 분,
+   * 한약 처방전 출력만으로 잡힌 경우 등(원장 요청, 2026-09-23). */
+  excluded: boolean;
   note: string | null;
 }
 
@@ -67,9 +72,11 @@ export interface ReceptionSummary {
   cash: number;
   card: number;
   unpaid: number;
-  /** 결제 "제외"로 표시한 줄 수(린다이어트 상담·자보 환자처럼 결제를 안 하는 경우). */
-  excluded: number;
-  /** 결제 방법을 아직 고르지 않은 줄 수 — 합계 대조 전에 채워야 한다("제외"는 고른 것이라 여기 안 낀다). */
+  /** 결제 "없음"으로 표시한 줄 수(린다이어트 상담·자보 환자처럼 결제를 안 하는 경우). */
+  noPaymentCount: number;
+  /** "제외" 체크된 줄 수 — 오늘 오셨지만 예약률 계산(내원환자수 − 제외환자수)에서 빼야 하는 분. */
+  excludedCount: number;
+  /** 결제 방법을 아직 고르지 않은 줄 수 — 합계 대조 전에 채워야 한다("없음"은 고른 것이라 여기 안 낀다). */
   paymentMissing: number;
 }
 
@@ -83,19 +90,21 @@ export function summarize(records: ReceptionRecord[]): ReceptionSummary {
     cash: 0,
     card: 0,
     unpaid: 0,
-    excluded: 0,
+    noPaymentCount: 0,
+    excludedCount: 0,
     paymentMissing: 0,
   };
   for (const r of records) {
     if (r.visitKind === '초진' || r.visitKind === '재초진') s.firstVisitCount += 1;
     if (r.reserved) s.reservedCount += 1;
     if (r.chuna) s.chunaCount += 1;
+    if (r.excluded) s.excludedCount += 1;
     const fee = r.fee ?? 0;
     s.feeTotal += fee;
     if (r.payment === '현금') s.cash += fee;
     else if (r.payment === '카드') s.card += fee;
     else if (r.payment === '미수') s.unpaid += fee;
-    else if (r.payment === '제외') s.excluded += 1;
+    else if (r.payment === '없음') s.noPaymentCount += 1;
     else if (r.fee !== null) s.paymentMissing += 1;
   }
   return s;

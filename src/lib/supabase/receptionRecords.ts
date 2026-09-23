@@ -13,6 +13,7 @@ interface Row {
   payment: ReceptionPayment | null;
   reserved: boolean;
   chuna: boolean;
+  excluded: boolean;
   note: string | null;
 }
 
@@ -29,6 +30,7 @@ function rowToRecord(r: Row): ReceptionRecord {
     payment: r.payment,
     reserved: r.reserved,
     chuna: r.chuna,
+    excluded: r.excluded,
     note: r.note,
   };
 }
@@ -54,6 +56,7 @@ export interface NewReceptionRecord {
   payment: ReceptionPayment | null;
   reserved: boolean;
   chuna: boolean;
+  excluded: boolean;
   note: string | null;
   createdBy: string | null;
 }
@@ -77,6 +80,7 @@ export async function createReceptionRecord(
       payment: input.payment,
       reserved: input.reserved,
       chuna: input.chuna,
+      excluded: input.excluded,
       note: input.note,
       created_by: input.createdBy,
     })
@@ -99,6 +103,7 @@ export async function updateReceptionRecord(supabase: SupabaseClient, id: string
   if ('payment' in patch) db.payment = patch.payment;
   if ('reserved' in patch) db.reserved = patch.reserved;
   if ('chuna' in patch) db.chuna = patch.chuna;
+  if ('excluded' in patch) db.excluded = patch.excluded;
   if ('note' in patch) db.note = patch.note;
   const { data, error } = await supabase.from('reception_records').update(db).eq('id', id).select('id');
   if (error) throw error;

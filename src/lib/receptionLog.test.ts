@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { chunaPrefill, countChunaRecords, countReservedRecords, formatFee, formatLogHeader, nextBookingPrefill, normalizeBirth, parseFee, summarize, weekdayKo, type ReceptionRecord } from './receptionLog';
 
 function rec(o: Partial<ReceptionRecord>): ReceptionRecord {
-  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, chuna: false, note: null, ...o };
+  return { id: 'x', visitDate: '2026-09-21', seq: 1, visitKind: '재진', patientName: '가상환자', birthDate: null, treatment: null, fee: null, payment: null, reserved: false, chuna: false, excluded: false, note: null, ...o };
 }
 
 describe('날짜 머리글', () => {
@@ -46,7 +46,7 @@ describe('하루 합계', () => {
       rec({ fee: 1500, payment: '현금' }),
       rec({ fee: 3000, payment: '미수', visitKind: '재초진', reserved: true, chuna: true }),
     ]);
-    expect(s).toMatchObject({ count: 4, firstVisitCount: 2, reservedCount: 2, chunaCount: 2, feeTotal: 54600, cash: 1500, card: 50100, unpaid: 3000, excluded: 0, paymentMissing: 0 });
+    expect(s).toMatchObject({ count: 4, firstVisitCount: 2, reservedCount: 2, chunaCount: 2, feeTotal: 54600, cash: 1500, card: 50100, unpaid: 3000, noPaymentCount: 0, excludedCount: 0, paymentMissing: 0 });
   });
 
   it('진료비는 있는데 결제 방법이 빈 줄을 알려 준다(금액 없는 줄은 제외)', () => {
@@ -55,14 +55,19 @@ describe('하루 합계', () => {
     expect(s.feeTotal).toBe(3400);
   });
 
-  it('결제 "제외"는 고른 것으로 쳐서 결제 방법 안 고른 줄에 안 낀다(린다이어트 상담·자보 환자 등)', () => {
-    const s = summarize([rec({ fee: 2400, payment: '제외' }), rec({ fee: null, payment: '제외' }), rec({ fee: 1000, payment: '현금' })]);
-    expect(s.excluded).toBe(2);
+  it('결제 "없음"은 고른 것으로 쳐서 결제 방법 안 고른 줄에 안 낀다(린다이어트 상담·자보 환자 등)', () => {
+    const s = summarize([rec({ fee: 2400, payment: '없음' }), rec({ fee: null, payment: '없음' }), rec({ fee: 1000, payment: '현금' })]);
+    expect(s.noPaymentCount).toBe(2);
     expect(s.paymentMissing).toBe(0);
   });
 
+  it('"제외" 체크된 줄 수를 센다(결제 여부와 무관)', () => {
+    const s = summarize([rec({ excluded: true }), rec({ excluded: true, payment: '카드', fee: 1000 }), rec({ excluded: false })]);
+    expect(s.excludedCount).toBe(2);
+  });
+
   it('빈 날은 전부 0', () => {
-    expect(summarize([])).toMatchObject({ count: 0, feeTotal: 0, excluded: 0, paymentMissing: 0 });
+    expect(summarize([])).toMatchObject({ count: 0, feeTotal: 0, noPaymentCount: 0, excludedCount: 0, paymentMissing: 0 });
   });
 });
 

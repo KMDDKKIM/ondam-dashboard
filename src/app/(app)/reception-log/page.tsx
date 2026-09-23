@@ -41,6 +41,7 @@ function emptyDraft() {
     payment: null as ReceptionPayment | null,
     reserved: false,
     chuna: false,
+    excluded: false,
     note: '',
   };
 }
@@ -191,6 +192,7 @@ export default function ReceptionLogPage() {
           payment: draft.payment,
           reserved: draft.reserved,
           chuna: draft.chuna,
+          excluded: draft.excluded,
           note: draft.note.trim() || null,
           createdBy: user?.id ?? null,
         },
@@ -241,8 +243,9 @@ export default function ReceptionLogPage() {
       {error && <p className="error-text" style={{ marginBottom: 8 }}>{error}</p>}
 
       <div className="card" style={{ padding: 10, overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 920 }}>
+        <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 966 }}>
           <colgroup>
+            <col style={{ width: 46 }} />
             <col style={{ width: 46 }} />
             <col style={{ width: 46 }} />
             <col style={{ width: 44 }} />
@@ -257,8 +260,8 @@ export default function ReceptionLogPage() {
           </colgroup>
           <thead>
             <tr style={{ background: '#f0f0f0' }}>
-              {['예약', '추나', '번호', '구분', '성명', '생년월일', '치료내역', '진료비', '결제', '비고', ''].map((h, i) => (
-                <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: i === 0 || i === 1 || i === 2 ? 'center' : 'left', fontSize: 13 }}>
+              {['예약', '추나', '제외', '번호', '구분', '성명', '생년월일', '치료내역', '진료비', '결제', '비고', ''].map((h, i) => (
+                <th key={`${h}-${i}`} style={{ ...cellStyle, textAlign: i === 0 || i === 1 || i === 2 || i === 3 ? 'center' : 'left', fontSize: 13 }}>
                   {h}
                 </th>
               ))}
@@ -282,6 +285,15 @@ export default function ReceptionLogPage() {
                     checked={r.chuna}
                     onChange={(e) => save(r.id, { chuna: e.target.checked })}
                     aria-label={`${r.patientName} 추나 여부`}
+                    style={{ width: 18, height: 18 }}
+                  />
+                </td>
+                <td style={{ ...cellStyle, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={r.excluded}
+                    onChange={(e) => save(r.id, { excluded: e.target.checked })}
+                    aria-label={`${r.patientName} 예약률 제외 여부`}
                     style={{ width: 18, height: 18 }}
                   />
                 </td>
@@ -346,6 +358,15 @@ export default function ReceptionLogPage() {
                   style={{ width: 18, height: 18 }}
                 />
               </td>
+              <td style={{ ...cellStyle, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={draft.excluded}
+                  onChange={(e) => setDraft((d) => ({ ...d, excluded: e.target.checked }))}
+                  aria-label="예약률 제외 여부"
+                  style={{ width: 18, height: 18 }}
+                />
+              </td>
               <td style={{ ...cellStyle, textAlign: 'center', color: '#999' }}>{records.length + 1}</td>
               <td style={cellStyle}>
                 <select value={draft.visitKind} onChange={(e) => setDraft((d) => ({ ...d, visitKind: e.target.value as ReceptionVisitKind }))} style={selectStyle}>
@@ -398,8 +419,8 @@ export default function ReceptionLogPage() {
         </table>
         {loading && <p className="muted-text" style={{ marginTop: 8, fontSize: 13 }}>불러오는 중…</p>}
         <p className="muted-text" style={{ marginTop: 8, fontSize: 12 }}>
-          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 추나 칸의 체크는 그날 추나 치료를 받았는지예요(일일결산의 추나 인원·이름이 여기서 자동으로 채워져요). 구분은 초진 · 재초진 · 재진 중에서 골라요.
-          결제의 &quot;제외&quot;는 린다이어트 상담·자보 환자처럼 결제 자체가 없는 경우예요.
+          성명만 적고 Enter를 누르면 추가돼요. 예약 칸의 체크는 종이 접수 노트의 번호 왼쪽 체크(다음 예약을 잡았는지)예요. 추나 칸의 체크는 그날 추나 치료를 받았는지예요(일일결산의 추나 인원·이름이 여기서 자동으로 채워져요). 제외 칸은 오늘 오셨지만 예약률 계산에서 빼야 하는 분이에요 — 진단서만 받아가신 분, 실제로 안 오셨는데 한약 처방전 출력으로 잡힌 경우 등(일일결산의 제외환자 수·이름도 여기서 자동으로 채워져요). 구분은 초진 · 재초진 · 재진 중에서 골라요.
+          결제의 &quot;없음&quot;은 린다이어트 상담·자보 환자처럼 결제 자체가 없는 경우예요.
         </p>
       </div>
 
@@ -413,13 +434,18 @@ export default function ReceptionLogPage() {
         <span>
           추나 <b>{summary.chunaCount}</b>
         </span>
+        {summary.excludedCount > 0 && (
+          <span>
+            제외 <b>{summary.excludedCount}</b>
+          </span>
+        )}
         <span>
           진료비 합계 <b>{formatFee(summary.feeTotal) || 0}</b>원
         </span>
         <span>현금 {formatFee(summary.cash) || 0}</span>
         <span>카드 {formatFee(summary.card) || 0}</span>
         <span>미수 {formatFee(summary.unpaid) || 0}</span>
-        {summary.excluded > 0 && <span>제외 {summary.excluded}건</span>}
+        {summary.noPaymentCount > 0 && <span>결제없음 {summary.noPaymentCount}건</span>}
         {summary.paymentMissing > 0 && (
           <span style={{ color: '#b3261e', fontWeight: 600 }}>결제 방법 안 고른 줄 {summary.paymentMissing}건</span>
         )}
