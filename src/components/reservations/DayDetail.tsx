@@ -28,10 +28,11 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
   const [pendingPrint, setPendingPrint] = useState(false);
   const [syncingGrowthMate, setSyncingGrowthMate] = useState(false);
   const handledRequestId = useRef(0);
-  // "결과" 자동저장을 순서대로 처리한다 — 여러 줄을 빠르게 잇달아 누르면 저장 응답이 요청
-  // 순서와 다르게 돌아올 수 있어, 앞 저장이 끝난 뒤에만 다음 저장을 보낸다(먼저 누른 게
-  // 나중에 도착해 최신 결과를 덮어쓰는 일이 없게).
-  const resultSaveChain = useRef<Promise<void>>(Promise.resolve());
+  // 예약자 명단은 저장 버튼이 없다 — 칸을 벗어나거나 결과·삭제·행 추가를 하면 그 자리에서
+  // 바로 저장된다. 여러 칸을 빠르게 옮겨 다녀도 저장 응답이 요청 순서와 다르게 돌아올 수
+  // 있어, 앞 저장이 끝난 뒤에만 다음 저장을 보낸다(먼저 누른 게 나중에 도착해 최신 값을
+  // 덮어쓰는 일이 없게).
+  const autoSaveChain = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let cancelled = false;
@@ -62,36 +63,21 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
     };
   }, [date]);
 
-  async function handleReservationsSave(rows: Reservation[]) {
-    if (!dailyRecordId) return;
-    try {
-      await replaceReservations(dailyRecordId, rows);
-      setReservations(rows);
-      setStatusMessage({ type: 'success', text: '저장되었습니다.' });
-      // 저장은 이미 끝났으니, 사이드바 목록 새로고침이 실패해도 저장 성공
-      // 메시지를 덮어쓰지 않는다.
-      await Promise.resolve(onSaved()).catch(() => {});
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
-      setStatusMessage({
-        type: 'error',
-        text: `예약자 명단 저장에 실패했습니다.${detail ? ` (${detail})` : ''}`,
-      });
-    }
-  }
-
-  // "결과"(정상/노쇼/취소)를 누르면 바로 저장한다 — 날짜를 옮기거나 핀셋포인트에서 다시
-  // 가져와도 방금 누른 표시가 사라지지 않게. "저장" 버튼과 달리 조용히 처리하고(문구 없음),
-  // 실패했을 때만 알린다. 시간순 재배치는 하지 않는다(handleReservationsSave에서만).
-  function handleResultAutoSave(rows: Reservation[]) {
-    resultSaveChain.current = resultSaveChain.current.then(async () => {
+  // 칸을 벗어나거나(텍스트) 바로 바뀌면(결과·삭제·행 추가) 그 자리에서 저장한다 — 저장
+  // 버튼이 없다. 조용히 처리하고(문구 없음), 실패했을 때만 알린다. rows는 ReservationTable이
+  // "화면에 보일 값"과 별개로 넘기는 "저장할 값"이라 그대로 신뢰하되, 화면 상태(onChange로
+  // 이미 반영됨)는 여기서 다시 덮어쓰지 않는다 — 행 추가처럼 두 값이 다른 경우
+  // (방금 추가한 빈 줄은 화면엔 있지만 아직 저장 대상이 아님) 화면의 빈 줄이 사라지는
+  // 사고를 막기 위해서다.
+  function handleAutoSave(rows: Reservation[]) {
+    autoSaveChain.current = autoSaveChain.current.then(async () => {
       if (!dailyRecordId) return;
       try {
         await replaceReservations(dailyRecordId, rows);
-        setReservations(rows);
         setStatusMessage(null);
+        await Promise.resolve(onSaved()).catch(() => {});
       } catch {
-        setStatusMessage({ type: 'error', text: '결과 저장에 실패했어요. 다시 눌러 주세요.' });
+        setStatusMessage({ type: 'error', text: '저장하지 못했어요. 다시 시도해 주세요.' });
       }
     });
   }
@@ -101,9 +87,9 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
   async function handleGrowthMateSync() {
     setSyncingGrowthMate(true);
     setStatusMessage(null);
-    // 방금 누른 "결과" 자동저장이 아직 진행 중이면 먼저 끝내고 나서 가져온다 — 순서가
-    // 엇갈려 방금 누른 결과가 덮어써지지 않게.
-    await resultSaveChain.current;
+    // 방금 한 자동저장이 아직 진행 중이면 먼저 끝내고 나서 가져온다 — 순서가 엇갈려
+    // 방금 입력한 값이 덮어써지지 않게.
+    await autoSaveChain.current;
     try {
       const response = await fetch('/api/growth-mate-sync', {
         method: 'POST',
@@ -201,8 +187,7 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
         <ReservationTable
           reservations={reservations}
           onChange={setReservations}
-          onSave={handleReservationsSave}
-          onResultChange={handleResultAutoSave}
+          onAutoSave={handleAutoSave}
         />
       </div>
 

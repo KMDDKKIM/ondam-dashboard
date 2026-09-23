@@ -6,10 +6,9 @@ import { normalizeTimeLabel, sortReservationsByTime } from '@/lib/reservations/t
 interface ReservationTableProps {
   reservations: Reservation[];
   onChange: (rows: Reservation[]) => void;
-  onSave: (rows: Reservation[]) => void;
-  /** "결과"(정상/노쇼/취소)를 누르면 바로 호출된다 — 새로고침·핀셋포인트 재조회로 잃어버리지
-   * 않도록 그 자리에서 바로 저장한다("저장" 버튼과 별개). */
-  onResultChange: (rows: Reservation[]) => void;
+  /** 저장 버튼이 없다 — 칸에서 포커스를 벗어나거나(텍스트칸) 바로 바뀌면(결과·삭제·행 추가)
+   * 그 자리에서 호출된다. */
+  onAutoSave: (rows: Reservation[]) => void;
 }
 
 const EMPTY_ROW: Reservation = {
@@ -94,42 +93,48 @@ function AttendancePicker({ value, onChange }: { value: string; onChange: (v: st
   );
 }
 
-export function ReservationTable({ reservations, onChange, onSave, onResultChange }: ReservationTableProps) {
+export function ReservationTable({ reservations, onChange, onAutoSave }: ReservationTableProps) {
   function updateRow(index: number, field: keyof Reservation, value: string) {
     onChange(reservations.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   }
 
-  // "결과"만 별도로: 화면 상태를 바꾸는 동시에 그 자리에서 바로 저장을 요청한다(자리 이동·재조회로
-  // 잃어버리지 않게). 시간순 재배치는 하지 않는다 — 여기서 줄 순서가 바뀌면 다른 텍스트칸을
-  // 입력하던 포커스가 엉뚱한 줄로 넘어갈 수 있다(handleTimeBlur와 같은 이유).
+  // 텍스트칸에서 포커스를 벗어나면 그 자리에서 바로 저장한다(저장 버튼이 없다). 예약시간칸은
+  // 저장 전에 "930"·"9:30" 같은 입력을 "09:30"로 먼저 맞춘다. 줄 순서는 여기서 바꾸지 않는다
+  // — 입력 중(포커스가 표 안에 있는 동안) 줄을 옮기면 key={index} 재사용 때문에 다른 예약자
+  // 칸에 포커스가 넘어가 엉뚱한 값을 덮어쓸 수 있다(직접 테스트로 확인됨). 시간순 재배치는
+  // "행 추가"를 누를 때(포커스가 표를 벗어난 뒤)만 한다.
+  function handleFieldBlur(index: number, field: keyof Reservation) {
+    let rows = reservations;
+    if (field === 'timeLabel') {
+      const normalized = normalizeTimeLabel(reservations[index].timeLabel);
+      if (normalized !== reservations[index].timeLabel) {
+        rows = reservations.map((row, i) => (i === index ? { ...row, timeLabel: normalized } : row));
+        onChange(rows);
+      }
+    }
+    onAutoSave(rows);
+  }
+
+  // "결과"만 별도로: 화면 상태를 바꾸는 동시에 그 자리에서 바로 저장을 요청한다.
   function updateResult(index: number, value: string) {
     const updated = reservations.map((row, i) => (i === index ? { ...row, visitStatus: value } : row));
     onChange(updated);
-    onResultChange(updated);
-  }
-
-  // 예약시간칸에서 포커스를 벗어나면 "930"·"9:30" 같은 입력을 "09:30"로 바꾼다. 줄 순서는 여기서
-  // 바로 바꾸지 않는다 — 입력 중(포커스가 표 안에 있는 동안) 줄을 옮기면 key={index} 재사용 때문에
-  // 다른 예약자 칸에 포커스가 넘어가 엉뚱한 값을 덮어쓸 수 있다(직접 테스트로 확인됨). 실제 재배치는
-  // "예약자 명단 저장"을 누를 때(포커스가 표를 완전히 벗어난 뒤) 한 번에 한다.
-  function handleTimeBlur(index: number) {
-    const normalized = normalizeTimeLabel(reservations[index].timeLabel);
-    if (normalized === reservations[index].timeLabel) return;
-    updateRow(index, 'timeLabel', normalized);
+    onAutoSave(updated);
   }
 
   function removeRow(index: number) {
-    onChange(reservations.filter((_, i) => i !== index));
+    const updated = reservations.filter((_, i) => i !== index);
+    onChange(updated);
+    onAutoSave(updated);
   }
 
+  // 새 줄을 추가하기 전에, 지금까지 적어 둔 시간 기준으로 먼저 자리를 잡는다 — 이 버튼을 누르는
+  // 시점은 표 안 어떤 칸도 입력 중이 아니라서(포커스가 이 버튼에 있다) 안전하게 재배치할 수 있다.
+  // 방금 추가한 빈 줄 자체는 아직 저장하지 않는다(이름 등을 적고 칸을 벗어날 때 저장된다).
   function addRow() {
-    onChange([...reservations, { ...EMPTY_ROW }]);
-  }
-
-  function handleSave() {
     const sorted = sortReservationsByTime(reservations);
-    onChange(sorted);
-    onSave(sorted);
+    onChange([...sorted, { ...EMPTY_ROW }]);
+    onAutoSave(sorted);
   }
 
   return (
@@ -172,7 +177,7 @@ export function ReservationTable({ reservations, onChange, onSave, onResultChang
                   <input
                     value={row[field.key] as string}
                     onChange={(event) => updateRow(index, field.key, event.target.value)}
-                    onBlur={field.key === 'timeLabel' ? () => handleTimeBlur(index) : undefined}
+                    onBlur={() => handleFieldBlur(index, field.key)}
                     style={{ fontSize: 13, padding: '3px 4px' }}
                   />
                 </td>
@@ -182,6 +187,7 @@ export function ReservationTable({ reservations, onChange, onSave, onResultChang
                   <input
                     value={row[field.key] as string}
                     onChange={(event) => updateRow(index, field.key, event.target.value)}
+                    onBlur={() => handleFieldBlur(index, field.key)}
                     style={{ fontSize: 13, padding: '3px 4px' }}
                   />
                 </td>
@@ -201,12 +207,6 @@ export function ReservationTable({ reservations, onChange, onSave, onResultChang
       <div className="no-print">
         <button onClick={addRow} style={{ marginTop: 8 }}>
           행 추가
-        </button>
-        <button
-          onClick={handleSave}
-          style={{ marginTop: 8, marginLeft: 8, background: 'var(--color-teal-deep)', color: '#fff' }}
-        >
-          예약자 명단 저장
         </button>
       </div>
     </div>
