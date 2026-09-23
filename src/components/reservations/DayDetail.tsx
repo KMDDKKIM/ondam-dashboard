@@ -26,6 +26,7 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
   const [candidates, setCandidates] = useState<FirstVisitCandidateDto[] | null>(null);
   const [printing, setPrinting] = useState(false);
   const [pendingPrint, setPendingPrint] = useState(false);
+  const [syncingGrowthMate, setSyncingGrowthMate] = useState(false);
   const handledRequestId = useRef(0);
 
   useEffect(() => {
@@ -71,6 +72,33 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
         type: 'error',
         text: `예약자 명단 저장에 실패했습니다.${detail ? ` (${detail})` : ''}`,
       });
+    }
+  }
+
+  // 핀셋포인트(growth-mate.co.kr)의 정상이행/노쇼/취소를 이름으로 대조해 채운다. 서버가 이미
+  // 저장까지 끝내고 최신 명단을 돌려주므로, 여기서는 화면 상태만 그 값으로 바꾼다.
+  async function handleGrowthMateSync() {
+    setSyncingGrowthMate(true);
+    setStatusMessage(null);
+    try {
+      const response = await fetch('/api/growth-mate-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? '가져오지 못했습니다.');
+      setReservations(body.reservations as Reservation[]);
+      const unmatched = (body.unmatchedNames as string[]) ?? [];
+      const parts = [`${body.changedCount}명 결과를 반영했어요.`];
+      if (unmatched.length > 0) parts.push(`이름을 못 찾은 환자: ${unmatched.join(', ')}`);
+      setStatusMessage({ type: 'success', text: parts.join(' ') });
+      await Promise.resolve(onSaved()).catch(() => {});
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      setStatusMessage({ type: 'error', text: detail || '핀셋포인트에서 가져오지 못했습니다.' });
+    } finally {
+      setSyncingGrowthMate(false);
     }
   }
 
@@ -127,6 +155,15 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
       </h2>
       <button className="no-print" onClick={() => void startPrint()} disabled={printing} style={{ marginBottom: 12 }}>
         {printing ? '준비 중...' : '인쇄'}
+      </button>
+      <button
+        className="no-print"
+        onClick={() => void handleGrowthMateSync()}
+        disabled={syncingGrowthMate}
+        title="핀셋포인트(growth-mate.co.kr)의 정상이행/노쇼/취소를 이름으로 대조해 채워요"
+        style={{ marginBottom: 12, marginLeft: 8 }}
+      >
+        {syncingGrowthMate ? '가져오는 중...' : '핀셋포인트에서 결과 가져오기'}
       </button>
       {statusMessage && (
         <p
