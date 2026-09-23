@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchAttendance } from './reservationReceptionMatch';
+import { countMarkedAttendance, matchAttendance } from './reservationReceptionMatch';
 
 function res(patientName: string, visitStatus = '내원') {
   return { patientName, visitStatus };
@@ -54,5 +54,30 @@ describe('예약·접수기록부 대조', () => {
     const result = matchAttendance(reservations, receptionNames);
     // 손 계산: kept = 3(홍길동·성춘향·서태웅), cancel = 2(이몽룡·채치수), noshow = 6 - 3 - 2 = 1(강백호)
     expect(result).toEqual({ keptCount: 3, cancelCount: 2, noshowCount: 1 });
+  });
+});
+
+describe('countMarkedAttendance', () => {
+  it('아무 것도 표시가 안 돼 있으면 null(이름 대조로 넘긴다)', () => {
+    expect(countMarkedAttendance([res('홍길동', ''), res('성춘향', '취소')])).toBeNull();
+  });
+
+  it('하나라도 정상이행/노쇼 표시가 있으면 직접 센다', () => {
+    const result = countMarkedAttendance([
+      res('홍길동', '정상이행'),
+      res('성춘향', '노쇼'),
+      res('이몽룡', '취소'),
+      res('강백호', ''), // 아직 미정 — 어느 쪽에도 안 낀다
+    ]);
+    expect(result).toEqual({ keptCount: 1, noshowCount: 1 });
+  });
+
+  it('전원 정상이행이면 노쇼 0', () => {
+    expect(countMarkedAttendance([res('홍길동', '정상이행'), res('성춘향', '정상이행')])).toEqual({ keptCount: 2, noshowCount: 0 });
+  });
+
+  it('붙여넣은 표의 기본값 "내원"만으로는 표시로 치지 않는다(직접 눌러야만)', () => {
+    // OK차트 예약표는 취소만 아니면 항상 '내원'이라고 적어 두므로, 방문 전 명단은 이게 전부 '내원'이다.
+    expect(countMarkedAttendance([res('홍길동', '내원'), res('성춘향', '내원')])).toBeNull();
   });
 });

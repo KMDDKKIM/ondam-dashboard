@@ -14,7 +14,7 @@ import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/secti
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
-import { matchAttendance } from '@/lib/reservationReceptionMatch';
+import { countMarkedAttendance, matchAttendance } from '@/lib/reservationReceptionMatch';
 import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
@@ -468,10 +468,18 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             reservationCount: String(rows.length),
             cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
           };
-          if (receptionUsable) {
+          // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서) —
+          // 없으면 예전처럼 접수기록부 이름 대조로 채운다.
+          const marked = countMarkedAttendance(rows);
+          if (marked) {
+            next.keptCount = String(marked.keptCount);
+            next.noshowCount = String(marked.noshowCount);
+          } else if (receptionUsable) {
             const attendance = matchAttendance(rows, receptionRecords.map((r) => r.patientName));
             next.keptCount = String(attendance.keptCount);
             next.noshowCount = String(attendance.noshowCount);
+          }
+          if (receptionUsable) {
             const chunaMatched = receptionRecords.filter((r) => r.chuna);
             next.chunaCount = String(chunaMatched.length);
             next.chunaNames = chunaMatched.map((r) => r.patientName).join(' ');
@@ -540,9 +548,14 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
         next.cancelCount = String(listRows.filter((r) => r.visitStatus === '취소').length);
-        // 정상 이행/노쇼는 접수기록부와 이름을 대조해서 센다 — 못 읽었거나 접수기록부가 비어
-        // 있으면 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
-        if (receptionUsable) {
+        // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서).
+        // 없으면 접수기록부와 이름을 대조해서 센다 — 못 읽었거나 접수기록부가 비어 있으면
+        // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
+        const marked = countMarkedAttendance(listRows);
+        if (marked) {
+          next.keptCount = String(marked.keptCount);
+          next.noshowCount = String(marked.noshowCount);
+        } else if (receptionUsable) {
           const attendance = matchAttendance(listRows, receptionRecords.map((r) => r.patientName));
           next.keptCount = String(attendance.keptCount);
           next.noshowCount = String(attendance.noshowCount);

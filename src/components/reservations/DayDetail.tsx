@@ -122,7 +122,9 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
 
   return (
     <div className="day-detail" style={{ padding: 12, flex: 1 }}>
-      <h2 className="no-print">{date}</h2>
+      <h2 className="no-print">
+        {date} {reservations.length > 0 ? `· 예약 ${reservations.length}명` : ''}
+      </h2>
       <button className="no-print" onClick={() => void startPrint()} disabled={printing} style={{ marginBottom: 12 }}>
         {printing ? '준비 중...' : '인쇄'}
       </button>

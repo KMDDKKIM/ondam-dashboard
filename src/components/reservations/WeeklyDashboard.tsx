@@ -35,6 +35,7 @@ export function WeeklyDashboard({ records, summary, isOwner, rates }: WeeklyDash
             initial={summary}
             isOwner={isOwner}
             compact
+            showPace={false}
             extraTiles={
               <>
                 <StatTile label="이번 주 예약률" compact title="이번 주 예약 정상 이행 ÷ (내원환자수 − 제외환자수)">

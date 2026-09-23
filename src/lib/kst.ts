@@ -37,3 +37,9 @@ export function kstDateOf(iso: string): string {
 export function kstTimeOf(iso: string): string {
   return new Date(new Date(iso).getTime() + KST_OFFSET_MS).toISOString().slice(11, 16);
 }
+
+/** YYYY-MM-DD → "26.9.23"(두 자리 연도, 앞자리 0 없는 월·일) — 좁은 자리에 날짜를 줄여 보여줄 때. */
+export function shortDateKo(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return `${String(y).slice(-2)}.${m}.${d}`;
+}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
-import { currentMonthKst } from '@/lib/kst';
+import { currentMonthKst, shortDateKo } from '@/lib/kst';
 import { groupRecordsByMonth, isMonthOpen, monthOf } from '@/lib/reservations/monthGroups';
 
 interface SidebarProps {
@@ -43,7 +43,7 @@ export function Sidebar({
     <aside
       className="no-print"
       style={{
-        width: 160,
+        width: 120,
         borderRight: '1px solid var(--color-line)',
         background: 'var(--color-bg-2)',
         padding: 8,
@@ -111,8 +111,7 @@ export function Sidebar({
                         borderRadius: 4,
                       }}
                     >
-                      {record.date}
-                      {record.reservationRowCount > 0 ? ` (예약 ${record.reservationRowCount}명)` : ''}
+                      {shortDateKo(record.date)}
                     </button>
                   </li>
                 ))}

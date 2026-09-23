@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentMonthKst, todayKst, addDaysKst, diffDaysKst, kstDateOf, kstTimeOf } from './kst';
+import { currentMonthKst, todayKst, addDaysKst, diffDaysKst, kstDateOf, kstTimeOf, shortDateKo } from './kst';
 
 describe('todayKst', () => {
   it('uses the Seoul date, not the UTC date', () => {
@@ -50,6 +50,14 @@ describe('kstDateOf / kstTimeOf', () => {
     expect(kstTimeOf('2026-09-20T16:30:00Z')).toBe('01:30');
     expect(kstDateOf('2026-09-20T05:00:00+00:00')).toBe('2026-09-20');
     expect(kstTimeOf('2026-09-20T05:00:00+00:00')).toBe('14:00');
+  });
+});
+
+describe('shortDateKo', () => {
+  it('두 자리 연도, 앞자리 0 없는 월·일로 줄인다', () => {
+    expect(shortDateKo('2026-09-23')).toBe('26.9.23');
+    expect(shortDateKo('2026-01-05')).toBe('26.1.5');
+    expect(shortDateKo('2026-12-31')).toBe('26.12.31');
   });
 });
 

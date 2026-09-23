@@ -47,3 +47,30 @@ export function matchAttendance(
 
   return { keptCount, cancelCount, noshowCount };
 }
+
+export interface MarkedAttendance {
+  keptCount: number;
+  noshowCount: number;
+}
+
+/**
+ * 예약자 명단 화면에서 직접 표시한 정상이행/노쇼로 직접 센다(취소는 원래도 명단 자체 값을
+ * 그대로 썼으니 여기 다시 안 건드린다 — 위 matchAttendance와 같은 방식으로 계속 잰다).
+ * "정상이행"은 붙여넣은 표의 '내원' 값과 일부러 다른 문자열이다 — OK차트 예약표는 취소만
+ * 아니면 방문 전부터 그 칸에 항상 '내원'이라고 적어 두므로(실제 방문 여부와 무관한 기본값),
+ * 그대로 정상이행으로 세면 하루가 시작하기도 전에 예약 전원이 정상이행으로 잡힌다. 그래서
+ * 직원이 예약자 명단 화면에서 직접 눌러야만 이 값이 붙는다(ReservationTable.tsx).
+ * 하나도 안 표시돼 있으면 null — 그러면 호출하는 쪽에서 matchAttendance(이름 대조)로 채운다
+ * (원장 결정, 2026-09-24: 직접 표시가 이름 대조보다 정확하니 있으면 그걸 우선한다).
+ */
+export function countMarkedAttendance(reservations: { visitStatus: string }[]): MarkedAttendance | null {
+  const hasMarked = reservations.some((r) => r.visitStatus === '정상이행' || r.visitStatus === '노쇼');
+  if (!hasMarked) return null;
+  let keptCount = 0;
+  let noshowCount = 0;
+  for (const r of reservations) {
+    if (r.visitStatus === '정상이행') keptCount += 1;
+    else if (r.visitStatus === '노쇼') noshowCount += 1;
+  }
+  return { keptCount, noshowCount };
+}
