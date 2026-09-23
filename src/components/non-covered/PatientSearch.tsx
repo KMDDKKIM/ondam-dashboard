@@ -1,32 +1,40 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 
 interface Props {
+  value: string;
+  onChange: (name: string) => void;
   knownPatients: KnownPatient[];
   onPick: (patient: KnownPatient) => void;
+  className?: string;
+  style?: CSSProperties;
 }
 
-// 기존 구매 기록에서 이름/차트번호로 환자를 찾아 누르면 폼에 자동 입력한다.
-export function PatientSearch({ knownPatients, onPick }: Props) {
-  const [search, setSearch] = useState('');
+// 환자 성함칸 자체가 검색칸이다 — 이름(또는 차트번호)을 치면 기존 구매 기록에서 찾아 아래에
+// 보여주고, 눌러서 고르면 차트번호·연락처까지 자동으로 채운다. 동명이인은 차트번호가 다르면
+// 후보에 따로 뜬다(listKnownPatients가 차트번호로 구분해 둔다) — 아무 후보도 안 누르고 계속
+// 입력하면 그냥 새 환자로 등록된다. 차트번호가 다르면 같은 이름이어도 별개 후보라 헷갈리지 않는다.
+export function PatientSearch({ value, onChange, knownPatients, onPick, className, style }: Props) {
+  const [open, setOpen] = useState(false);
 
-  const matches = useMemo(() => {
-    const q = search.trim();
-    if (!q) return [];
-    return knownPatients
-      .filter((p) => p.patientName.includes(q) || p.chartNo.includes(q))
-      .slice(0, 8);
-  }, [search, knownPatients]);
+  const q = value.trim();
+  const matches = open && q ? knownPatients.filter((p) => p.patientName.includes(q) || p.chartNo.includes(q)).slice(0, 8) : [];
 
   return (
-    <div style={{ position: 'relative', marginBottom: 10 }}>
+    <div style={{ position: 'relative' }}>
       <input
-        placeholder="환자 검색 (이름/차트번호) — 있으면 눌러서 자동 입력"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="input-field"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className={className}
+        style={style}
+        autoComplete="off"
       />
       {matches.length > 0 && (
         <div
@@ -37,9 +45,10 @@ export function PatientSearch({ knownPatients, onPick }: Props) {
             <button
               key={p.chartNo}
               type="button"
+              onMouseDown={(e) => e.preventDefault()} // 이 클릭이 input의 blur보다 먼저 처리되게
               onClick={() => {
                 onPick(p);
-                setSearch('');
+                setOpen(false);
               }}
               style={{
                 display: 'block',
@@ -56,6 +65,7 @@ export function PatientSearch({ knownPatients, onPick }: Props) {
               <strong>{p.patientName}</strong>{' '}
               <span className="muted-text">
                 {p.chartNo}
+                {p.phone ? ` · ${p.phone}` : ''}
               </span>
             </button>
           ))}

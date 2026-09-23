@@ -135,6 +135,9 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
             <Field label="차트번호 *">
               <input value={d.chartNo} onChange={(e) => field('chartNo', e.target.value)} className="input-field" style={inputBig} />
             </Field>
+            <Field label="휴대전화번호">
+              <input value={d.phone} onChange={(e) => field('phone', e.target.value)} placeholder="선택" className="input-field" style={inputBig} />
+            </Field>
             <Field label="구분">
               <input value={d.category} onChange={(e) => field('category', e.target.value)} className="input-field" style={inputBig} />
             </Field>

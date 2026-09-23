@@ -6,6 +6,7 @@ import {
   createNonCoveredPurchase,
   defaultHappyCallDate,
   deleteNonCoveredPurchase,
+  listKnownPatients,
   listNonCoveredPurchases,
   updateNonCoveredPurchase,
 } from './nonCoveredPurchases';
@@ -108,6 +109,21 @@ function purchase(extra: Partial<NonCoveredPurchase> = {}): NonCoveredPurchase {
     ...extra,
   };
 }
+
+describe('listKnownPatients', () => {
+  it('차트번호별로 중복을 없앤다', () => {
+    const rows = [purchase({ chartNo: '100', patientName: '홍길동' }), purchase({ chartNo: '100', patientName: '홍길동' }), purchase({ chartNo: '200', patientName: '김철수' })];
+    expect(listKnownPatients(rows)).toEqual([
+      { patientName: '홍길동', chartNo: '100', phone: null },
+      { patientName: '김철수', chartNo: '200', phone: null },
+    ]);
+  });
+
+  it('차트번호가 빈 기록은 후보에서 뺀다(일괄로 넣은 과거 이력 등)', () => {
+    const rows = [purchase({ chartNo: '', patientName: '이력환자' }), purchase({ chartNo: '100', patientName: '홍길동' })];
+    expect(listKnownPatients(rows)).toEqual([{ patientName: '홍길동', chartNo: '100', phone: null }]);
+  });
+});
 
 describe('listNonCoveredPurchases', () => {
   it('1000건씩 이어서 끝까지 읽어 어떤 행도 빠지지 않는다', async () => {

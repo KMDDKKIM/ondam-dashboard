@@ -341,9 +341,12 @@ export interface KnownPatient {
 
 // "한 번 입력하면 다음엔 검색해서 클릭" — 별도 환자 테이블 없이, 기존 구매
 // 기록에서 이름/차트번호/연락처만 뽑아 중복 제거한 목록을 자동완성 후보로 쓴다.
+// 차트번호가 빈 구매 기록(예: 차트번호 없이 일괄로 넣은 과거 이력)은 후보에서 뺀다 —
+// 차트번호가 서로 다른 여러 사람이 빈 값 하나로 뭉뚱그려져 뜨면 오히려 헷갈린다.
 export function listKnownPatients(purchases: NonCoveredPurchase[]): KnownPatient[] {
   const seen = new Map<string, KnownPatient>();
   for (const p of purchases) {
+    if (!p.chartNo.trim()) continue;
     if (!seen.has(p.chartNo)) {
       seen.set(p.chartNo, { patientName: p.patientName, chartNo: p.chartNo, phone: p.phone });
     }
