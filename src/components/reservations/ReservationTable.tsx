@@ -1,11 +1,12 @@
 'use client';
 
 import type { Reservation } from '@/lib/reservations/types';
+import { normalizeTimeLabel, sortReservationsByTime } from '@/lib/reservations/timeLabel';
 
 interface ReservationTableProps {
   reservations: Reservation[];
   onChange: (rows: Reservation[]) => void;
-  onSave: () => void;
+  onSave: (rows: Reservation[]) => void;
 }
 
 const EMPTY_ROW: Reservation = {
@@ -95,12 +96,28 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
     onChange(reservations.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   }
 
+  // 예약시간칸에서 포커스를 벗어나면 "930"·"9:30" 같은 입력을 "09:30"로 바꾼다. 줄 순서는 여기서
+  // 바로 바꾸지 않는다 — 입력 중(포커스가 표 안에 있는 동안) 줄을 옮기면 key={index} 재사용 때문에
+  // 다른 예약자 칸에 포커스가 넘어가 엉뚱한 값을 덮어쓸 수 있다(직접 테스트로 확인됨). 실제 재배치는
+  // "예약자 명단 저장"을 누를 때(포커스가 표를 완전히 벗어난 뒤) 한 번에 한다.
+  function handleTimeBlur(index: number) {
+    const normalized = normalizeTimeLabel(reservations[index].timeLabel);
+    if (normalized === reservations[index].timeLabel) return;
+    updateRow(index, 'timeLabel', normalized);
+  }
+
   function removeRow(index: number) {
     onChange(reservations.filter((_, i) => i !== index));
   }
 
   function addRow() {
     onChange([...reservations, { ...EMPTY_ROW }]);
+  }
+
+  function handleSave() {
+    const sorted = sortReservationsByTime(reservations);
+    onChange(sorted);
+    onSave(sorted);
   }
 
   return (
@@ -143,6 +160,7 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
                   <input
                     value={row[field.key] as string}
                     onChange={(event) => updateRow(index, field.key, event.target.value)}
+                    onBlur={field.key === 'timeLabel' ? () => handleTimeBlur(index) : undefined}
                     style={{ fontSize: 13, padding: '3px 4px' }}
                   />
                 </td>
@@ -173,7 +191,7 @@ export function ReservationTable({ reservations, onChange, onSave }: Reservation
           행 추가
         </button>
         <button
-          onClick={onSave}
+          onClick={handleSave}
           style={{ marginTop: 8, marginLeft: 8, background: 'var(--color-teal-deep)', color: '#fff' }}
         >
           예약자 명단 저장

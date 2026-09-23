@@ -58,10 +58,11 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
     };
   }, [date]);
 
-  async function handleReservationsSave() {
+  async function handleReservationsSave(rows: Reservation[]) {
     if (!dailyRecordId) return;
     try {
-      await replaceReservations(dailyRecordId, reservations);
+      await replaceReservations(dailyRecordId, rows);
+      setReservations(rows);
       setStatusMessage({ type: 'success', text: '저장되었습니다.' });
       // 저장은 이미 끝났으니, 사이드바 목록 새로고침이 실패해도 저장 성공
       // 메시지를 덮어쓰지 않는다.
