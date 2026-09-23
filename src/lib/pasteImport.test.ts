@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzePasteText, computeReservationDerivedStats } from './pasteImport';
+import { todayKst } from './kst';
 
 const RESERVATION_HEADER = [
   'No',
@@ -182,6 +183,28 @@ describe('analyzePasteText - monthly settlement', () => {
       ['합계', '520', '47338780', '27567150', '0'].join('\t'),
     ].join('\n');
     expect(analyzePasteText(text)).toMatchObject({ format: 'monthly', month: '2026-09', latestDate: '2026-09-19' });
+  });
+
+  it('never reports a latestDate later than today, even if the pasted table has rows for days that have not happened yet (실사례 2026-09-22: 기준일이 9/30으로 잡혀 그 뒤 일일 마감이 전혀 합산되지 않았다)', () => {
+    const today = todayKst();
+    const month = today.slice(0, 7);
+    // 이번 달의 마지막 날 — "오늘"이 언제든 항상 오늘보다 뒤(또는 오늘이 말일이면 같음)다.
+    const lastDayOfMonth = `${month}-${new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()}`;
+    const text = [
+      `월말결산:${month}`,
+      ['내원환자수', '신규환자수', '자보환자수', '진료일평균환자수', '총진료비', '본인부담', '환자부담계', '미수금'].join('\t'),
+      ['520', '32', '9', '27.4', '47338780', '7839750', '27567150', '0'].join('\t'),
+      ['일자', '내원환자수', '총진료비', '환자부담계', '미수금'].join('\t'),
+      [`${month}-01`, '16', '1736170', '705400', '0'].join('\t'),
+      // OK차트 내보내기가 아직 오지 않은 말일까지 행을 채워둔 경우 — 오늘보다 뒤여도 무시해야 한다.
+      [lastDayOfMonth, '', '', '', ''].join('\t'),
+    ].join('\n');
+    const result = analyzePasteText(text);
+    expect(result).toMatchObject({ format: 'monthly' });
+    if (result.format !== 'monthly') throw new Error('unreachable');
+    expect(result.latestDate).not.toBeNull();
+    expect(result.latestDate! <= today).toBe(true);
+    if (lastDayOfMonth > today) expect(result.latestDate).toBe(`${month}-01`);
   });
 });
 

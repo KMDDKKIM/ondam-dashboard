@@ -29,10 +29,7 @@ export interface MonthlySummary {
 interface DailyRecordRow {
   date: string;
   visit_count: number | null;
-  nogyong_count: number | null;
-  ilban_count: number | null;
   chuna_count: number | null;
-  diet_count: number | null;
 }
 
 // 서버 시간대와 상관없이 한국 기준 이번 달.
@@ -91,7 +88,7 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
 
   const { data: records, error: recordsError } = await admin
     .from('daily_records')
-    .select('date, visit_count, nogyong_count, ilban_count, chuna_count, diet_count')
+    .select('date, visit_count, chuna_count')
     .is('deleted_at', null)
     .gte('date', monthStart)
     .lt('date', monthEnd);
@@ -109,10 +106,13 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     .maybeSingle();
   if (goalsError) throw goalsError;
 
-  // 특수한약(공진단/경옥고/녹용관절고/보폐고엔오 등) 실적은 예약관리 쪽에 데이터가
-  // 없다 — 비급여 현황에서 그 항목을 등록할 때 "목표 반영"으로 표시해둔 건수를 센다.
-  // 한약/다이어트/추나는 예약관리 기록에 비급여 현황에서 같은 범주로 표시해둔
-  // 건수를 더한다(예: 비급여로만 판 특수 한약재도 "한약" 목표에 넣고 싶을 때).
+  // 한약/다이어트/특수한약 실적은 비급여 현황에 "목표 반영"으로 표시해둔 건수만 센다
+  // (원장 요청, 2026-09-23: "매번 카운팅"이 아니라 "한 달 동안 적혀진 내역을 확인하는
+  // 방식"으로). 예전엔 예약관리 쪽 daily_records.nogyong_count/ilban_count(OK차트에
+  // 직접 입력하던 옛 집계 칸)를 여기에 더했는데, 비급여 현황에 같은 판매를 등록해두면
+  // 두 곳에서 겹쳐 세어져 실제보다 부풀려졌다(2026-09-23 100일치 일괄 등록 때 발견).
+  // 이제 비급여 현황 등록분(일괄 등록 포함)이 유일한 근거다 — 한 달치 내역을 그대로
+  // 확인하는 셈이라, 같은 판매를 두 번 셀 일이 없다.
   const { data: purchaseRows, error: purchaseError } = await admin
     .from('non_covered_purchases')
     .select('goal_category')
@@ -195,12 +195,12 @@ export async function getMonthlySummary(month: string = currentMonth()): Promise
     avgDailyVisitsGoal: goalsRow?.avg_visits_goal != null ? Number(goalsRow.avg_visits_goal) : null,
     goals: {
       herb: {
-        achieved: sum('nogyong_count') + sum('ilban_count') + purchaseCounts.herb + adjust.herb,
+        achieved: purchaseCounts.herb + adjust.herb,
         goal: goalsRow?.herb_goal ?? null,
         adjust: adjust.herb,
       },
       diet: {
-        achieved: sum('diet_count') + purchaseCounts.diet + adjust.diet,
+        achieved: purchaseCounts.diet + adjust.diet,
         goal: goalsRow?.diet_goal ?? null,
         adjust: adjust.diet,
       },
