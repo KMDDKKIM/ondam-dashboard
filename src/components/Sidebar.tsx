@@ -33,7 +33,7 @@ const RAIL_WIDTH = 60;
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
 export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
   const pathname = usePathname();
-  const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null });
+  const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null, naverTalkTalkUnread: null });
   const inFlight = useRef(false);
   const openCallCount = badges.openCalls ?? 0;
   const firstVisitMissingCount = badges.missingFirstVisits ?? 0;
@@ -50,6 +50,7 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
       setBadges((prev) => ({
         openCalls: body.openCalls ?? prev.openCalls,
         missingFirstVisits: body.missingFirstVisits ?? prev.missingFirstVisits,
+        naverTalkTalkUnread: body.naverTalkTalkUnread ?? prev.naverTalkTalkUnread,
       }));
     } catch {
       // 배지를 못 읽어도 메뉴는 정상 동작한다.
