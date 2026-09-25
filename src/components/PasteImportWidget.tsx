@@ -14,7 +14,7 @@ import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/secti
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
-import { countMarkedAttendance, matchAttendance } from '@/lib/reservationReceptionMatch';
+import { attendanceNamesFrom, countMarkedAttendance, matchAttendance } from '@/lib/reservationReceptionMatch';
 import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
@@ -478,7 +478,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             next.keptCount = String(marked.keptCount);
             next.noshowCount = String(marked.noshowCount);
           } else if (receptionUsable) {
-            const attendance = matchAttendance(rows, receptionRecords.map((r) => r.patientName));
+            const attendance = matchAttendance(rows, attendanceNamesFrom(receptionRecords));
             next.keptCount = String(attendance.keptCount);
             next.noshowCount = String(attendance.noshowCount);
           }
@@ -570,7 +570,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
           next.keptCount = String(marked.keptCount);
           next.noshowCount = String(marked.noshowCount);
         } else if (receptionUsable) {
-          const attendance = matchAttendance(listRows, receptionRecords.map((r) => r.patientName));
+          const attendance = matchAttendance(listRows, attendanceNamesFrom(receptionRecords));
           next.keptCount = String(attendance.keptCount);
           next.noshowCount = String(attendance.noshowCount);
         }
@@ -782,14 +782,14 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
               <label className="muted-text" style={label}>예약 정상 이행</label>
               {numberInput('keptCount')}
               <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해 자동 입력돼요
+                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해(제외 표시한 분은 뺀 채) 자동 입력돼요
               </p>
             </div>
             <div>
               <label className="muted-text" style={label}>예약 노쇼</label>
               {numberInput('noshowCount')}
               <p className="muted-text" style={{ fontSize: 11, margin: '4px 0 0' }}>
-                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해 자동 입력돼요
+                예약관리에서 표시했으면 그 값을, 아니면 접수기록부와 이름을 대조해(제외 표시한 분은 뺀 채) 자동 입력돼요
               </p>
             </div>
             <div>

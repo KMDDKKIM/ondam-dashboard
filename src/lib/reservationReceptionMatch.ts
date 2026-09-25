@@ -17,6 +17,16 @@ function normalizeName(name: string | null | undefined): string {
   return String(name ?? '').replace(/\s+/g, '');
 }
 
+/**
+ * 접수기록부에서 정상이행 이름 대조에 쓸 이름들. "제외"(예약률에서 빼는 분 — 진단서만 받아가신 분,
+ * 실제로 안 오셨는데 처방전 출력으로 잡힌 분 등)는 뺀다. 예약률 = 정상이행 ÷ (내원 − 제외)라서
+ * 제외한 사람은 분모에서 이미 빠지는데, 그 사람이 예약자 명단에도 있다고 정상이행에 넣으면
+ * 분자에만 남아 예약률이 부풀려진다(2026-09-25). 빠진 사람이 예약자라면 노쇼(나머지)로 잡힌다.
+ */
+export function attendanceNamesFrom(records: { patientName: string; excluded?: boolean }[]): string[] {
+  return records.filter((r) => !r.excluded).map((r) => r.patientName);
+}
+
 export function matchAttendance(
   reservations: { patientName: string; visitStatus: string }[],
   receptionNames: string[]

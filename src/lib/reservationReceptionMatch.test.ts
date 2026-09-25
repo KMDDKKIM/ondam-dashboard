@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countMarkedAttendance, matchAttendance } from './reservationReceptionMatch';
+import { attendanceNamesFrom, countMarkedAttendance, matchAttendance } from './reservationReceptionMatch';
 
 function res(patientName: string, visitStatus = '내원') {
   return { patientName, visitStatus };
@@ -79,5 +79,31 @@ describe('countMarkedAttendance', () => {
   it('붙여넣은 표의 기본값 "내원"만으로는 표시로 치지 않는다(직접 눌러야만)', () => {
     // OK차트 예약표는 취소만 아니면 항상 '내원'이라고 적어 두므로, 방문 전 명단은 이게 전부 '내원'이다.
     expect(countMarkedAttendance([res('홍길동', '내원'), res('성춘향', '내원')])).toBeNull();
+  });
+});
+
+describe('제외 표시한 분은 정상이행 이름 대조에서 뺀다', () => {
+  const rec = (patientName: string, excluded = false) => ({ patientName, excluded });
+
+  it('제외 표시한 사람의 이름은 대조 대상에서 빠진다', () => {
+    expect(attendanceNamesFrom([rec('홍길동'), rec('성춘향', true), rec('이몽룡')])).toEqual(['홍길동', '이몽룡']);
+  });
+
+  it('excluded 값이 없어도(옛 기록) 그대로 대조 대상이다', () => {
+    expect(attendanceNamesFrom([{ patientName: '홍길동' }, { patientName: '성춘향' }])).toEqual(['홍길동', '성춘향']);
+  });
+
+  it('예약자였지만 안 오셨는데 처방전 출력으로 접수기록부에 잡힌 분(제외)은 정상이행이 아니라 노쇼로 센다', () => {
+    const reservations = [res('홍길동'), res('성춘향'), res('이몽룡')];
+    const records = [rec('홍길동'), rec('성춘향', true), rec('이몽룡')];
+    // 제외를 안 뺐다면 3/0/0(성춘향이 정상이행)으로 부풀려진다.
+    expect(matchAttendance(reservations, attendanceNamesFrom(records))).toEqual({ keptCount: 2, cancelCount: 0, noshowCount: 1 });
+    expect(matchAttendance(reservations, records.map((r) => r.patientName))).toEqual({ keptCount: 3, cancelCount: 0, noshowCount: 0 });
+  });
+
+  it('예약자가 아닌 제외 대상은 아무것도 바꾸지 않는다', () => {
+    const reservations = [res('홍길동'), res('성춘향')];
+    const records = [rec('홍길동'), rec('성춘향'), rec('김철수', true)];
+    expect(matchAttendance(reservations, attendanceNamesFrom(records))).toEqual({ keptCount: 2, cancelCount: 0, noshowCount: 0 });
   });
 });
