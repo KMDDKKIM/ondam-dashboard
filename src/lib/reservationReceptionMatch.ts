@@ -84,3 +84,34 @@ export function countMarkedAttendance(reservations: { visitStatus: string }[]): 
   }
   return { keptCount, noshowCount };
 }
+
+/**
+ * 정상이행/노쇼를 낸다: 직접 표시(정상이행/노쇼)가 있는 줄은 그 값을 그대로 쓰고, 표시가
+ * 안 된 줄(빈칸·'내원')만 접수기록부 이름 대조(matchAttendance)로 채운다.
+ *
+ * countMarkedAttendance는 "하나라도 표시돼 있으면 표시 안 된 나머지는 아예 안 센다"라서,
+ * 노쇼 몇 명만 눌러 두고 나머지는 아직 안 누른 날은 정상이행이 0에 가깝게 잘못 나왔다
+ * (감사 결과 #2, 2026-09-29). 하나도 안 표시돼 있으면 이 함수는 matchAttendance만 쓴 것과
+ * 같은 값을 낸다 — 새로 대체한 게 아니라 그 경우를 포함하도록 넓힌 것이다.
+ */
+export function resolveAttendance(
+  reservations: { patientName: string; visitStatus: string }[],
+  receptionNames: string[]
+): AttendanceMatch {
+  const cancelCount = reservations.filter((r) => r.visitStatus === '취소').length;
+  let keptCount = 0;
+  let noshowCount = 0;
+  const unmarked: { patientName: string; visitStatus: string }[] = [];
+  for (const r of reservations) {
+    if (r.visitStatus === '취소') continue;
+    if (r.visitStatus === '정상이행') keptCount += 1;
+    else if (r.visitStatus === '노쇼') noshowCount += 1;
+    else unmarked.push(r);
+  }
+  if (unmarked.length > 0) {
+    const matched = matchAttendance(unmarked, receptionNames);
+    keptCount += matched.keptCount;
+    noshowCount += matched.noshowCount;
+  }
+  return { keptCount, noshowCount, cancelCount };
+}

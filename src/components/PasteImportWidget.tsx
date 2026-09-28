@@ -14,7 +14,7 @@ import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/secti
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
-import { attendanceNamesFrom, countMarkedAttendance, matchAttendance } from '@/lib/reservationReceptionMatch';
+import { attendanceNamesFrom, countMarkedAttendance, resolveAttendance } from '@/lib/reservationReceptionMatch';
 import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
@@ -471,16 +471,19 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             reservationCount: String(rows.length),
             cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
           };
-          // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서) —
-          // 없으면 예전처럼 접수기록부 이름 대조로 채운다.
-          const marked = countMarkedAttendance(rows);
-          if (marked) {
-            next.keptCount = String(marked.keptCount);
-            next.noshowCount = String(marked.noshowCount);
-          } else if (receptionUsable) {
-            const attendance = matchAttendance(rows, attendanceNamesFrom(receptionRecords));
-            next.keptCount = String(attendance.keptCount);
-            next.noshowCount = String(attendance.noshowCount);
+          // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 줄마다 그걸 우선하고, 아직
+          // 표시 안 된 줄만 접수기록부 이름 대조로 채운다(resolveAttendance) — 일부만 눌러둔 날
+          // 정상이행이 0에 가깝게 잘못 나오던 문제(감사 결과 #2)를 막는다.
+          if (receptionUsable) {
+            const resolved = resolveAttendance(rows, attendanceNamesFrom(receptionRecords));
+            next.keptCount = String(resolved.keptCount);
+            next.noshowCount = String(resolved.noshowCount);
+          } else {
+            const marked = countMarkedAttendance(rows);
+            if (marked) {
+              next.keptCount = String(marked.keptCount);
+              next.noshowCount = String(marked.noshowCount);
+            }
           }
           if (receptionUsable) {
             const chuna = matchByFlag(receptionRecords, 'chuna');
@@ -562,17 +565,20 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
         next.cancelCount = String(listRows.filter((r) => r.visitStatus === '취소').length);
-        // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서).
-        // 없으면 접수기록부와 이름을 대조해서 센다 — 못 읽었거나 접수기록부가 비어 있으면
-        // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
-        const marked = countMarkedAttendance(listRows);
-        if (marked) {
-          next.keptCount = String(marked.keptCount);
-          next.noshowCount = String(marked.noshowCount);
-        } else if (receptionUsable) {
-          const attendance = matchAttendance(listRows, attendanceNamesFrom(receptionRecords));
-          next.keptCount = String(attendance.keptCount);
-          next.noshowCount = String(attendance.noshowCount);
+        // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 줄마다 그걸 우선하고, 아직
+        // 표시 안 된 줄만 접수기록부 이름 대조로 채운다(resolveAttendance, 감사 결과 #2) — 못
+        // 읽었거나 접수기록부가 비어 있으면 직접 표시된 것만 세고, 합계가 안 맞으면 아래 주의
+        // 표시가 뜬다.
+        if (receptionUsable) {
+          const resolved = resolveAttendance(listRows, attendanceNamesFrom(receptionRecords));
+          next.keptCount = String(resolved.keptCount);
+          next.noshowCount = String(resolved.noshowCount);
+        } else {
+          const marked = countMarkedAttendance(listRows);
+          if (marked) {
+            next.keptCount = String(marked.keptCount);
+            next.noshowCount = String(marked.noshowCount);
+          }
         }
       }
 
@@ -669,6 +675,13 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       // 저장 전 확인: 매출/내원 0, 미래 날짜, 이미 저장된 마감(덮어쓰기)이면 한 번 더 묻는다.
       const existing = await getSavedDailyRevenue(supabase, date);
       const warnings = closingSaveWarnings({ date, totalRevenue, visitCount, today: todayKst(), existing });
+      // 정상이행+노쇼+취소 합계가 예약 환자수와 다르면(화면에는 이미 떠 있던 주의 표시) 저장
+      // 전 확인에도 넣는다 — 예전에는 화면에만 보이고 그냥 저장할 수 있었다(감사 결과 #2).
+      if (outcomeMismatch) {
+        warnings.push(
+          `예약 결과 합계(정상이행 ${n('keptCount') ?? 0}+노쇼 ${n('noshowCount') ?? 0}+취소 ${n('cancelCount') ?? 0}=${outcomeSum}명)가 예약 환자수(${n('reservationCount')}명)와 달라요.`
+        );
+      }
       if (warnings.length > 0) {
         const ok = await confirmDialog(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);
         if (!ok) return;
