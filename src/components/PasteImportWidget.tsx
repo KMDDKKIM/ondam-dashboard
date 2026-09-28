@@ -3,7 +3,7 @@
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { analyzePasteText } from '@/lib/pasteImport';
+import { analyzePasteText, resolveMonthlyAsOfDate } from '@/lib/pasteImport';
 import { parseSettlementVisits } from '@/lib/settlementVisits';
 import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
@@ -20,6 +20,7 @@ import {
   upsertDailyRevenue,
   getSavedDailyClosing,
   getSavedDailyRevenue,
+  getMonthlyOverrideAsOfDate,
   upsertMonthlyOverride,
   listRecentDailyRevenue,
   listRecentMonthlyOverrides,
@@ -48,6 +49,9 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [history, setHistory] = useState<MonthlyOverrideRow[]>([]);
+  // 오늘 결산이 이미 저장됐는지 — 아직이면 표에 오늘 날짜 행이 있어도 기준일을 어제로 물러선다
+  // (resolveMonthlyAsOfDate, 감사 결과 #3). 확인 전/실패 시에는 true(안전한 쪽: 안 물러섬)로 둔다.
+  const [todayClosingSaved, setTodayClosingSaved] = useState(true);
   const supabase = createClient();
 
   // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
@@ -69,6 +73,9 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
 
   useEffect(() => {
     loadHistory();
+    getSavedDailyRevenue(supabase, todayKst())
+      .then((v) => setTodayClosingSaved(v != null))
+      .catch(() => {}); // 못 읽으면 기본값(true, 안 물러섬)을 그대로 둔다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,8 +85,12 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
   const totalRevenue = analysis?.format === 'monthly' ? analysis.totalRevenue : null;
   const avgDailyVisits = analysis?.format === 'monthly' ? analysis.avgDailyVisits : null;
   const invalidCells = analysis?.format === 'monthly' ? analysis.invalidCells : [];
-  // 기준일 = 붙여넣은 표의 마지막 일자, 없으면 오늘(한국 날짜). 이 날짜까지는 월결산 값이 맞고 그 뒤 일일결산이 더해진다.
-  const asOfDate = analysis?.format === 'monthly' ? (analysis.latestDate ?? todayKst()) : null;
+  const rawLatestDate = analysis?.format === 'monthly' ? analysis.latestDate : null;
+  // 붙여넣은 표의 마지막 일자가 기준일. 그게 오늘인데 오늘 결산이 아직 없으면 어제로 물러서고
+  // (감사 결과 #3), 표에 날짜 행이 아예 없으면(rawLatestDate=null) 오늘로 둔다 — 이 경우는
+  // 아래 handleSave에서 따로 확인창을 띄운다.
+  const clampedToYesterday = rawLatestDate != null && resolveMonthlyAsOfDate(rawLatestDate, todayKst(), todayClosingSaved) !== rawLatestDate;
+  const asOfDate = analysis?.format === 'monthly' ? (resolveMonthlyAsOfDate(rawLatestDate, todayKst(), todayClosingSaved) ?? todayKst()) : null;
   const formatError = analysis && analysis.format !== 'monthly';
 
   async function handleSave() {
@@ -142,6 +153,12 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
           <span style={{ fontSize: 13 }}>
             {month} 총매출 {totalRevenue.toLocaleString()}원
             {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} · 기준일 {asOfDate} 확인됨
+            {clampedToYesterday && (
+              <span style={{ color: 'var(--color-orange)', fontWeight: 600 }}>
+                {' '}
+                (표에 오늘({rawLatestDate}) 날짜가 있었지만 오늘 결산이 아직 없어 어제로 조정했어요)
+              </span>
+            )}
           </span>
           <button onClick={handleSave} disabled={saving || invalidCells.length > 0} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
@@ -681,6 +698,16 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
         warnings.push(
           `예약 결과 합계(정상이행 ${n('keptCount') ?? 0}+노쇼 ${n('noshowCount') ?? 0}+취소 ${n('cancelCount') ?? 0}=${outcomeSum}명)가 예약 환자수(${n('reservationCount')}명)와 달라요.`
         );
+      }
+      // 이 날짜가 그 달 월결산 기준일 이하면, 지금 저장해도 총매출에 더해지지 않는다 — 미리
+      // 알린다(감사 결과 #3). 못 읽었으면(권한·네트워크 등) 조용히 건너뛰고 저장은 막지 않는다.
+      try {
+        const monthAsOf = await getMonthlyOverrideAsOfDate(supabase, date.slice(0, 7));
+        if (monthAsOf && date <= monthAsOf) {
+          warnings.push(`${date}는 월결산 기준일(${monthAsOf}) 이내라 지금 저장해도 총매출에는 더해지지 않아요. (반영하려면 월결산을 다시 붙여넣어야 해요.)`);
+        }
+      } catch {
+        // 확인 못 해도 저장 자체는 막지 않는다.
       }
       if (warnings.length > 0) {
         const ok = await confirmDialog(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);

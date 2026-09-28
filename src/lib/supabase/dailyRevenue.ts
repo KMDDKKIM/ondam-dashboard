@@ -134,6 +134,18 @@ export async function upsertMonthlyOverride(
   if (error) throw error;
 }
 
+// 그 달 월결산 기준일(있으면). 일일결산을 저장하려는 날짜가 이 기준일 이하면 총매출에
+// 더해지지 않는다고 저장 전에 미리 알리는 데 쓴다(감사 결과 #3).
+export async function getMonthlyOverrideAsOfDate(supabase: SupabaseClient, month: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('monthly_revenue_override')
+    .select('as_of_date')
+    .eq('month', month)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.as_of_date ?? null;
+}
+
 // 그 날짜에 이미 저장된 일일 결산(매출·내원). 없으면 null — 덮어쓰기 확인에 쓴다.
 export async function getSavedDailyRevenue(
   supabase: SupabaseClient,
