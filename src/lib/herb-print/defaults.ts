@@ -1,4 +1,4 @@
-import { DEFAULT_ETC_NOTE, DEFAULT_STORAGE_NOTE, DOCTOR_NAMES, defaultDoses } from "./constants";
+import { DEFAULT_ETC_NOTE, DEFAULT_STORAGE_NOTE, defaultDoses } from "./constants";
 import { todayKst } from "@/lib/kst";
 import { createId } from "./storage";
 import type { Prescription } from "./types";
@@ -9,7 +9,9 @@ export function makeEmptyPrescription(): Prescription {
     id: createId(),
     createdAt: now,
     updatedAt: now,
-    doctorName: DOCTOR_NAMES[0],
+    // 진료의 목록이 이제 고정돼 있지 않아 여기서는 기본값을 정할 수 없다 — 빈 값으로 두고
+    // 화면(herb-print/page.tsx)이 진료의 목록을 불러온 뒤 첫 번째 값으로 채운다.
+    doctorName: "",
     patientName: "",
     chiefComplaint: "",
     dosesPerDay: 2,

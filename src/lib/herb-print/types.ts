@@ -1,6 +1,8 @@
-import type { DoctorName } from "@/lib/doctors";
-
-export type { DoctorName } from "@/lib/doctors";
+// 진료의 목록은 더 이상 여기 고정돼 있지 않다 — 대표원장·부원장 등급의 승인된 직원 계정이
+// 곧 진료의 목록이고(doctors 테이블, src/lib/supabase/doctorSync.server.ts가 자동으로 맞춘다),
+// 이 화면은 그때그때 그 목록을 불러와 쓴다(herb-print/page.tsx). 그래서 여기서는 평범한
+// 문자열이면 된다.
+export type DoctorName = string;
 
 export type BeforeAfter = "식전" | "식후";
 

@@ -6,9 +6,12 @@ import PrescriptionForm from "@/components/herb-print/PrescriptionForm";
 import { makeEmptyPrescription } from "@/lib/herb-print/defaults";
 import { get, save } from "@/lib/herb-print/storage";
 import type { Prescription } from "@/lib/herb-print/types";
+import { createClient } from "@/lib/supabase/client";
+import { listDoctors } from "@/lib/supabase/doctors";
 
 export default function Home() {
   const [data, setData] = useState<Prescription>(() => makeEmptyPrescription());
+  const [doctorNames, setDoctorNames] = useState<string[]>([]);
   const [savedMessage, setSavedMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -22,6 +25,24 @@ export default function Home() {
         if (record) setData(record);
       })
       .catch(() => setErrorMessage("기록을 불러오지 못했습니다."));
+  }, []);
+
+  // 진료의 목록은 더 이상 코드에 박혀 있지 않다 — 대표원장·부원장 직원 계정에서 자동으로
+  // 맞춰진 doctors 테이블을 그때그때 불러온다(감사 결과 #5). 아직 처방 진료의를 안 고른
+  // 새 안내문이면 첫 번째 값으로 채운다.
+  useEffect(() => {
+    const supabase = createClient();
+    listDoctors(supabase)
+      .then((doctors) => {
+        const names = doctors.filter((d) => d.active).map((d) => d.name);
+        setDoctorNames(names);
+        if (names.length > 0) {
+          setData((prev) => (prev.doctorName ? prev : { ...prev, doctorName: names[0] }));
+        }
+      })
+      .catch(() => {
+        // 못 불러와도 처방 입력 자체는 계속 쓸 수 있어야 한다(목록이 비어 보일 뿐).
+      });
   }, []);
 
   async function handleSave() {
@@ -65,7 +86,7 @@ export default function Home() {
               새 안내문 시작
             </button>
           </div>
-          <PrescriptionForm value={data} onChange={setData} />
+          <PrescriptionForm value={data} onChange={setData} doctorNames={doctorNames} />
           <div className="mt-5 flex items-center gap-2">
             <button
               type="button"

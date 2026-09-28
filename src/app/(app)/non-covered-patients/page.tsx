@@ -23,7 +23,7 @@ const GENERAL = '일반';
 
 // 구매 기록: 비급여 구매를 등록하고(해피콜이 자동으로 만들어진다) 목록에서 고치거나 지운다.
 export default function NonCoveredRecordsPage() {
-  const { supabase, purchases, products, setProducts, staffNames, loading, error, setError, load } = useNonCoveredData();
+  const { supabase, purchases, products, setProducts, staffNames, doctorNames, loading, error, setError, load } = useNonCoveredData();
   const [showForm, setShowForm] = useState(false);
   const [showProductManager, setShowProductManager] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +116,7 @@ export default function NonCoveredRecordsPage() {
           categories={categories}
           defaultCategory={activeTab !== '전체' ? activeTab : GENERAL}
           knownPatients={knownPatients}
+          doctorNames={doctorNames}
           submitting={submitting}
           onSubmit={handleSubmit}
           onCancel={() => setShowForm(false)}
@@ -143,7 +144,7 @@ export default function NonCoveredRecordsPage() {
         ))}
       </div>
 
-      <PurchaseTable rows={filtered} products={products} staffNames={staffNames} onSave={handleSave} onDelete={handleDelete} />
+      <PurchaseTable rows={filtered} products={products} staffNames={staffNames} doctorNames={doctorNames} onSave={handleSave} onDelete={handleDelete} />
     </div>
   );
 }

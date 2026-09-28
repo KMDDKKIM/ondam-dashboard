@@ -1,7 +1,4 @@
-import { DOCTOR_NAMES } from "@/lib/doctors";
 import type { Dose, DoseMode, Temperature } from "./types";
-
-export { DOCTOR_NAMES };
 
 export const CLINIC = {
   name: "경희온담한의원",

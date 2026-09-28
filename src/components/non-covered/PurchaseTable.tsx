@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { DURATION_PRESETS } from '@/lib/supabase/nonCoveredPurchases';
 import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
-import { DOCTOR_NAMES } from '@/lib/doctors';
 import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
 import { GOAL_CATEGORY_LABEL, formatAmount, monthDay, shortDate } from './shared';
@@ -14,6 +13,8 @@ interface Props {
   products: NonCoveredProduct[];
   /** 직원 id -> 이름 (승인된 직원). 없으면 삭제된 직원으로 본다. */
   staffNames: Record<string, string>;
+  /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
+  doctorNames: string[];
   /** 저장이 끝나 편집 상태를 닫아도 되면 true */
   onSave: (existing: NonCoveredPurchase, patch: EditableNonCoveredPurchase) => Promise<boolean>;
   onDelete: (purchase: NonCoveredPurchase) => void;
@@ -98,7 +99,7 @@ function creatorLabel(createdBy: string | null, staffNames: Record<string, strin
   return createdBy && staffNames[createdBy] ? staffNames[createdBy] : '(삭제된 직원)';
 }
 
-export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: Props) {
+export function PurchaseTable({ rows, products, staffNames, doctorNames, onSave, onDelete }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -145,7 +146,8 @@ export function PurchaseTable({ rows, products, staffNames, onSave, onDelete }: 
             <Field label="진료의">
               <select value={d.doctorName} onChange={(e) => field('doctorName', e.target.value)} className="input-field" style={inputBig}>
                 <option value="">미지정</option>
-                {DOCTOR_NAMES.map((n) => (
+                {/* 이 기록의 진료의가 지금은 활성 목록에 없으면(퇴사 등) 값이 안 사라지게 같이 보여준다. */}
+                {(d.doctorName && !doctorNames.includes(d.doctorName) ? [d.doctorName, ...doctorNames] : doctorNames).map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
