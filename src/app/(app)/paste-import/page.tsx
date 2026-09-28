@@ -1,6 +1,15 @@
+import { createClient } from '@/lib/supabase/server';
 import { PasteImportWidget } from '@/components/PasteImportWidget';
 
-export default function PasteImportPage() {
+export default async function PasteImportPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: staff } = user
+    ? await supabase.from('staff').select('role').eq('id', user.id).maybeSingle()
+    : { data: null };
+
   return (
     <div>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>일일결산</h1>
@@ -8,7 +17,7 @@ export default function PasteImportPage() {
         매일 마감할 때 OK차트의 일일 결산표를 복사해 맨 위 칸에 붙여넣으세요. 예약 명단과 월말 결산표도
         이 화면에서 같은 방식으로 입력해요.
       </p>
-      <PasteImportWidget />
+      <PasteImportWidget isOwner={staff?.role === 'owner'} />
     </div>
   );
 }

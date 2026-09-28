@@ -21,7 +21,6 @@ import {
   getSavedDailyClosing,
   getSavedDailyRevenue,
   getMonthlyOverrideAsOfDate,
-  upsertMonthlyOverride,
   listRecentDailyRevenue,
   listRecentMonthlyOverrides,
   type MonthlyOverrideRow,
@@ -43,7 +42,7 @@ function InvalidCellsNotice({ cells }: { cells: string[] }) {
 
 // ── 월결산 ──────────────────────────────────────────────────────────
 // 월은 붙여넣은 결산표 제목("월말결산:2026-09")에서 읽어 오므로 따로 고르지 않는다.
-function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
+function MonthlySettlementSection({ clearSignal, onOutcome, isOwner }: SectionSync & { isOwner: boolean }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
@@ -110,18 +109,24 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
     setError('');
     setResult('');
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await upsertMonthlyOverride(supabase, month, totalRevenue, avgDailyVisits, asOfDate, user?.id ?? null);
+      // 그 달 총매출 누계 기준값을 통째로 바꾸는 값이라 대표원장만 할 수 있다(감사 결과 #4) —
+      // 서버(requireOwner)와 DB(RLS의 is_owner())도 같은 제한을 두지만, 이 칸 자체를 부원장·
+      // 사원에게 안 보여줘서(아래 렌더) 애초에 이 함수가 불릴 일이 없다.
+      const response = await fetch('/api/monthly-baseline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, totalRevenue, avgDailyVisits, asOfDate }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? '저장에 실패했습니다.');
       setResult(
         `${month} 매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
       );
       setText('');
       onOutcome();
       await loadHistory();
-    } catch {
-      setError('저장에 실패했습니다.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장에 실패했습니다.');
       onOutcome();
     } finally {
       setSaving(false);
@@ -138,17 +143,24 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
         </span>
       </div>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="월말 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
-        className="input-field"
-        style={textareaStyle}
-      />
+      {!isOwner && (
+        <p className="muted-text" style={{ fontSize: 13, marginBottom: 8 }}>
+          그 달 총매출 누계 기준값이 통째로 바뀌는 값이라 대표원장만 입력할 수 있어요. 아래는 지금까지 저장된 기록이에요.
+        </p>
+      )}
+      {isOwner && (
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="월말 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
+          className="input-field"
+          style={textareaStyle}
+        />
+      )}
 
-      {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
-      {invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
-      {totalRevenue != null && month && (
+      {isOwner && formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
+      {isOwner && invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
+      {isOwner && totalRevenue != null && month && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13 }}>
             {month} 총매출 {totalRevenue.toLocaleString()}원
@@ -988,7 +1000,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
 
 // 자주 쓰는 순서대로 — 일일결산(매일) → 예약 명단 → 월결산(월말에 한 번). 월결산은
 // 맨 아래에 있어도 이번달 현황의 총매출·일평균 환자수를 가장 우선해서 결정한다.
-export function PasteImportWidget() {
+export function PasteImportWidget({ isOwner }: { isOwner: boolean }) {
   const [reservationSync, setReservationSync] = useState<ReservationSync>({ version: 0, dates: [] });
   const [clearSignals, setClearSignals] = useState({ daily: 0, reservation: 0, monthly: 0 });
   // from 이외 칸들의 신호를 올려 그 칸들의 예전 결과 문구를 지운다.
@@ -1006,7 +1018,7 @@ export function PasteImportWidget() {
         clearSignal={clearSignals.reservation}
         onOutcome={outcomeFrom('reservation')}
       />
-      <MonthlySettlementSection clearSignal={clearSignals.monthly} onOutcome={outcomeFrom('monthly')} />
+      <MonthlySettlementSection clearSignal={clearSignals.monthly} onOutcome={outcomeFrom('monthly')} isOwner={isOwner} />
     </div>
   );
 }

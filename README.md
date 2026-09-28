@@ -93,6 +93,7 @@ TopBar의 💬 아이콘(안읽음 배지 포함) → `/chat`. 토픽방(업무 
 22. `migration_patient_visit_history.sql`
 23. `migration_herb_queue.sql`
 24. `migration_consult_summary_doctors_only.sql`
+25. `migration_monthly_baseline_owner_only.sql`
 
 새 마이그레이션 파일을 만들면 이 목록 맨 아래에 추가하세요.
 
