@@ -3,7 +3,7 @@
 // 헤더 이름으로 컬럼을 찾기 때문에 컬럼 순서가 달라져도 동작한다(kh-ondam-reservation의
 // xlsxParser와 같은 방식).
 
-import { todayKst } from './kst';
+import { addDaysKst, todayKst } from './kst';
 
 export interface ParsedReservationRow {
   doctorName: string;
@@ -164,6 +164,18 @@ function latestDateInMonth(rows: string[][], month: string, today: string): stri
     }
   }
   return latest;
+}
+
+// 붙여넣은 표에 오늘 날짜 행이 있어도, 오늘 결산이 아직 저장 안 됐으면 그 행의 값은 아직
+// 다 안 걷힌 하루치일 수 있다(낮에 붙여넣으면 특히) — 그 날짜를 기준일로 삼으면 오늘 밤
+// 결산이 저장돼도 다시 더해지지 않는다(감사 결과 #3, 2026-09-29 — 9/22 사고와 같은 종류).
+// 오늘 결산이 아직 없으면 기준일을 어제로 물러선다. latestDate가 null(표에 날짜 행이 아예
+// 없음)이면 이미 다른 곳(붙여넣기 화면의 확인창)에서 다루므로 여기서는 손대지 않는다.
+export function resolveMonthlyAsOfDate(latestDate: string | null, today: string, todayClosingSaved: boolean): string | null {
+  if (latestDate === today && !todayClosingSaved) {
+    return addDaysKst(today, -1);
+  }
+  return latestDate;
 }
 
 // 일일/월말 결산표 둘 다 "내원환자수 ... 총진료비 ... 환자부담계 ... 미수금" 헤더

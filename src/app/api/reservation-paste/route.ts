@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiErrorResponse } from '@/lib/apiError';
 import { analyzePasteText } from '@/lib/pasteImport';
-import { countReservationsByDates, replaceReservationsForDate } from '@/lib/reservations/dailyRecords.server';
+import { mergeReservationPaste } from '@/lib/reservationPasteMerge';
+import { countReservationsByDates, getDailyRecordByDate, replaceReservationsForDate } from '@/lib/reservations/dailyRecords.server';
 
 // 예약시트 붙여넣기 → kh-ondam-reservation의 daily_records/reservations에 직접
 // 쓴다. 같은 hanyak-ondam Supabase 프로젝트를 공유하지만 그쪽 RLS는 anon/
@@ -37,8 +38,12 @@ export async function POST(request: NextRequest) {
   const savedDates: string[] = [];
   try {
     for (const group of analysis.groups) {
+      // 그날 이미 저장돼 있던 명단과 짝지어, 직원이 직접 표시한 정상이행/노쇼·특이사항·비고를
+      // 옮겨 붙인다 — 안 그러면 다시 붙여넣을 때마다 그 표시가 지워진다(감사 결과 #1).
+      const existingRecord = await getDailyRecordByDate(group.date);
+      const rows = existingRecord ? mergeReservationPaste(existingRecord.reservations, group.rows) : group.rows;
       // 지우기+넣기는 DB 함수(replace_reservations) 안에서 한 트랜잭션 — 날짜 단위로 전부 되거나 전혀 안 된다.
-      await replaceReservationsForDate(group.date, group.rows);
+      await replaceReservationsForDate(group.date, rows);
       savedDates.push(group.date);
     }
   } catch (err) {

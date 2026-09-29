@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attendanceNamesFrom, countMarkedAttendance, matchAttendance } from './reservationReceptionMatch';
+import { attendanceNamesFrom, countMarkedAttendance, matchAttendance, resolveAttendance } from './reservationReceptionMatch';
 
 function res(patientName: string, visitStatus = '내원') {
   return { patientName, visitStatus };
@@ -79,6 +79,38 @@ describe('countMarkedAttendance', () => {
   it('붙여넣은 표의 기본값 "내원"만으로는 표시로 치지 않는다(직접 눌러야만)', () => {
     // OK차트 예약표는 취소만 아니면 항상 '내원'이라고 적어 두므로, 방문 전 명단은 이게 전부 '내원'이다.
     expect(countMarkedAttendance([res('홍길동', '내원'), res('성춘향', '내원')])).toBeNull();
+  });
+});
+
+describe('resolveAttendance', () => {
+  it('아무 것도 표시가 안 돼 있으면 matchAttendance와 같은 값(전부 이름 대조)', () => {
+    const reservations = [res('홍길동'), res('성춘향'), res('강백호')];
+    const receptionNames = ['홍길동', '성춘향'];
+    expect(resolveAttendance(reservations, receptionNames)).toEqual(matchAttendance(reservations, receptionNames));
+  });
+
+  it('일부만 직접 표시돼 있으면, 표시 안 된 줄만 이름 대조로 채운다(감사 결과 #2)', () => {
+    // 노쇼만 하나 눌러 두고 나머지는 아직 미정인 날: countMarkedAttendance라면 keptCount가 0으로
+    // 잘못 나온다 — resolveAttendance는 미정인 홍길동·서태웅을 접수기록부로 마저 가른다.
+    const reservations = [
+      res('강백호', '노쇼'),
+      res('홍길동', ''), // 미정, 접수기록부에 있음 → kept
+      res('서태웅', ''), // 미정, 접수기록부에 없음 → noshow
+      res('이몽룡', '취소'),
+    ];
+    const receptionNames = ['홍길동'];
+    expect(resolveAttendance(reservations, receptionNames)).toEqual({ keptCount: 1, noshowCount: 2, cancelCount: 1 });
+  });
+
+  it('전원 직접 표시돼 있으면 이름 대조를 아예 안 쓴다(직접 표시가 우선)', () => {
+    const reservations = [res('홍길동', '정상이행'), res('성춘향', '노쇼')];
+    // 접수기록부에 홍길동이 없다고 해도(대조하면 노쇼로 뒤집힐 상황) 직접 표시가 그대로 이긴다.
+    expect(resolveAttendance(reservations, [])).toEqual({ keptCount: 1, noshowCount: 1, cancelCount: 0 });
+  });
+
+  it('취소는 대조 대상에서 늘 빠진다', () => {
+    const reservations = [res('홍길동', '취소'), res('성춘향', '정상이행')];
+    expect(resolveAttendance(reservations, []).cancelCount).toBe(1);
   });
 });
 

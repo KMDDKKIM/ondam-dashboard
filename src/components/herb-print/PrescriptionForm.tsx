@@ -1,4 +1,4 @@
-import { DOCTOR_NAMES, TEMPERATURES, defaultDoses } from "@/lib/herb-print/constants";
+import { TEMPERATURES, defaultDoses } from "@/lib/herb-print/constants";
 import type { DoctorName, DoseMode, Prescription, Temperature } from "@/lib/herb-print/types";
 import DoseScheduleEditor from "./DoseScheduleEditor";
 import FoodChecklist from "./FoodChecklist";
@@ -26,9 +26,12 @@ const inputClass =
 export default function PrescriptionForm({
   value,
   onChange,
+  doctorNames,
 }: {
   value: Prescription;
   onChange: (next: Prescription) => void;
+  /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
+  doctorNames: string[];
 }) {
   function set<K extends keyof Prescription>(key: K, v: Prescription[K]) {
     onChange({ ...value, [key]: v });
@@ -59,7 +62,8 @@ export default function PrescriptionForm({
             value={value.doctorName}
             onChange={(e) => set("doctorName", e.target.value as DoctorName)}
           >
-            {DOCTOR_NAMES.map((n) => (
+            {/* 저장된 처방의 진료의가 지금은 활성 목록에 없으면(퇴사 등) 값이 안 사라지게 같이 보여준다. */}
+            {(value.doctorName && !doctorNames.includes(value.doctorName) ? [value.doctorName, ...doctorNames] : doctorNames).map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>

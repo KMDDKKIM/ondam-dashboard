@@ -3,7 +3,7 @@
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { analyzePasteText } from '@/lib/pasteImport';
+import { analyzePasteText, resolveMonthlyAsOfDate } from '@/lib/pasteImport';
 import { parseSettlementVisits } from '@/lib/settlementVisits';
 import { replaceDailyVisits } from '@/lib/supabase/dailyVisits';
 import { closingSaveWarnings } from '@/lib/closingChecks';
@@ -14,13 +14,13 @@ import { errorAfterOtherSectionSaved, VISITS_NOT_SAVED_ERROR } from '@/lib/secti
 import { replaceConfirmMessage, summarizeReplace } from '@/lib/reservationReplace';
 import { buildClosingMessage, countMismatch, splitNames, summarizePurchases } from '@/lib/closingMessage';
 import { listPurchasesByDate } from '@/lib/supabase/nonCoveredPurchases';
-import { attendanceNamesFrom, countMarkedAttendance, matchAttendance } from '@/lib/reservationReceptionMatch';
+import { attendanceNamesFrom, countMarkedAttendance, resolveAttendance } from '@/lib/reservationReceptionMatch';
 import { formatSavedAt } from '@/lib/savedAt';
 import {
   upsertDailyRevenue,
   getSavedDailyClosing,
   getSavedDailyRevenue,
-  upsertMonthlyOverride,
+  getMonthlyOverrideAsOfDate,
   listRecentDailyRevenue,
   listRecentMonthlyOverrides,
   type MonthlyOverrideRow,
@@ -42,12 +42,15 @@ function InvalidCellsNotice({ cells }: { cells: string[] }) {
 
 // ── 월결산 ──────────────────────────────────────────────────────────
 // 월은 붙여넣은 결산표 제목("월말결산:2026-09")에서 읽어 오므로 따로 고르지 않는다.
-function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
+function MonthlySettlementSection({ clearSignal, onOutcome, isOwner }: SectionSync & { isOwner: boolean }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [history, setHistory] = useState<MonthlyOverrideRow[]>([]);
+  // 오늘 결산이 이미 저장됐는지 — 아직이면 표에 오늘 날짜 행이 있어도 기준일을 어제로 물러선다
+  // (resolveMonthlyAsOfDate, 감사 결과 #3). 확인 전/실패 시에는 true(안전한 쪽: 안 물러섬)로 둔다.
+  const [todayClosingSaved, setTodayClosingSaved] = useState(true);
   const supabase = createClient();
 
   // 다른 칸을 저장하면 이 칸에 남은 예전 결과/오류 문구를 지운다(칸마다 자기 최신 상태만 보이게).
@@ -69,6 +72,9 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
 
   useEffect(() => {
     loadHistory();
+    getSavedDailyRevenue(supabase, todayKst())
+      .then((v) => setTodayClosingSaved(v != null))
+      .catch(() => {}); // 못 읽으면 기본값(true, 안 물러섬)을 그대로 둔다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,8 +84,12 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
   const totalRevenue = analysis?.format === 'monthly' ? analysis.totalRevenue : null;
   const avgDailyVisits = analysis?.format === 'monthly' ? analysis.avgDailyVisits : null;
   const invalidCells = analysis?.format === 'monthly' ? analysis.invalidCells : [];
-  // 기준일 = 붙여넣은 표의 마지막 일자, 없으면 오늘(한국 날짜). 이 날짜까지는 월결산 값이 맞고 그 뒤 일일결산이 더해진다.
-  const asOfDate = analysis?.format === 'monthly' ? (analysis.latestDate ?? todayKst()) : null;
+  const rawLatestDate = analysis?.format === 'monthly' ? analysis.latestDate : null;
+  // 붙여넣은 표의 마지막 일자가 기준일. 그게 오늘인데 오늘 결산이 아직 없으면 어제로 물러서고
+  // (감사 결과 #3), 표에 날짜 행이 아예 없으면(rawLatestDate=null) 오늘로 둔다 — 이 경우는
+  // 아래 handleSave에서 따로 확인창을 띄운다.
+  const clampedToYesterday = rawLatestDate != null && resolveMonthlyAsOfDate(rawLatestDate, todayKst(), todayClosingSaved) !== rawLatestDate;
+  const asOfDate = analysis?.format === 'monthly' ? (resolveMonthlyAsOfDate(rawLatestDate, todayKst(), todayClosingSaved) ?? todayKst()) : null;
   const formatError = analysis && analysis.format !== 'monthly';
 
   async function handleSave() {
@@ -99,18 +109,24 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
     setError('');
     setResult('');
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await upsertMonthlyOverride(supabase, month, totalRevenue, avgDailyVisits, asOfDate, user?.id ?? null);
+      // 그 달 총매출 누계 기준값을 통째로 바꾸는 값이라 대표원장만 할 수 있다(감사 결과 #4) —
+      // 서버(requireOwner)와 DB(RLS의 is_owner())도 같은 제한을 두지만, 이 칸 자체를 부원장·
+      // 사원에게 안 보여줘서(아래 렌더) 애초에 이 함수가 불릴 일이 없다.
+      const response = await fetch('/api/monthly-baseline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, totalRevenue, avgDailyVisits, asOfDate }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? '저장에 실패했습니다.');
       setResult(
         `${month} 매출을 ${asOfDate}까지 ${totalRevenue.toLocaleString()}원${avgDailyVisits != null ? `, 일평균 환자수를 ${avgDailyVisits}명` : ''}으로 저장했어요.`
       );
       setText('');
       onOutcome();
       await loadHistory();
-    } catch {
-      setError('저장에 실패했습니다.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '저장에 실패했습니다.');
       onOutcome();
     } finally {
       setSaving(false);
@@ -127,21 +143,34 @@ function MonthlySettlementSection({ clearSignal, onOutcome }: SectionSync) {
         </span>
       </div>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="월말 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
-        className="input-field"
-        style={textareaStyle}
-      />
+      {!isOwner && (
+        <p className="muted-text" style={{ fontSize: 13, marginBottom: 8 }}>
+          그 달 총매출 누계 기준값이 통째로 바뀌는 값이라 대표원장만 입력할 수 있어요. 아래는 지금까지 저장된 기록이에요.
+        </p>
+      )}
+      {isOwner && (
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="월말 결산표를 여기에 붙여넣으세요 (Ctrl+V)"
+          className="input-field"
+          style={textareaStyle}
+        />
+      )}
 
-      {formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
-      {invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
-      {totalRevenue != null && month && (
+      {isOwner && formatError && <p className="error-text" style={{ marginTop: 8 }}>{analysis.format === 'unknown' ? analysis.reason : '월결산표가 아닌 것 같아요. 다른 칸에 붙여넣어 주세요.'}</p>}
+      {isOwner && invalidCells.length > 0 && <InvalidCellsNotice cells={invalidCells} />}
+      {isOwner && totalRevenue != null && month && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13 }}>
             {month} 총매출 {totalRevenue.toLocaleString()}원
             {avgDailyVisits != null ? `, 일평균 환자수 ${avgDailyVisits}명` : ''} · 기준일 {asOfDate} 확인됨
+            {clampedToYesterday && (
+              <span style={{ color: 'var(--color-orange)', fontWeight: 600 }}>
+                {' '}
+                (표에 오늘({rawLatestDate}) 날짜가 있었지만 오늘 결산이 아직 없어 어제로 조정했어요)
+              </span>
+            )}
           </span>
           <button onClick={handleSave} disabled={saving || invalidCells.length > 0} className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>
             {saving ? '저장 중...' : '저장'}
@@ -471,16 +500,19 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
             reservationCount: String(rows.length),
             cancelCount: String(rows.filter((r) => r.visitStatus === '취소').length),
           };
-          // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서) —
-          // 없으면 예전처럼 접수기록부 이름 대조로 채운다.
-          const marked = countMarkedAttendance(rows);
-          if (marked) {
-            next.keptCount = String(marked.keptCount);
-            next.noshowCount = String(marked.noshowCount);
-          } else if (receptionUsable) {
-            const attendance = matchAttendance(rows, attendanceNamesFrom(receptionRecords));
-            next.keptCount = String(attendance.keptCount);
-            next.noshowCount = String(attendance.noshowCount);
+          // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 줄마다 그걸 우선하고, 아직
+          // 표시 안 된 줄만 접수기록부 이름 대조로 채운다(resolveAttendance) — 일부만 눌러둔 날
+          // 정상이행이 0에 가깝게 잘못 나오던 문제(감사 결과 #2)를 막는다.
+          if (receptionUsable) {
+            const resolved = resolveAttendance(rows, attendanceNamesFrom(receptionRecords));
+            next.keptCount = String(resolved.keptCount);
+            next.noshowCount = String(resolved.noshowCount);
+          } else {
+            const marked = countMarkedAttendance(rows);
+            if (marked) {
+              next.keptCount = String(marked.keptCount);
+              next.noshowCount = String(marked.noshowCount);
+            }
           }
           if (receptionUsable) {
             const chuna = matchByFlag(receptionRecords, 'chuna');
@@ -562,17 +594,20 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       } else if (listRows.length > 0) {
         next.reservationCount = String(listRows.length);
         next.cancelCount = String(listRows.filter((r) => r.visitStatus === '취소').length);
-        // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 그걸 우선한다(더 정확해서).
-        // 없으면 접수기록부와 이름을 대조해서 센다 — 못 읽었거나 접수기록부가 비어 있으면
-        // 직접 입력하게 하고, 합계가 안 맞으면 아래 주의 표시가 뜬다.
-        const marked = countMarkedAttendance(listRows);
-        if (marked) {
-          next.keptCount = String(marked.keptCount);
-          next.noshowCount = String(marked.noshowCount);
-        } else if (receptionUsable) {
-          const attendance = matchAttendance(listRows, attendanceNamesFrom(receptionRecords));
-          next.keptCount = String(attendance.keptCount);
-          next.noshowCount = String(attendance.noshowCount);
+        // 예약자 명단 화면에서 직접 표시한 정상이행/노쇼가 있으면 줄마다 그걸 우선하고, 아직
+        // 표시 안 된 줄만 접수기록부 이름 대조로 채운다(resolveAttendance, 감사 결과 #2) — 못
+        // 읽었거나 접수기록부가 비어 있으면 직접 표시된 것만 세고, 합계가 안 맞으면 아래 주의
+        // 표시가 뜬다.
+        if (receptionUsable) {
+          const resolved = resolveAttendance(listRows, attendanceNamesFrom(receptionRecords));
+          next.keptCount = String(resolved.keptCount);
+          next.noshowCount = String(resolved.noshowCount);
+        } else {
+          const marked = countMarkedAttendance(listRows);
+          if (marked) {
+            next.keptCount = String(marked.keptCount);
+            next.noshowCount = String(marked.noshowCount);
+          }
         }
       }
 
@@ -669,6 +704,23 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
       // 저장 전 확인: 매출/내원 0, 미래 날짜, 이미 저장된 마감(덮어쓰기)이면 한 번 더 묻는다.
       const existing = await getSavedDailyRevenue(supabase, date);
       const warnings = closingSaveWarnings({ date, totalRevenue, visitCount, today: todayKst(), existing });
+      // 정상이행+노쇼+취소 합계가 예약 환자수와 다르면(화면에는 이미 떠 있던 주의 표시) 저장
+      // 전 확인에도 넣는다 — 예전에는 화면에만 보이고 그냥 저장할 수 있었다(감사 결과 #2).
+      if (outcomeMismatch) {
+        warnings.push(
+          `예약 결과 합계(정상이행 ${n('keptCount') ?? 0}+노쇼 ${n('noshowCount') ?? 0}+취소 ${n('cancelCount') ?? 0}=${outcomeSum}명)가 예약 환자수(${n('reservationCount')}명)와 달라요.`
+        );
+      }
+      // 이 날짜가 그 달 월결산 기준일 이하면, 지금 저장해도 총매출에 더해지지 않는다 — 미리
+      // 알린다(감사 결과 #3). 못 읽었으면(권한·네트워크 등) 조용히 건너뛰고 저장은 막지 않는다.
+      try {
+        const monthAsOf = await getMonthlyOverrideAsOfDate(supabase, date.slice(0, 7));
+        if (monthAsOf && date <= monthAsOf) {
+          warnings.push(`${date}는 월결산 기준일(${monthAsOf}) 이내라 지금 저장해도 총매출에는 더해지지 않아요. (반영하려면 월결산을 다시 붙여넣어야 해요.)`);
+        }
+      } catch {
+        // 확인 못 해도 저장 자체는 막지 않는다.
+      }
       if (warnings.length > 0) {
         const ok = await confirmDialog(`${date} 일일 결산을 저장합니다.\n\n${warnings.map((w) => `- ${w}`).join('\n')}\n\n그래도 저장할까요?`);
         if (!ok) return;
@@ -948,7 +1000,7 @@ function DailySettlementSection({ reservationSync, clearSignal, onOutcome }: Sec
 
 // 자주 쓰는 순서대로 — 일일결산(매일) → 예약 명단 → 월결산(월말에 한 번). 월결산은
 // 맨 아래에 있어도 이번달 현황의 총매출·일평균 환자수를 가장 우선해서 결정한다.
-export function PasteImportWidget() {
+export function PasteImportWidget({ isOwner }: { isOwner: boolean }) {
   const [reservationSync, setReservationSync] = useState<ReservationSync>({ version: 0, dates: [] });
   const [clearSignals, setClearSignals] = useState({ daily: 0, reservation: 0, monthly: 0 });
   // from 이외 칸들의 신호를 올려 그 칸들의 예전 결과 문구를 지운다.
@@ -966,7 +1018,7 @@ export function PasteImportWidget() {
         clearSignal={clearSignals.reservation}
         onOutcome={outcomeFrom('reservation')}
       />
-      <MonthlySettlementSection clearSignal={clearSignals.monthly} onOutcome={outcomeFrom('monthly')} />
+      <MonthlySettlementSection clearSignal={clearSignals.monthly} onOutcome={outcomeFrom('monthly')} isOwner={isOwner} />
     </div>
   );
 }

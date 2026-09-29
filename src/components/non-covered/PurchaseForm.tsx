@@ -4,7 +4,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { DURATION_PRESETS, defaultHappyCallDate, suggestGoalCategory, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
-import { DOCTOR_NAMES, type DoctorName } from '@/lib/doctors';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
 import { PatientSearch } from './PatientSearch';
@@ -34,6 +33,8 @@ interface Props {
   categories: string[];
   defaultCategory: string;
   knownPatients: KnownPatient[];
+  /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
+  doctorNames: string[];
   submitting: boolean;
   onSubmit: (values: PurchaseFormValues) => void;
   onCancel: () => void;
@@ -42,12 +43,12 @@ interface Props {
 const sectionTitle = { fontSize: 14, fontWeight: 800, margin: '0 0 10px' } as const;
 
 // 등록 폼: 환자 → 구매 내용 → 목표·한약 해피콜 → 메모를 한 화면에 모두 보여 준다("자세히"로 접지 않는다).
-export function PurchaseForm({ products, categories, defaultCategory, knownPatients, submitting, onSubmit, onCancel }: Props) {
+export function PurchaseForm({ products, categories, defaultCategory, knownPatients, doctorNames, submitting, onSubmit, onCancel }: Props) {
   const today = todayKst();
   const [name, setName] = useState('');
   const [chartNo, setChartNo] = useState('');
   const [phone, setPhone] = useState('');
-  const [doctorName, setDoctorName] = useState(DOCTOR_NAMES[0]);
+  const [doctorName, setDoctorName] = useState('');
   const [category, setCategory] = useState(defaultCategory);
   const [newCategory, setNewCategory] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
@@ -68,6 +69,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
       setProductName('');
     }
   }, [products, productChoice]);
+
+  // 진료의 목록은 부모가 비동기로 불러오므로(useNonCoveredData), 처음 도착했을 때 첫 값으로 채운다.
+  useEffect(() => {
+    if (!doctorName && doctorNames.length > 0) setDoctorName(doctorNames[0]);
+  }, [doctorNames, doctorName]);
 
   function pickPatient(p: KnownPatient) {
     setName(p.patientName);
@@ -131,8 +137,8 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
       <h3 style={sectionTitle}>② 구매 내용</h3>
       <div style={fieldGrid}>
         <Field label="진료의">
-          <select value={doctorName} onChange={(e) => setDoctorName(e.target.value as DoctorName)} className="input-field" style={inputBig}>
-            {DOCTOR_NAMES.map((d) => (
+          <select value={doctorName} onChange={(e) => setDoctorName(e.target.value)} className="input-field" style={inputBig}>
+            {doctorNames.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>

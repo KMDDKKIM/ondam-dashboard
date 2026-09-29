@@ -51,6 +51,24 @@ $$;
 revoke all on function public.is_approved_staff() from public, anon;
 grant execute on function public.is_approved_staff() to authenticated;
 
+-- Helper: is the caller the owner(대표원장)? Used where a mistake by regular staff
+-- could change a shared, hard-to-notice value (e.g. the month's revenue baseline) —
+-- see monthly_revenue_override below.
+create or replace function public.is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.staff where id = auth.uid() and status = 'approved' and role = 'owner'
+  )
+$$;
+
+revoke all on function public.is_owner() from public, anon;
+grant execute on function public.is_owner() to authenticated;
+
 -- Approved staff can see the staff list (used to render names in the UI). A pending
 -- account can still read its OWN row -- the pending-approval gate in
 -- src/lib/supabase/middleware.ts needs it -- but not anyone else's.
@@ -405,13 +423,17 @@ drop policy if exists "authenticated can read monthly_revenue_override" on month
 create policy "authenticated can read monthly_revenue_override" on monthly_revenue_override
   for select to authenticated using (public.is_approved_staff());
 
+-- 그 달 총매출 누계의 기준값을 통째로 바꾸는 값이라, 쓰기는 대표원장만 할 수 있다
+-- (감사 결과 #4 — migration_monthly_baseline_owner_only.sql).
 drop policy if exists "authenticated can insert monthly_revenue_override" on monthly_revenue_override;
-create policy "authenticated can insert monthly_revenue_override" on monthly_revenue_override
-  for insert to authenticated with check (public.is_approved_staff());
+drop policy if exists "owner can insert monthly_revenue_override" on monthly_revenue_override;
+create policy "owner can insert monthly_revenue_override" on monthly_revenue_override
+  for insert to authenticated with check (public.is_owner());
 
 drop policy if exists "authenticated can update monthly_revenue_override" on monthly_revenue_override;
-create policy "authenticated can update monthly_revenue_override" on monthly_revenue_override
-  for update to authenticated using (public.is_approved_staff());
+drop policy if exists "owner can update monthly_revenue_override" on monthly_revenue_override;
+create policy "owner can update monthly_revenue_override" on monthly_revenue_override
+  for update to authenticated using (public.is_owner()) with check (public.is_owner());
 
 -- 티로 등으로 녹음한 상담 내용을 붙여넣으면 AI가 차팅 형식으로 요약해준다
 -- (src/app/api/consult-summary/route.ts, Anthropic API 필요). transcript는

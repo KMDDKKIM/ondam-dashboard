@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzePasteText, computeReservationDerivedStats } from './pasteImport';
+import { analyzePasteText, computeReservationDerivedStats, resolveMonthlyAsOfDate } from './pasteImport';
 import { todayKst } from './kst';
 
 const RESERVATION_HEADER = [
@@ -205,6 +205,25 @@ describe('analyzePasteText - monthly settlement', () => {
     expect(result.latestDate).not.toBeNull();
     expect(result.latestDate! <= today).toBe(true);
     if (lastDayOfMonth > today) expect(result.latestDate).toBe(`${month}-01`);
+  });
+});
+
+describe('resolveMonthlyAsOfDate', () => {
+  it('falls back to yesterday when the latest row is today but today has no saved closing yet (감사 결과 #3)', () => {
+    expect(resolveMonthlyAsOfDate('2026-09-29', '2026-09-29', false)).toBe('2026-09-28');
+  });
+
+  it('keeps today as the as-of date once today’s closing is saved', () => {
+    expect(resolveMonthlyAsOfDate('2026-09-29', '2026-09-29', true)).toBe('2026-09-29');
+  });
+
+  it('leaves an earlier latestDate alone regardless of whether today is saved', () => {
+    expect(resolveMonthlyAsOfDate('2026-09-19', '2026-09-29', false)).toBe('2026-09-19');
+    expect(resolveMonthlyAsOfDate('2026-09-19', '2026-09-29', true)).toBe('2026-09-19');
+  });
+
+  it('leaves null alone (no date rows in the pasted table — handled separately by a confirm dialog)', () => {
+    expect(resolveMonthlyAsOfDate(null, '2026-09-29', false)).toBeNull();
   });
 });
 
