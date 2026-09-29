@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
-import { herbLineTotal, totalHerbWeight } from '@/lib/herbCompounding';
+import { herbLineTotal, mergeHerbLines, parseHerbGramsEntry, totalHerbWeight } from '@/lib/herbCompounding';
 
 interface OrderFormProps {
   value: HerbCompoundingOrder;
@@ -16,8 +17,27 @@ const labelStyle = { display: 'block', fontSize: 12, color: 'var(--color-muted)'
 const fieldStyle = { marginBottom: 14 };
 
 export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }: OrderFormProps) {
+  const [bulkText, setBulkText] = useState('');
+  const [bulkWarning, setBulkWarning] = useState('');
+
   function set<K extends keyof HerbCompoundingOrder>(key: K, v: HerbCompoundingOrder[K]) {
     onChange({ ...value, [key]: v });
+  }
+
+  // "당귀 천궁 백출 4 산사 신곡 맥아 2" 처럼 붙여넣으면, 숫자 앞에 나온 이름들 전부에 그
+  // 숫자를 1첩당 그램으로 적용해 약재 목록에 더한다(이미 채운 줄은 지우지 않는다).
+  function applyBulkText() {
+    if (bulkText.trim() === '') return;
+    const parsed = parseHerbGramsEntry(bulkText);
+    if (parsed.herbs.length === 0) {
+      setBulkWarning('숫자(그램)가 붙은 약재명을 찾지 못했어요. "당귀 천궁 4"처럼 이름 뒤에 숫자를 넣어주세요.');
+      return;
+    }
+    onChange({ ...value, herbs: mergeHerbLines(value.herbs, parsed.herbs) });
+    setBulkWarning(
+      parsed.danglingNames.length > 0 ? `그램이 안 붙어서 반영 못 한 이름: ${parsed.danglingNames.join(', ')}` : ''
+    );
+    setBulkText('');
   }
 
   function updateHerb(index: number, patch: Partial<{ herbName: string; gramsPerPacket: number }>) {
@@ -63,6 +83,21 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
             placeholder="10"
           />
         </div>
+      </div>
+
+      <div style={fieldStyle}>
+        <label style={labelStyle}>약재 일괄 입력 — "당귀 천궁 백출 4 산사 신곡 맥아 2"처럼 이름 뒤에 그램을 적으면, 그 앞의 이름들에 한꺼번에 적용돼요</label>
+        <textarea
+          className="input-field"
+          style={{ minHeight: 48 }}
+          value={bulkText}
+          onChange={(e) => setBulkText(e.target.value)}
+          placeholder="당귀 천궁 백출 4 산사 신곡 맥아 2"
+        />
+        <button type="button" onClick={applyBulkText} style={{ marginTop: 6 }}>
+          약재 목록에 적용
+        </button>
+        {bulkWarning && <p className="error-text">{bulkWarning}</p>}
       </div>
 
       <label style={labelStyle}>약재 목록 — 1첩당 그램을 넣으면 첩수를 곱해 총용량을 계산해요</label>
