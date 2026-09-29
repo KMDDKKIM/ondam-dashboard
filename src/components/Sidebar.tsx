@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { isActivePath, isWidePath, visibleGroups } from '@/lib/navItems';
+import { isActivePath, visibleGroups } from '@/lib/navItems';
 import type { StaffGrade } from '@/lib/staffGrade';
 import { openChatWindow } from '@/lib/openChatWindow';
 import { shouldRefreshBadges, type SidebarBadges } from '@/lib/sidebarBadges';
@@ -85,7 +85,10 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
     return () => media.removeEventListener('change', onChange);
   }, []);
 
-  const collapsed = pref ? pref === 'collapsed' : narrow || isWidePath(pathname);
+  // 화면이 좁을 때만 자동으로 접는다 — 예전에는 표가 넓은 화면(예약관리 등)으로 들어갈
+  // 때도 자동으로 접혔는데, 메뉴를 눌렀는데 메뉴 크기가 저절로 바뀌는 게 거슬린다는
+  // 지적(원장, 2026-09-29)으로 없앴다. 직접 접고 펴는 건 그대로 기억한다(STORAGE_KEY).
+  const collapsed = pref ? pref === 'collapsed' : narrow;
 
   function toggle() {
     const next = collapsed ? 'open' : 'collapsed';
