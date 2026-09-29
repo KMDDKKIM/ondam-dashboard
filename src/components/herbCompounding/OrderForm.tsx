@@ -15,6 +15,8 @@ interface OrderFormProps {
 
 const labelStyle = { display: 'block', fontSize: 12, color: 'var(--color-muted)', marginBottom: 4 };
 const fieldStyle = { marginBottom: 14 };
+// 수치(포제) 자주 쓰는 값 — 원장님이 알려준 예시. 목록에 없어도 직접 입력할 수 있다.
+const PREP_METHOD_OPTIONS = ['초', '주초', '자'];
 
 export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }: OrderFormProps) {
   const [bulkText, setBulkText] = useState('');
@@ -40,7 +42,7 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
     setBulkText('');
   }
 
-  function updateHerb(index: number, patch: Partial<{ herbName: string; gramsPerPacket: number }>) {
+  function updateHerb(index: number, patch: Partial<{ herbName: string; prepMethod: string; gramsPerPacket: number }>) {
     onChange({
       ...value,
       herbs: value.herbs.map((h, i) => (i === index ? { ...h, ...patch } : h)),
@@ -48,7 +50,7 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
   }
 
   function addHerbRow() {
-    onChange({ ...value, herbs: [...value.herbs, { herbName: '', gramsPerPacket: 0 }] });
+    onChange({ ...value, herbs: [...value.herbs, { herbName: '', prepMethod: '', gramsPerPacket: 0 }] });
   }
 
   function removeHerbRow(index: number) {
@@ -106,11 +108,17 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
           <option key={name} value={name} />
         ))}
       </datalist>
+      <datalist id="herb-prep-options">
+        {PREP_METHOD_OPTIONS.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, marginBottom: 8 }}>
         <thead>
           <tr>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 30 }}>No.</th>
             <th style={{ textAlign: 'left', padding: '4px 4px' }}>약재명</th>
+            <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>1첩당(g)</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>총용량(g)</th>
             <th style={{ width: 40 }} />
@@ -127,6 +135,15 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
                   value={herb.herbName}
                   onChange={(e) => updateHerb(i, { herbName: e.target.value })}
                   placeholder="당귀"
+                />
+              </td>
+              <td style={{ padding: '2px 4px' }}>
+                <input
+                  className="input-field"
+                  list="herb-prep-options"
+                  value={herb.prepMethod}
+                  onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
+                  placeholder="선택"
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>

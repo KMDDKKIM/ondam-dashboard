@@ -18,7 +18,7 @@ function makeEmptyOrder(): HerbCompoundingOrder {
     chartNo: '',
     orderDate: todayKst(),
     packetCount: 0,
-    herbs: [{ herbName: '', gramsPerPacket: 0 }],
+    herbs: [{ herbName: '', prepMethod: '', gramsPerPacket: 0 }],
     memo: '',
     createdAt: '',
     updatedAt: '',

@@ -32,6 +32,7 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
           <tr>
             <th>No.</th>
             <th>약재명</th>
+            <th>수치</th>
             <th>1첩당(g)</th>
             <th>총용량(g)</th>
           </tr>
@@ -41,6 +42,7 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
             <tr key={i}>
               <td>{i + 1}</td>
               <td>{h.herbName}</td>
+              <td>{h.prepMethod}</td>
               <td>{h.gramsPerPacket}</td>
               <td>{herbLineTotal(h, order.packetCount)}</td>
             </tr>
@@ -48,7 +50,7 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={3}>약재 총량</td>
+            <td colSpan={4}>약재 총량</td>
             <td>{total.toLocaleString('ko-KR')}g</td>
           </tr>
         </tfoot>

@@ -3,6 +3,8 @@
 
 export interface HerbLine {
   herbName: string;
+  /** 수치(포제) — 초·주초·자 같은 가공 방법. 없으면 빈 문자열(생약 그대로). */
+  prepMethod: string;
   /** 1첩당 그램수(소수 가능 — 예: 7.5g). */
   gramsPerPacket: number;
 }
@@ -31,12 +33,16 @@ export function herbLineTotal(line: Pick<HerbLine, 'gramsPerPacket'>, packetCoun
 }
 
 /** 처방 전체 약재 총량(g) — 모든 줄의 총용량 합. */
-export function totalHerbWeight(herbs: HerbLine[], packetCount: number): number {
+export function totalHerbWeight(herbs: Pick<HerbLine, 'gramsPerPacket'>[], packetCount: number): number {
   return round1(herbs.reduce((sum, h) => sum + h.gramsPerPacket * packetCount, 0));
 }
 
 /** 저장·인쇄해도 되는 최소 조건 — 환자명·첩수·약재(이름+그램)가 하나 이상 채워져 있어야 한다. */
-export function canSaveOrder(order: Pick<HerbCompoundingOrder, 'patientName' | 'packetCount' | 'herbs'>): boolean {
+export function canSaveOrder(order: {
+  patientName: string;
+  packetCount: number;
+  herbs: Pick<HerbLine, 'herbName' | 'gramsPerPacket'>[];
+}): boolean {
   if (order.patientName.trim() === '') return false;
   if (!(order.packetCount > 0)) return false;
   return order.herbs.some((h) => h.herbName.trim() !== '' && h.gramsPerPacket > 0);
@@ -44,7 +50,7 @@ export function canSaveOrder(order: Pick<HerbCompoundingOrder, 'patientName' | '
 
 /** 약재 줄 중 이름은 있는데 그램이 비었거나(0 이하) 반대로 그램만 있고 이름이 없는 줄 —
  * 저장 전에 확인을 요청하기 위한 목록(줄 번호, 1부터). */
-export function incompleteHerbLines(herbs: HerbLine[]): number[] {
+export function incompleteHerbLines(herbs: Pick<HerbLine, 'herbName' | 'gramsPerPacket'>[]): number[] {
   return herbs
     .map((h, i) => ({ i, hasName: h.herbName.trim() !== '', hasGrams: h.gramsPerPacket > 0 }))
     .filter((h) => h.hasName !== h.hasGrams)
@@ -73,10 +79,11 @@ export function parseHerbGramsEntry(text: string): ParsedHerbEntry {
     for (const name of pending) {
       const existingIndex = indexByName.get(name);
       if (existingIndex != null) {
-        herbs[existingIndex] = { herbName: name, gramsPerPacket: round1(herbs[existingIndex].gramsPerPacket + grams) };
+        herbs[existingIndex] = { ...herbs[existingIndex], gramsPerPacket: round1(herbs[existingIndex].gramsPerPacket + grams) };
       } else {
         indexByName.set(name, herbs.length);
-        herbs.push({ herbName: name, gramsPerPacket: grams });
+        // 일괄 입력 표기에는 수치(포제)가 없다 — 필요하면 약재 목록에서 따로 채운다.
+        herbs.push({ herbName: name, prepMethod: '', gramsPerPacket: grams });
       }
     }
     pending = [];
