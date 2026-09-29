@@ -92,50 +92,44 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
             placeholder="10"
           />
         </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>팩용량(mL)</label>
-          <input
-            className="input-field"
-            type="number"
-            min={0}
-            value={value.packVolumeMl || ''}
-            onChange={(e) => set('packVolumeMl', Number(e.target.value) || 0)}
-            placeholder="선택"
-          />
-        </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>며칠분</label>
-          <input
-            className="input-field"
-            type="number"
-            min={0}
-            value={value.daysSupply || ''}
-            onChange={(e) => set('daysSupply', Number(e.target.value) || 0)}
-            placeholder="선택"
-          />
-        </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>팩수</label>
-          <input
-            className="input-field"
-            type="number"
-            min={0}
-            value={value.packCount || ''}
-            onChange={(e) => set('packCount', Number(e.target.value) || 0)}
-            placeholder="선택"
-          />
-        </div>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>총물량(mL)</label>
-          <input
-            className="input-field"
-            type="number"
-            min={0}
-            value={value.totalLiquidMl || ''}
-            onChange={(e) => set('totalLiquidMl', Number(e.target.value) || 0)}
-            placeholder="선택"
-          />
-        </div>
+      </div>
+
+      {/* 팩용량·며칠분·팩수·총물량은 부가 정보라, 환자·첩수 칸보다 눈에 덜 띄게 한 줄로
+          압축했다(원장 요청, 2026-09-29 — 위쪽에 두되 칸을 작게). */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          flexWrap: 'wrap',
+          padding: '8px 12px',
+          marginBottom: 14,
+          borderRadius: 10,
+          background: 'var(--color-surface-2)',
+        }}
+      >
+        <span className="muted-text" style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+          탕전 정보(선택)
+        </span>
+        {([
+          ['packVolumeMl', '팩용량', 'mL'],
+          ['daysSupply', '며칠분', '일'],
+          ['packCount', '팩수', '팩'],
+          ['totalLiquidMl', '총물량', 'mL'],
+        ] as const).map(([key, label, unit]) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+            {label}
+            <input
+              className="input-field"
+              type="number"
+              min={0}
+              value={value[key] || ''}
+              onChange={(e) => set(key, Number(e.target.value) || 0)}
+              style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+            />
+            {unit}
+          </label>
+        ))}
       </div>
 
       <div style={fieldStyle}>
