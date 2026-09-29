@@ -131,7 +131,7 @@ export default function HerbCompoundingPage() {
   return (
     <div className="herb-compounding-app">
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2>한약 처방전 출력</h2>
+        <h2>한약 처방전</h2>
         <Link href="/herb-compounding/records" className="muted-text">
           과거 기록 보기
         </Link>

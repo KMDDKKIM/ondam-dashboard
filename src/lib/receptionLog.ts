@@ -23,7 +23,7 @@ export interface ReceptionRecord {
   reserved: boolean;
   chuna: boolean;
   /** 오늘 오셨지만 예약률 계산(내원환자수 − 제외환자수)에서 빼야 하는 분 — 진단서만 받아가신 분,
-   * 한약 처방전 출력만으로 잡힌 경우 등(원장 요청, 2026-09-23). */
+   * 한약 복용법 출력만으로 잡힌 경우 등(원장 요청, 2026-09-23). */
   excluded: boolean;
   note: string | null;
 }
