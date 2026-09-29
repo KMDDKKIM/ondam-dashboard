@@ -1,0 +1,98 @@
+/* 한약 처방전(조제 지시서) 화면 전용 — 예약관리 인쇄와 같은 관례(.print-only/.no-print,
+   페이지별 @page)를 따른다. */
+.herb-compounding-app {
+  page: compounding;
+}
+
+.herb-compounding-app .print-only {
+  display: none;
+}
+
+@page compounding {
+  size: portrait;
+  margin: 14mm;
+}
+
+@media print {
+  html,
+  body {
+    width: 100%;
+    height: auto;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .app-main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .herb-compounding-app .no-print {
+    display: none !important;
+  }
+
+  .herb-compounding-app .print-only {
+    display: block !important;
+  }
+
+  .rx-sheet {
+    font-size: 12pt;
+  }
+
+  .rx-sheet h1 {
+    font-size: 16pt;
+    text-align: center;
+    margin: 0 0 8mm;
+  }
+
+  .rx-header-table,
+  .rx-herb-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 6mm;
+  }
+
+  .rx-header-table th,
+  .rx-header-table td,
+  .rx-herb-table th,
+  .rx-herb-table td {
+    border: 0.5pt solid #000;
+    padding: 1.5mm 2.5mm;
+    text-align: left;
+  }
+
+  .rx-header-table th {
+    width: 22mm;
+    background: #f0f0f0;
+    font-weight: 700;
+  }
+
+  .rx-herb-table th {
+    background: #f0f0f0;
+    font-weight: 700;
+  }
+
+  .rx-herb-table tr {
+    break-inside: avoid;
+  }
+
+  .rx-herb-table thead {
+    display: table-header-group;
+  }
+
+  .rx-herb-table tfoot td {
+    font-weight: 700;
+  }
+
+  .rx-memo {
+    margin-top: 6mm;
+    border: 0.5pt solid #000;
+    padding: 3mm;
+    min-height: 20mm;
+  }
+
+  .rx-memo-label {
+    font-weight: 700;
+    margin-bottom: 2mm;
+  }
+}

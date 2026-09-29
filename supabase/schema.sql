@@ -1467,3 +1467,40 @@ on conflict (name) do nothing;
 
 -- 시드 2) 부원장
 insert into doctors (name, sort_order) values ('박소은', 2) on conflict (name) do nothing;
+
+-- 한약 처방전(조제 지시서) — 약재별 1첩당 그램수를 적어 두면 화면에서 첩수를 곱해 조제할
+-- 총용량을 보여준다(그램×첩수는 DB에 안 넣고 화면에서 계산). herbs는 [{herbName, gramsPerPacket}]
+-- 배열 통째로 jsonb에 담는다(약재 줄 수가 매번 달라서 — doses를 jsonb로 담는 prescriptions 표와 같은 방식).
+-- 나중에 herb_inventory와 이름으로 연결해 총용량만큼 자동 차감할 계획이다(원장 요청, 2026-09-29).
+create table if not exists herb_compounding_orders (
+  id uuid primary key default gen_random_uuid(),
+  patient_name text not null,
+  chart_no text,
+  order_date date not null,
+  packet_count numeric not null check (packet_count > 0),
+  herbs jsonb not null default '[]'::jsonb,
+  memo text,
+  created_by uuid references staff(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table herb_compounding_orders enable row level security;
+
+drop policy if exists "authenticated can read herb_compounding_orders" on herb_compounding_orders;
+create policy "authenticated can read herb_compounding_orders" on herb_compounding_orders
+  for select to authenticated using (public.is_approved_staff());
+
+drop policy if exists "authenticated can insert herb_compounding_orders" on herb_compounding_orders;
+create policy "authenticated can insert herb_compounding_orders" on herb_compounding_orders
+  for insert to authenticated with check (public.is_approved_staff());
+
+drop policy if exists "authenticated can update herb_compounding_orders" on herb_compounding_orders;
+create policy "authenticated can update herb_compounding_orders" on herb_compounding_orders
+  for update to authenticated using (public.is_approved_staff()) with check (public.is_approved_staff());
+
+drop policy if exists "authenticated can delete herb_compounding_orders" on herb_compounding_orders;
+create policy "authenticated can delete herb_compounding_orders" on herb_compounding_orders
+  for delete to authenticated using (public.is_approved_staff());
+
+revoke all on herb_compounding_orders from anon;
