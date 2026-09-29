@@ -108,34 +108,28 @@ export default function HerbCompoundingPage() {
         </Link>
       </div>
 
-      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 700 }}>처방 입력</span>
-            <button type="button" onClick={handleNew} className="muted-text" style={{ background: 'none', border: 'none', textDecoration: 'underline', padding: 0 }}>
-              새 처방전 시작
-            </button>
-          </div>
-          <OrderForm value={order} onChange={setOrder} herbNameOptions={herbNameOptions} incompleteLines={incompleteLines} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-            <button type="button" onClick={handleSave} disabled={saving} className="btn-primary">
-              {saving ? '저장 중...' : '저장하기'}
-            </button>
-            <button type="button" onClick={handlePrint} disabled={!canSave}>
-              인쇄하기
-            </button>
-            {savedMessage && <span style={{ color: 'var(--color-green)', fontSize: 13 }}>{savedMessage}</span>}
-            {errorMessage && <span className="error-text">{errorMessage}</span>}
-          </div>
-          {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 인쇄하면 과거 기록에는 안 남아요.</p>}
+      {/* 화면에서는 입력 칸만 보여준다 — 옆에 미리보기까지 같이 두면 같은 내용이 두 번
+          찍혀서 겹쳐 보였다(원장 지적, 2026-09-29). 실제 찍히는 모양은 "인쇄하기"를 눌러
+          window.print()가 열릴 때(.print-only)만 보면 된다. */}
+      <div className="no-print card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontWeight: 700 }}>처방 입력</span>
+          <button type="button" onClick={handleNew} className="muted-text" style={{ background: 'none', border: 'none', textDecoration: 'underline', padding: 0 }}>
+            새 처방전 시작
+          </button>
         </div>
-
-        <div>
-          <p className="muted-text" style={{ marginBottom: 8 }}>미리보기</p>
-          <div className="card" style={{ padding: 20 }}>
-            <PrintSheet order={order} />
-          </div>
+        <OrderForm value={order} onChange={setOrder} herbNameOptions={herbNameOptions} incompleteLines={incompleteLines} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <button type="button" onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving ? '저장 중...' : '저장하기'}
+          </button>
+          <button type="button" onClick={handlePrint} disabled={!canSave}>
+            인쇄하기
+          </button>
+          {savedMessage && <span style={{ color: 'var(--color-green)', fontSize: 13 }}>{savedMessage}</span>}
+          {errorMessage && <span className="error-text">{errorMessage}</span>}
         </div>
+        {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 인쇄하면 과거 기록에는 안 남아요.</p>}
       </div>
 
       <div className="print-only">

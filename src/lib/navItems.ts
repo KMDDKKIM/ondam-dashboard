@@ -62,7 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 // 표가 넓은 화면(예약관리, 초진환자 해피콜, 한약 복용법 출력)은 본문을 화면 가득 쓰고,
 // 왼쪽 메뉴도 처음에는 아이콘만 남겨 접어 둔다.
-export const WIDE_PATHS = ['/reservations', '/happy-call-register', '/herb-print', '/herb-compounding'];
+export const WIDE_PATHS = ['/reservations', '/happy-call-register', '/herb-print'];
 
 export function isWidePath(pathname: string): boolean {
   return WIDE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

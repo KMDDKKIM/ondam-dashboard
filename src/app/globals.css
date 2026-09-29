@@ -102,6 +102,13 @@ a.card:hover {
   box-shadow: 0 0 0 3px rgba(44, 143, 214, 0.15);
 }
 
+/* 입력 예시(placeholder)는 실제로 적은 값과 헷갈리지 않도록 더 옅게 — 스크린샷에서
+   "홍길동"·"10" 같은 예시 글자를 실제 입력값으로 착각한 적이 있었다(2026-09-29). */
+.input-field::placeholder {
+  color: var(--color-muted);
+  opacity: 0.55;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: flex;
