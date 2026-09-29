@@ -76,6 +76,11 @@
     break-inside: avoid;
   }
 
+  /* 5줄마다 굵은 파란 선으로 구분해 약재가 많아도 눈으로 훑기 쉽게 한다(OK차트 참고). */
+  .rx-herb-table tr.rx-group-end td {
+    border-bottom: 1.2pt solid #2c6fbb;
+  }
+
   .rx-herb-table thead {
     display: table-header-group;
   }

@@ -8,7 +8,12 @@ import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
 import { canSaveOrder, incompleteHerbLines, type HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
-import { createHerbCompoundingOrder, getHerbCompoundingOrder } from '@/lib/supabase/herbCompounding';
+import {
+  createHerbCompoundingOrder,
+  getHerbCompoundingOrder,
+  listKnownHerbCompoundingPatients,
+  type KnownHerbPatient,
+} from '@/lib/supabase/herbCompounding';
 import { listHerbInventory } from '@/lib/supabase/herbInventory';
 
 function makeEmptyOrder(): HerbCompoundingOrder {
@@ -18,6 +23,10 @@ function makeEmptyOrder(): HerbCompoundingOrder {
     chartNo: '',
     orderDate: todayKst(),
     packetCount: 0,
+    packVolumeMl: 0,
+    daysSupply: 0,
+    packCount: 0,
+    totalLiquidMl: 0,
     herbs: [{ herbName: '', prepMethod: '', gramsPerPacket: 0 }],
     memo: '',
     createdAt: '',
@@ -28,9 +37,24 @@ function makeEmptyOrder(): HerbCompoundingOrder {
 export default function HerbCompoundingPage() {
   const [order, setOrder] = useState<HerbCompoundingOrder>(() => makeEmptyOrder());
   const [herbNameOptions, setHerbNameOptions] = useState<string[]>([]);
+  const [knownPatients, setKnownPatients] = useState<KnownHerbPatient[]>([]);
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  // 환자명 검색 후보 — 전에 저장한 처방전들에서 이름+차트번호 조합을 뽑는다.
+  function refreshKnownPatients() {
+    const supabase = createClient();
+    listKnownHerbCompoundingPatients(supabase)
+      .then(setKnownPatients)
+      .catch(() => {
+        // 못 불러와도 직접 입력하면 된다.
+      });
+  }
+  useEffect(() => {
+    refreshKnownPatients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ?load=<id> 로 들어오면(과거 기록에서 클릭) 그 처방전을 불러온다 — 한약 복용법 출력과 같은 관례.
   useEffect(() => {
@@ -75,6 +99,10 @@ export default function HerbCompoundingPage() {
         chartNo: order.chartNo,
         orderDate: order.orderDate,
         packetCount: order.packetCount,
+        packVolumeMl: order.packVolumeMl,
+        daysSupply: order.daysSupply,
+        packCount: order.packCount,
+        totalLiquidMl: order.totalLiquidMl,
         herbs: order.herbs.filter((h) => h.herbName.trim() !== ''),
         memo: order.memo,
         createdBy: user?.id ?? null,
@@ -82,6 +110,7 @@ export default function HerbCompoundingPage() {
       setOrder(saved);
       setSavedMessage('저장되었습니다.');
       setTimeout(() => setSavedMessage(''), 2000);
+      refreshKnownPatients();
     } catch {
       setErrorMessage('저장에 실패했습니다. 다시 시도해 주세요.');
     } finally {
@@ -118,7 +147,13 @@ export default function HerbCompoundingPage() {
             새 처방전 시작
           </button>
         </div>
-        <OrderForm value={order} onChange={setOrder} herbNameOptions={herbNameOptions} incompleteLines={incompleteLines} />
+        <OrderForm
+          value={order}
+          onChange={setOrder}
+          herbNameOptions={herbNameOptions}
+          knownPatients={knownPatients}
+          incompleteLines={incompleteLines}
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
           <button type="button" onClick={handleSave} disabled={saving} className="btn-primary">
             {saving ? '저장 중...' : '저장하기'}

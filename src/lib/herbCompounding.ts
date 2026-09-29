@@ -17,6 +17,12 @@ export interface HerbCompoundingOrder {
   orderDate: string; // YYYY-MM-DD
   /** 첩수 — 처방 전체에 적용되는 한 값이다(약재마다 따로 첩수를 두지 않는다). */
   packetCount: number;
+  /** 탕전(달임) 정보 — 전부 선택, 0은 "안 적음"이다. 서로 계산으로 맞물리지 않는다(팩수가
+   * 며칠분×하루팩수인지는 탕전 방식마다 달라서, 실제로 나온 값을 그대로 적는다). */
+  packVolumeMl: number;
+  daysSupply: number;
+  packCount: number;
+  totalLiquidMl: number;
   herbs: HerbLine[];
   memo: string;
   createdAt: string;

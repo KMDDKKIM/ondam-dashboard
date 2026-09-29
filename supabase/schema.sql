@@ -1478,6 +1478,11 @@ create table if not exists herb_compounding_orders (
   chart_no text,
   order_date date not null,
   packet_count numeric not null check (packet_count > 0),
+  -- 탕전(달임) 정보 — 전부 선택(migration_herb_compounding_decoction.sql, 원장 요청 2026-09-29).
+  pack_volume_ml numeric,
+  days_supply numeric,
+  pack_count numeric,
+  total_liquid_ml numeric,
   herbs jsonb not null default '[]'::jsonb,
   memo text,
   created_by uuid references staff(id) on delete set null,

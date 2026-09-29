@@ -3,12 +3,16 @@
 import { useState } from 'react';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { herbLineTotal, mergeHerbLines, parseHerbGramsEntry, totalHerbWeight } from '@/lib/herbCompounding';
+import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
+import { PatientSearch } from './PatientSearch';
 
 interface OrderFormProps {
   value: HerbCompoundingOrder;
   onChange: (next: HerbCompoundingOrder) => void;
   /** 약재명 입력칸의 자동완성 후보(한약재 재고 현황의 약재 목록). */
   herbNameOptions: string[];
+  /** 전에 저장한 적 있는 환자(이름+차트번호) — 환자명 칸에서 검색·선택용. */
+  knownPatients: KnownHerbPatient[];
   /** 이름은 있는데 그램이 없거나 반대인 줄 번호(1부터) — 저장 전 확인 표시용. */
   incompleteLines: number[];
 }
@@ -16,7 +20,7 @@ interface OrderFormProps {
 const labelStyle = { display: 'block', fontSize: 12, color: 'var(--color-muted)', marginBottom: 4 };
 const fieldStyle = { marginBottom: 14 };
 
-export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }: OrderFormProps) {
+export function OrderForm({ value, onChange, herbNameOptions, knownPatients, incompleteLines }: OrderFormProps) {
   const [bulkText, setBulkText] = useState('');
   const [bulkWarning, setBulkWarning] = useState('');
 
@@ -61,8 +65,13 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={fieldStyle}>
-          <label style={labelStyle}>환자명</label>
-          <input className="input-field" value={value.patientName} onChange={(e) => set('patientName', e.target.value)} placeholder="홍길동" />
+          <label style={labelStyle}>환자명 (전에 저장한 적 있으면 검색돼요)</label>
+          <PatientSearch
+            value={value.patientName}
+            onChange={(name) => set('patientName', name)}
+            knownPatients={knownPatients}
+            onPick={(p) => onChange({ ...value, patientName: p.patientName, chartNo: p.chartNo })}
+          />
         </div>
         <div style={fieldStyle}>
           <label style={labelStyle}>차트번호</label>
@@ -81,6 +90,50 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
             value={value.packetCount || ''}
             onChange={(e) => set('packetCount', Number(e.target.value) || 0)}
             placeholder="10"
+          />
+        </div>
+        <div style={fieldStyle}>
+          <label style={labelStyle}>팩용량(mL)</label>
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.packVolumeMl || ''}
+            onChange={(e) => set('packVolumeMl', Number(e.target.value) || 0)}
+            placeholder="선택"
+          />
+        </div>
+        <div style={fieldStyle}>
+          <label style={labelStyle}>며칠분</label>
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.daysSupply || ''}
+            onChange={(e) => set('daysSupply', Number(e.target.value) || 0)}
+            placeholder="선택"
+          />
+        </div>
+        <div style={fieldStyle}>
+          <label style={labelStyle}>팩수</label>
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.packCount || ''}
+            onChange={(e) => set('packCount', Number(e.target.value) || 0)}
+            placeholder="선택"
+          />
+        </div>
+        <div style={fieldStyle}>
+          <label style={labelStyle}>총물량(mL)</label>
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.totalLiquidMl || ''}
+            onChange={(e) => set('totalLiquidMl', Number(e.target.value) || 0)}
+            placeholder="선택"
           />
         </div>
       </div>
@@ -111,9 +164,9 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
           <tr>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 30 }}>No.</th>
             <th style={{ textAlign: 'left', padding: '4px 4px' }}>약재명</th>
-            <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>1첩당(g)</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>총용량(g)</th>
+            <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ width: 40 }} />
           </tr>
         </thead>
@@ -133,14 +186,6 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
               <td style={{ padding: '2px 4px' }}>
                 <input
                   className="input-field"
-                  value={herb.prepMethod}
-                  onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
-                  placeholder="초, 주초, 자 등"
-                />
-              </td>
-              <td style={{ padding: '2px 4px' }}>
-                <input
-                  className="input-field"
                   type="number"
                   min={0}
                   step={0.1}
@@ -150,6 +195,13 @@ export function OrderForm({ value, onChange, herbNameOptions, incompleteLines }:
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>{herbLineTotal(herb, value.packetCount)}</td>
+              <td style={{ padding: '2px 4px' }}>
+                <input
+                  className="input-field"
+                  value={herb.prepMethod}
+                  onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
+                />
+              </td>
               <td style={{ padding: '2px 4px', textAlign: 'right' }}>
                 <button type="button" onClick={() => removeHerbRow(i)} style={{ padding: '4px 8px', fontSize: 12 }}>
                   삭제
