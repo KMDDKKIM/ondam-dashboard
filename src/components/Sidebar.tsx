@@ -19,6 +19,8 @@ interface SidebarProps {
   remoteNewCount?: number;
   /** 원장님 처리를 기다리는 한약 처방 신청 건수 — 한약 대기방 메뉴에 숫자 배지를 붙인다. */
   herbQueueCount?: number;
+  /** 아직 도착하지 않은(신청됨+주문완료) 물품신청 건수 — 물품신청 메뉴에 숫자 배지를 붙인다. */
+  supplyOpenCount?: number;
 }
 
 // 무거운 배지(오늘 걸 해피콜 수, 초진·재초진 등록 누락)는 메뉴가 뜬 뒤에 따로 읽는다.
@@ -31,7 +33,7 @@ const RAIL_WIDTH = 60;
 
 // 도구를 묶어 항상 보여 주는 왼쪽 메뉴. 표가 넓은 화면이나 좁은 창에서는 처음에 아이콘만
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
-export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0 }: SidebarProps) {
+export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0, supplyOpenCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null, naverTalkTalkUnread: null });
   const inFlight = useRef(false);
@@ -202,6 +204,9 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                     {item.href === '/remote-consult-alerts' && remoteNewCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`처리 대기 비대면진료 신청 ${remoteNewCount}건`} />
                     )}
+                    {item.href === '/supply-requests' && supplyOpenCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`대기 중인 물품신청 ${supplyOpenCount}건`} />
+                    )}
                   </span>
                   {!collapsed && (
                     <>
@@ -228,6 +233,11 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                       {item.href === '/paste-import' && closingMissing && (
                         <span className="side-badge" title="어제 결산이 아직 입력되지 않았어요">
                           미입력
+                        </span>
+                      )}
+                      {item.href === '/supply-requests' && supplyOpenCount > 0 && (
+                        <span className="side-badge" title="아직 도착하지 않은 물품신청">
+                          {supplyOpenCount > 99 ? '99+' : supplyOpenCount}
                         </span>
                       )}
                     </>

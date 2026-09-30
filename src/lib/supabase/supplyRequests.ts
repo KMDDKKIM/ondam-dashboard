@@ -144,6 +144,19 @@ export async function setSupplyReceived(
   if (error) throw error;
 }
 
+// 왼쪽 메뉴 배지용 — 아직 도착하지 않은(신청됨+주문완료) 신청 수. 못 읽으면 null(배지를 숨긴다).
+export async function countOpenSupplyRequests(supabase: SupabaseClient): Promise<number | null> {
+  try {
+    const { count, error } = await supabase
+      .from('supply_requests')
+      .select('id', { count: 'exact', head: true })
+      .is('received_at', null);
+    return error ? null : (count ?? 0);
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteSupplyRequest(supabase: SupabaseClient, id: string): Promise<void> {
   // RLS가 막으면(권한 없음) 에러 없이 0행이 지워지므로 실제 삭제됐는지 확인한다.
   const { data, error } = await supabase.from('supply_requests').delete().eq('id', id).select('id');
