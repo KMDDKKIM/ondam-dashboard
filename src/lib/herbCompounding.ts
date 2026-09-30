@@ -14,13 +14,19 @@ export interface HerbCompoundingOrder {
   patientName: string;
   /** 없을 수도 있다(신환 등록 전 등) — 예약자 명단과 같은 관례로 빈 문자열을 쓴다. */
   chartNo: string;
+  /** 처방명(예: 보중익기탕) — 선택. 과거 기록에서 환자별로 어떤 처방을 받았는지 찾아보는 용도. */
+  prescriptionName: string;
   orderDate: string; // YYYY-MM-DD
   /** 첩수 — 처방 전체에 적용되는 한 값이다(약재마다 따로 첩수를 두지 않는다). */
   packetCount: number;
-  /** 탕전(달임) 정보 — 전부 선택, 0은 "안 적음"이다. 서로 계산으로 맞물리지 않는다(팩수가
-   * 며칠분×하루팩수인지는 탕전 방식마다 달라서, 실제로 나온 값을 그대로 적는다). */
+  /** 탕전(달임) 정보 — 전부 선택, 0은 "안 적음"이다.
+   * 며칠분은 첩수와 같이 움직이는 게 기본(하루 한 첩 관례)이지만 직접 고칠 수 있다 —
+   * 화면(OrderForm)에서 "며칠분이 첩수와 같았을 때만" 첩수를 따라가게 해서 구현한다.
+   * 팩수 = 하루 복용횟수 × 며칠분으로 자동 계산한다(화면에서 계산해 넣어 둔다, 원장 요청 2026-09-30). */
   packVolumeMl: number;
   daysSupply: number;
+  /** 하루 몇 번 복용하는지 — 팩수 자동 계산에 쓰인다. */
+  dosesPerDay: number;
   packCount: number;
   totalLiquidMl: number;
   herbs: HerbLine[];
@@ -104,6 +110,19 @@ export function parseHerbGramsEntry(text: string): ParsedHerbEntry {
   }
 
   return { herbs, danglingNames: pending };
+}
+
+/** 팩수 = 하루 복용횟수 × 며칠분. 둘 중 하나라도 안 적었으면(0 이하) 0(안 적음). */
+export function computePackCount(dosesPerDay: number, daysSupply: number): number {
+  return dosesPerDay > 0 && daysSupply > 0 ? dosesPerDay * daysSupply : 0;
+}
+
+/** 1첩당 그램 기준으로 약재 줄을 정렬한다(안정 정렬 — 그램이 같으면 원래 순서 유지). */
+export function sortHerbLinesByGrams<T extends Pick<HerbLine, 'gramsPerPacket'>>(
+  herbs: T[],
+  direction: 'asc' | 'desc'
+): T[] {
+  return [...herbs].sort((a, b) => (direction === 'asc' ? a.gramsPerPacket - b.gramsPerPacket : b.gramsPerPacket - a.gramsPerPacket));
 }
 
 // 일괄 입력으로 새로 읽은 약재를, 이미 입력칸에 있던 약재 줄 뒤에 더한다. 완전히 빈 줄(이름도

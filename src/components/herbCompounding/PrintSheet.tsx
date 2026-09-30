@@ -10,7 +10,7 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
   const herbs = order.herbs.filter((h) => h.herbName.trim() !== '');
   const total = totalHerbWeight(herbs, order.packetCount);
   const decoctionRow =
-    order.packVolumeMl > 0 || order.daysSupply > 0 || order.packCount > 0 || order.totalLiquidMl > 0;
+    order.packVolumeMl > 0 || order.daysSupply > 0 || order.dosesPerDay > 0 || order.packCount > 0 || order.totalLiquidMl > 0;
 
   return (
     <div className="rx-sheet">
@@ -29,6 +29,12 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
             <th>첩수</th>
             <td>{order.packetCount}첩</td>
           </tr>
+          {order.prescriptionName.trim() !== '' && (
+            <tr>
+              <th>처방명</th>
+              <td colSpan={3}>{order.prescriptionName}</td>
+            </tr>
+          )}
           {decoctionRow && (
             <tr>
               <th>팩용량</th>
@@ -39,10 +45,16 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
           )}
           {decoctionRow && (
             <tr>
+              <th>하루 복용</th>
+              <td>{order.dosesPerDay > 0 ? `${order.dosesPerDay}회` : ''}</td>
               <th>팩수</th>
               <td>{order.packCount > 0 ? `${order.packCount}팩` : ''}</td>
+            </tr>
+          )}
+          {decoctionRow && (
+            <tr>
               <th>총물량</th>
-              <td>{order.totalLiquidMl > 0 ? `${order.totalLiquidMl}mL` : ''}</td>
+              <td colSpan={3}>{order.totalLiquidMl > 0 ? `${order.totalLiquidMl}mL` : ''}</td>
             </tr>
           )}
         </tbody>

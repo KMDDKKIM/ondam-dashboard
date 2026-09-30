@@ -188,7 +188,7 @@ export default function HerbQueuePage() {
             <col style={{ width: 200 }} />
             <col />
             <col style={{ width: 70 }} />
-            <col style={{ width: 120 }} />
+            <col style={{ width: 200 }} />
           </colgroup>
           <thead>
             <tr style={{ background: '#e4f0e2' }}>
@@ -230,6 +230,13 @@ export default function HerbQueuePage() {
                   <button type="button" onClick={() => handleDone(w)} className="btn-primary" style={{ padding: '3px 12px', fontSize: 13 }}>
                     완료
                   </button>{' '}
+                  <Link
+                    href={`/herb-compounding?patientName=${encodeURIComponent(w.patientName)}&chartNo=${encodeURIComponent(w.chartNo)}`}
+                    title="환자명·차트번호를 채운 채로 한약 처방전 화면을 열어요"
+                    style={{ fontSize: 12, padding: '2px 6px', color: 'var(--color-brand-b)', whiteSpace: 'nowrap' }}
+                  >
+                    처방전 쓰기
+                  </Link>{' '}
                   <button type="button" onClick={() => handleDelete(w)} style={{ fontSize: 12, padding: '2px 6px', color: '#b3261e', whiteSpace: 'nowrap' }}>
                     삭제
                   </button>

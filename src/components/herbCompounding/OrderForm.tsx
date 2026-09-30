@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
-import { herbLineTotal, mergeHerbLines, parseHerbGramsEntry, totalHerbWeight } from '@/lib/herbCompounding';
+import { computePackCount, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
 import { PatientSearch } from './PatientSearch';
 
@@ -59,6 +59,26 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
     onChange({ ...value, herbs: value.herbs.filter((_, i) => i !== index) });
   }
 
+  function sortByGrams(direction: 'asc' | 'desc') {
+    onChange({ ...value, herbs: sortHerbLinesByGrams(value.herbs, direction) });
+  }
+
+  // 며칠분은 첩수와 같이 움직이는 게 기본(하루 한 첩 관례)이다. 며칠분을 아직 안 건드렸으면
+  // (첩수와 같거나 0이면) 첩수를 따라가게 하고, 직접 다르게 고쳤으면 더 이상 안 따라간다.
+  function setPacketCount(next: number) {
+    const inSync = value.daysSupply === value.packetCount || value.daysSupply === 0;
+    const nextDaysSupply = inSync ? next : value.daysSupply;
+    onChange({ ...value, packetCount: next, daysSupply: nextDaysSupply, packCount: computePackCount(value.dosesPerDay, nextDaysSupply) });
+  }
+
+  function setDaysSupply(next: number) {
+    onChange({ ...value, daysSupply: next, packCount: computePackCount(value.dosesPerDay, next) });
+  }
+
+  function setDosesPerDay(next: number) {
+    onChange({ ...value, dosesPerDay: next, packCount: computePackCount(next, value.daysSupply) });
+  }
+
   const total = totalHerbWeight(value.herbs, value.packetCount);
 
   return (
@@ -88,7 +108,7 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
             type="number"
             min={1}
             value={value.packetCount || ''}
-            onChange={(e) => set('packetCount', Number(e.target.value) || 0)}
+            onChange={(e) => setPacketCount(Number(e.target.value) || 0)}
             placeholder="10"
           />
         </div>
@@ -111,25 +131,75 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
         <span className="muted-text" style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
           탕전 정보(선택)
         </span>
-        {([
-          ['packVolumeMl', '팩용량', 'mL'],
-          ['daysSupply', '며칠분', '일'],
-          ['packCount', '팩수', '팩'],
-          ['totalLiquidMl', '총물량', 'mL'],
-        ] as const).map(([key, label, unit]) => (
-          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
-            {label}
-            <input
-              className="input-field"
-              type="number"
-              min={0}
-              value={value[key] || ''}
-              onChange={(e) => set(key, Number(e.target.value) || 0)}
-              style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
-            />
-            {unit}
-          </label>
-        ))}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          처방명
+          <input
+            className="input-field"
+            value={value.prescriptionName}
+            onChange={(e) => set('prescriptionName', e.target.value)}
+            placeholder="예: 보중익기탕"
+            style={{ width: 120, padding: '4px 6px', fontSize: 13 }}
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          팩용량
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.packVolumeMl || ''}
+            onChange={(e) => set('packVolumeMl', Number(e.target.value) || 0)}
+            style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+          />
+          mL
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          며칠분
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.daysSupply || ''}
+            onChange={(e) => setDaysSupply(Number(e.target.value) || 0)}
+            title="기본은 첩수와 같이 움직여요(하루 한 첩 관례). 직접 고치면 더 이상 첩수를 안 따라가요."
+            style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+          />
+          일
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          하루 몇 번 복용
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.dosesPerDay || ''}
+            onChange={(e) => setDosesPerDay(Number(e.target.value) || 0)}
+            style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+          />
+          회
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          팩수
+          <span
+            title="하루 몇 번 복용 × 며칠분으로 자동 계산돼요"
+            style={{ width: 56, padding: '4px 6px', fontSize: 13, color: 'var(--color-ink)' }}
+          >
+            {value.packCount || 0}
+          </span>
+          팩(자동)
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--color-muted)' }}>
+          총물량
+          <input
+            className="input-field"
+            type="number"
+            min={0}
+            value={value.totalLiquidMl || ''}
+            onChange={(e) => set('totalLiquidMl', Number(e.target.value) || 0)}
+            style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+          />
+          mL
+        </label>
       </div>
 
       <div style={fieldStyle}>
@@ -158,7 +228,29 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
           <tr>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 30 }}>No.</th>
             <th style={{ textAlign: 'left', padding: '4px 4px' }}>약재명</th>
-            <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>1첩당(g)</th>
+            <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                1첩당(g)
+                <button
+                  type="button"
+                  onClick={() => sortByGrams('asc')}
+                  title="1첩당 그램 오름차순 정렬"
+                  aria-label="1첩당 그램 오름차순 정렬"
+                  style={{ padding: '0 2px', fontSize: 11, lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)' }}
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sortByGrams('desc')}
+                  title="1첩당 그램 내림차순 정렬"
+                  aria-label="1첩당 그램 내림차순 정렬"
+                  style={{ padding: '0 2px', fontSize: 11, lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)' }}
+                >
+                  ▼
+                </button>
+              </span>
+            </th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>총용량(g)</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ width: 40 }} />

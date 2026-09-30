@@ -21,10 +21,12 @@ function makeEmptyOrder(): HerbCompoundingOrder {
     id: '',
     patientName: '',
     chartNo: '',
+    prescriptionName: '',
     orderDate: todayKst(),
     packetCount: 0,
     packVolumeMl: 0,
     daysSupply: 0,
+    dosesPerDay: 0,
     packCount: 0,
     totalLiquidMl: 0,
     herbs: [{ herbName: '', prepMethod: '', gramsPerPacket: 0 }],
@@ -56,17 +58,24 @@ export default function HerbCompoundingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ?load=<id> 로 들어오면(과거 기록에서 클릭) 그 처방전을 불러온다 — 한약 복용법 출력과 같은 관례.
+  // ?load=<id> 로 들어오면(과거 기록에서 클릭) 그 처방전을 불러오고, ?patientName=...&chartNo=...
+  // 로 들어오면(한약 대기방에서 "처방전 쓰기" 클릭) 새 처방전에 환자명·차트번호만 채워 둔다.
   useEffect(() => {
-    const loadId = new URLSearchParams(window.location.search).get('load');
-    if (!loadId) return;
+    const params = new URLSearchParams(window.location.search);
+    const loadId = params.get('load');
+    const patientName = params.get('patientName');
+    if (!loadId && !patientName) return;
     window.history.replaceState(null, '', '/herb-compounding');
-    const supabase = createClient();
-    getHerbCompoundingOrder(supabase, loadId)
-      .then((record) => {
-        if (record) setOrder(record);
-      })
-      .catch(() => setErrorMessage('기록을 불러오지 못했습니다.'));
+    if (loadId) {
+      const supabase = createClient();
+      getHerbCompoundingOrder(supabase, loadId)
+        .then((record) => {
+          if (record) setOrder(record);
+        })
+        .catch(() => setErrorMessage('기록을 불러오지 못했습니다.'));
+      return;
+    }
+    setOrder((prev) => ({ ...prev, patientName: patientName ?? '', chartNo: params.get('chartNo') ?? '' }));
   }, []);
 
   // 약재명 자동완성 후보 — 한약재 재고 현황의 약재 목록을 그대로 쓴다.
@@ -97,10 +106,12 @@ export default function HerbCompoundingPage() {
       const saved = await createHerbCompoundingOrder(supabase, {
         patientName: order.patientName,
         chartNo: order.chartNo,
+        prescriptionName: order.prescriptionName,
         orderDate: order.orderDate,
         packetCount: order.packetCount,
         packVolumeMl: order.packVolumeMl,
         daysSupply: order.daysSupply,
+        dosesPerDay: order.dosesPerDay,
         packCount: order.packCount,
         totalLiquidMl: order.totalLiquidMl,
         herbs: order.herbs.filter((h) => h.herbName.trim() !== ''),

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { canSaveOrder, herbLineTotal, incompleteHerbLines, mergeHerbLines, parseHerbGramsEntry, totalHerbWeight } from './herbCompounding';
+import {
+  canSaveOrder,
+  computePackCount,
+  herbLineTotal,
+  incompleteHerbLines,
+  mergeHerbLines,
+  parseHerbGramsEntry,
+  sortHerbLinesByGrams,
+  totalHerbWeight,
+} from './herbCompounding';
 
 describe('herbLineTotal', () => {
   it('1첩당 그램 × 첩수', () => {
@@ -109,6 +118,50 @@ describe('parseHerbGramsEntry', () => {
 
   it('빈 입력은 빈 결과', () => {
     expect(parseHerbGramsEntry('   ')).toEqual({ herbs: [], danglingNames: [] });
+  });
+});
+
+describe('computePackCount', () => {
+  it('하루 복용횟수 × 며칠분', () => {
+    expect(computePackCount(3, 10)).toBe(30);
+  });
+
+  it('하루 복용횟수가 0이면 0', () => {
+    expect(computePackCount(0, 10)).toBe(0);
+  });
+
+  it('며칠분이 0이면 0', () => {
+    expect(computePackCount(3, 0)).toBe(0);
+  });
+});
+
+describe('sortHerbLinesByGrams', () => {
+  const herbs = [
+    { herbName: '당귀', gramsPerPacket: 6 },
+    { herbName: '천궁', gramsPerPacket: 2 },
+    { herbName: '백출', gramsPerPacket: 4 },
+  ];
+
+  it('오름차순 정렬', () => {
+    expect(sortHerbLinesByGrams(herbs, 'asc').map((h) => h.herbName)).toEqual(['천궁', '백출', '당귀']);
+  });
+
+  it('내림차순 정렬', () => {
+    expect(sortHerbLinesByGrams(herbs, 'desc').map((h) => h.herbName)).toEqual(['당귀', '백출', '천궁']);
+  });
+
+  it('그램이 같으면 원래 순서를 유지한다', () => {
+    const tied = [
+      { herbName: 'A', gramsPerPacket: 4 },
+      { herbName: 'B', gramsPerPacket: 4 },
+    ];
+    expect(sortHerbLinesByGrams(tied, 'asc').map((h) => h.herbName)).toEqual(['A', 'B']);
+  });
+
+  it('원본 배열을 바꾸지 않는다', () => {
+    const original = [...herbs];
+    sortHerbLinesByGrams(herbs, 'asc');
+    expect(herbs).toEqual(original);
   });
 });
 

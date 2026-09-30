@@ -33,7 +33,7 @@ export default function HerbCompoundingRecordsPage() {
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return records;
-    return records.filter((r) => r.patientName.includes(q) || r.chartNo.includes(q));
+    return records.filter((r) => r.patientName.includes(q) || r.chartNo.includes(q) || r.prescriptionName.includes(q));
   }, [records, query]);
 
   async function handleDelete(id: string) {
@@ -59,7 +59,7 @@ export default function HerbCompoundingRecordsPage() {
         className="input-field"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="환자명·차트번호로 검색"
+        placeholder="환자명·차트번호·처방명으로 검색"
         style={{ marginBottom: 14, maxWidth: 320 }}
       />
 
@@ -76,6 +76,7 @@ export default function HerbCompoundingRecordsPage() {
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>날짜</th>
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>환자명</th>
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>차트번호</th>
+              <th style={{ textAlign: 'left', padding: '6px 8px' }}>처방명</th>
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>첩수</th>
               <th style={{ textAlign: 'left', padding: '6px 8px' }}>약재 수</th>
               <th />
@@ -87,6 +88,7 @@ export default function HerbCompoundingRecordsPage() {
                 <td style={{ padding: '6px 8px' }}>{r.orderDate}</td>
                 <td style={{ padding: '6px 8px' }}>{r.patientName || '(이름 없음)'}</td>
                 <td style={{ padding: '6px 8px' }}>{r.chartNo || '-'}</td>
+                <td style={{ padding: '6px 8px' }}>{r.prescriptionName || '-'}</td>
                 <td style={{ padding: '6px 8px' }}>{r.packetCount}첩</td>
                 <td style={{ padding: '6px 8px' }}>{r.herbCount}종</td>
                 <td style={{ padding: '6px 8px', textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

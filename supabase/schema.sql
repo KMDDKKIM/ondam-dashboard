@@ -1476,11 +1476,16 @@ create table if not exists herb_compounding_orders (
   id uuid primary key default gen_random_uuid(),
   patient_name text not null,
   chart_no text,
+  -- 처방명(예: 보중익기탕) — 선택(migration_herb_compounding_prescription_name.sql, 원장 요청 2026-09-30).
+  prescription_name text,
   order_date date not null,
   packet_count numeric not null check (packet_count > 0),
   -- 탕전(달임) 정보 — 전부 선택(migration_herb_compounding_decoction.sql, 원장 요청 2026-09-29).
   pack_volume_ml numeric,
   days_supply numeric,
+  -- 하루 몇 번 복용 — 선택(migration_herb_compounding_doses_per_day.sql, 원장 요청 2026-09-30).
+  -- pack_count는 이제 dosesPerDay × daysSupply로 화면에서 자동 계산해 넣는다.
+  doses_per_day numeric,
   pack_count numeric,
   total_liquid_ml numeric,
   herbs jsonb not null default '[]'::jsonb,

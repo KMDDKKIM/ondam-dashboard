@@ -5,10 +5,12 @@ interface HerbCompoundingRow {
   id: string;
   patient_name: string;
   chart_no: string | null;
+  prescription_name: string | null;
   order_date: string;
   packet_count: number;
   pack_volume_ml: number | null;
   days_supply: number | null;
+  doses_per_day: number | null;
   pack_count: number | null;
   total_liquid_ml: number | null;
   herbs: HerbLine[];
@@ -22,10 +24,12 @@ function fromRow(row: HerbCompoundingRow): HerbCompoundingOrder {
     id: row.id,
     patientName: row.patient_name,
     chartNo: row.chart_no ?? '',
+    prescriptionName: row.prescription_name ?? '',
     orderDate: row.order_date,
     packetCount: Number(row.packet_count),
     packVolumeMl: row.pack_volume_ml != null ? Number(row.pack_volume_ml) : 0,
     daysSupply: row.days_supply != null ? Number(row.days_supply) : 0,
+    dosesPerDay: row.doses_per_day != null ? Number(row.doses_per_day) : 0,
     packCount: row.pack_count != null ? Number(row.pack_count) : 0,
     totalLiquidMl: row.total_liquid_ml != null ? Number(row.total_liquid_ml) : 0,
     herbs: row.herbs,
@@ -38,10 +42,12 @@ function fromRow(row: HerbCompoundingRow): HerbCompoundingOrder {
 export interface NewHerbCompoundingOrder {
   patientName: string;
   chartNo: string;
+  prescriptionName: string;
   orderDate: string;
   packetCount: number;
   packVolumeMl: number;
   daysSupply: number;
+  dosesPerDay: number;
   packCount: number;
   totalLiquidMl: number;
   herbs: HerbLine[];
@@ -58,10 +64,12 @@ export async function createHerbCompoundingOrder(
     .insert({
       patient_name: input.patientName,
       chart_no: input.chartNo || null,
+      prescription_name: input.prescriptionName || null,
       order_date: input.orderDate,
       packet_count: input.packetCount,
       pack_volume_ml: input.packVolumeMl || null,
       days_supply: input.daysSupply || null,
+      doses_per_day: input.dosesPerDay || null,
       pack_count: input.packCount || null,
       total_liquid_ml: input.totalLiquidMl || null,
       herbs: input.herbs,
@@ -85,6 +93,7 @@ export interface HerbCompoundingSummary {
   id: string;
   patientName: string;
   chartNo: string;
+  prescriptionName: string;
   orderDate: string;
   packetCount: number;
   herbCount: number;
@@ -104,7 +113,7 @@ export async function listRecentHerbCompoundingOrders(
 ): Promise<HerbCompoundingSummary[]> {
   const { data, error } = await supabase
     .from('herb_compounding_orders')
-    .select('id, patient_name, chart_no, order_date, packet_count, herbs, created_at')
+    .select('id, patient_name, chart_no, prescription_name, order_date, packet_count, herbs, created_at')
     .order('order_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -113,6 +122,7 @@ export async function listRecentHerbCompoundingOrders(
     id: row.id,
     patientName: row.patient_name,
     chartNo: row.chart_no ?? '',
+    prescriptionName: row.prescription_name ?? '',
     orderDate: row.order_date,
     packetCount: Number(row.packet_count),
     herbCount: row.herbs.filter((h) => h.herbName.trim() !== '').length,
