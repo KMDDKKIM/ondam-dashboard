@@ -144,16 +144,28 @@ export async function setSupplyReceived(
   if (error) throw error;
 }
 
-// 왼쪽 메뉴 배지용 — 아직 도착하지 않은(신청됨+주문완료) 신청 수. 못 읽으면 null(배지를 숨긴다).
-export async function countOpenSupplyRequests(supabase: SupabaseClient): Promise<number | null> {
+export interface SupplyBadgeCounts {
+  /** 아직 주문 안 한(신청됨) 건수 — 원장님에게 보여준다. */
+  awaitingOrder: number | null;
+  /** 주문은 했지만 아직 도착 안 한(주문완료) 건수 — 데스크 직원에게 보여준다. */
+  awaitingArrival: number | null;
+}
+
+// 왼쪽 메뉴 배지용. 신청 직후엔 원장님에게(주문해야 함), 주문 후엔 데스크 직원에게(도착 확인해야 함)
+// 알람이 넘어가고, 도착 체크까지 끝나면 둘 다 사라진다 — 어느 쪽을 보여줄지는 호출하는 쪽에서 역할로 고른다.
+// 못 읽은 값은 null(배지를 숨긴다).
+export async function countSupplyRequestBadges(supabase: SupabaseClient): Promise<SupplyBadgeCounts> {
   try {
-    const { count, error } = await supabase
-      .from('supply_requests')
-      .select('id', { count: 'exact', head: true })
-      .is('received_at', null);
-    return error ? null : (count ?? 0);
+    const [awaitingOrderResult, awaitingArrivalResult] = await Promise.all([
+      supabase.from('supply_requests').select('id', { count: 'exact', head: true }).is('ordered_at', null).is('received_at', null),
+      supabase.from('supply_requests').select('id', { count: 'exact', head: true }).not('ordered_at', 'is', null).is('received_at', null),
+    ]);
+    return {
+      awaitingOrder: awaitingOrderResult.error ? null : (awaitingOrderResult.count ?? 0),
+      awaitingArrival: awaitingArrivalResult.error ? null : (awaitingArrivalResult.count ?? 0),
+    };
   } catch {
-    return null;
+    return { awaitingOrder: null, awaitingArrival: null };
   }
 }
 

@@ -19,7 +19,7 @@ interface SidebarProps {
   remoteNewCount?: number;
   /** 원장님 처리를 기다리는 한약 처방 신청 건수 — 한약 대기방 메뉴에 숫자 배지를 붙인다. */
   herbQueueCount?: number;
-  /** 아직 도착하지 않은(신청됨+주문완료) 물품신청 건수 — 물품신청 메뉴에 숫자 배지를 붙인다. */
+  /** 물품신청 메뉴 배지 건수 — 원장님에게는 주문 대기, 그 외에는 도착 확인 대기 건수(호출하는 쪽에서 역할별로 골라 내려준다). */
   supplyOpenCount?: number;
 }
 
@@ -39,6 +39,8 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
   const inFlight = useRef(false);
   const openCallCount = badges.openCalls ?? 0;
   const firstVisitMissingCount = badges.missingFirstVisits ?? 0;
+  // 원장님에게는 "주문해야 할 신청"을, 데스크 직원에게는 "도착 확인해야 할 신청"을 보여준다(supplyOpenCount는 layout.tsx에서 이미 역할별로 골라서 내려온다).
+  const supplyBadgeLabel = isOwner ? '주문 대기 물품신청' : '도착 확인 대기 물품신청';
 
   const refreshBadges = useCallback(async () => {
     if (inFlight.current || !shouldRefreshBadges(lastBadgeFetchAt, Date.now())) return;
@@ -205,7 +207,7 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                       <span className="side-dot" aria-label={`처리 대기 비대면진료 신청 ${remoteNewCount}건`} />
                     )}
                     {item.href === '/supply-requests' && supplyOpenCount > 0 && collapsed && (
-                      <span className="side-dot" aria-label={`대기 중인 물품신청 ${supplyOpenCount}건`} />
+                      <span className="side-dot" aria-label={`${supplyBadgeLabel} ${supplyOpenCount}건`} />
                     )}
                   </span>
                   {!collapsed && (
@@ -236,7 +238,7 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
                         </span>
                       )}
                       {item.href === '/supply-requests' && supplyOpenCount > 0 && (
-                        <span className="side-badge" title="아직 도착하지 않은 물품신청">
+                        <span className="side-badge" title={supplyBadgeLabel}>
                           {supplyOpenCount > 99 ? '99+' : supplyOpenCount}
                         </span>
                       )}
