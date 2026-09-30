@@ -11,6 +11,7 @@ import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 import { countSupplyRequestBadges } from '@/lib/supabase/supplyRequests';
+import { countPendingStaff } from '@/lib/supabase/staffApproval';
 import { listDoctors } from '@/lib/supabase/doctors';
 import { resolveHerbQueueDoctorFilter } from '@/lib/herbQueue';
 
@@ -36,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // 왼쪽 메뉴의 숫자 표시들은 서로 상관없으니 한꺼번에 읽는다(하나씩 기다리면 화면마다 그만큼 느려진다).
   // (해피콜 콜 수·초진 등록 누락처럼 무거운 배지는 여기서 기다리지 않고, 메뉴가 뜬 뒤 /api/sidebar-badges 로 따로 읽는다.)
-  const [unreadCount, closingMissing, remoteNewCount, doctorNames, supplyBadges] = await Promise.all([
+  const [unreadCount, closingMissing, remoteNewCount, doctorNames, supplyBadges, pendingStaffCount] = await Promise.all([
     // 채팅 목록을 못 가져와도 나머지 화면은 정상적으로 보여준다.
     listRoomsWithUnread(supabase).then(totalUnreadCount, () => 0),
     // 어제 결산이 비어 있으면 왼쪽 메뉴의 일일결산에 빨간 표시를 붙인다(조회 실패는 무시).
@@ -46,6 +47,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     countNewRemoteRequests(supabase).then((n) => n ?? 0),
     listDoctors(supabase).then((doctors) => doctors.map((d) => d.name), () => [] as string[]),
     countSupplyRequestBadges(supabase),
+    // 직원 승인 메뉴는 원장님만 보이니, 원장님이 아니면 조회할 필요가 없다.
+    isOwner ? countPendingStaff(supabase).then((n) => n ?? 0) : Promise.resolve(0),
   ]);
   // 로그인한 사람이 진료의 본인이면 자기 앞으로 신청된 것만, 데스크 직원이면 전체를 알림으로 보여준다.
   const herbQueueCount = await countWaitingHerbQueue(supabase, resolveHerbQueueDoctorFilter(staffName, doctorNames)).then((n) => n ?? 0);
@@ -62,6 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         remoteNewCount={remoteNewCount}
         herbQueueCount={herbQueueCount}
         supplyOpenCount={supplyOpenCount}
+        pendingStaffCount={pendingStaffCount}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
         <TopBar staffName={staffName} staffGrade={staffGrade} unreadCount={unreadCount} />
