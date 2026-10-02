@@ -1664,10 +1664,12 @@ create policy "approved staff can delete announcements" on announcements
 -- 한의원 이벤트(홈 달력에 보여줄 일정): 원장만 추가·삭제, 전 직원 읽기.
 create table if not exists clinic_events (
   id uuid primary key default gen_random_uuid(),
-  event_date date not null,
+  event_date date not null, -- 시작일
+  end_date date not null,   -- 끝나는 날(하루짜리는 시작일과 같음) — migration_clinic_events_period.sql 참고
   title text not null,
   created_by uuid references staff(id) on delete set null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint clinic_events_range check (end_date >= event_date)
 );
 
 alter table clinic_events enable row level security;

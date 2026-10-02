@@ -1,13 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { currentMonthKst, todayKst } from '@/lib/kst';
 import { monthGridWeeks } from '@/lib/leave';
-import { buildDayEntries, type DayEntries } from '@/lib/homeCalendar';
+import { assignEventLanes, buildDayEntries, eventSegment } from '@/lib/homeCalendar';
+import { todosForDate } from '@/lib/todoVisibility';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
 import { createClinicEvent, deleteClinicEvent, listClinicEvents, type ClinicEvent } from '@/lib/supabase/clinicEvents';
+import { createTodo, deleteTodo, listTodos, setTodoDone } from '@/lib/supabase/todos';
+import type { Staff, Todo } from '@/lib/types';
+import { HomeDayPanel, MINE } from './HomeDayPanel';
+
+const FILTER_KEY = 'todoChecklist.assigneeFilter';
+
+function readSavedFilter(): string | null {
+  try {
+    return window.localStorage.getItem(FILTER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveFilter(value: string) {
+  try {
+    window.localStorage.setItem(FILTER_KEY, value);
+  } catch {
+    // 저장이 막힌 브라우저에서는 기억만 못 할 뿐 화면은 그대로 동작한다.
+  }
+}
 
 function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
@@ -16,25 +38,29 @@ function shiftMonth(month: string, delta: number): string {
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+const LANE_HEIGHT = 14;
 
+// 홈 달력 — 한의원 이벤트(기간 막대)와 승인된 연차를 보여주고, 날짜를 누르면 그 아래에 그날
+// 할 일 목록이 뜬다(예전 "오늘 할 일" 카드를 여기로 묶음, 원장 요청 2026-10-02).
 export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   const supabase = useMemo(() => createClient(), []);
+  const today = todayKst();
   const [month, setMonth] = useState(currentMonthKst());
+  const [selectedDate, setSelectedDate] = useState(today);
   const [events, setEvents] = useState<ClinicEvent[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [myId, setMyId] = useState<string | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [myId, setMyId] = useState<string | null>(null);
-
-  const [newDate, setNewDate] = useState(todayKst());
-  const [newTitle, setNewTitle] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const weeks = useMemo(() => monthGridWeeks(month), [month]);
   const from = weeks[0][0];
   const to = weeks[weeks.length - 1][6];
 
-  const refresh = useCallback(async () => {
+  const refreshCalendar = useCallback(async () => {
     try {
       const [eventRows, leaveRows] = await Promise.all([
         listClinicEvents(supabase, { from, to }),
@@ -49,18 +75,35 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     }
   }, [supabase, from, to]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null));
+  const refreshTodos = useCallback(async () => {
+    try {
+      setTodos(await listTodos(supabase));
+    } catch {
+      setError('할 일을 불러오지 못했습니다.');
+    }
   }, [supabase]);
 
-  const entriesByDate: Map<string, DayEntries> = useMemo(
+  useEffect(() => {
+    refreshCalendar();
+  }, [refreshCalendar]);
+
+  useEffect(() => {
+    const saved = readSavedFilter();
+    if (saved !== null) setAssigneeFilter(saved);
+    refreshTodos();
+    supabase
+      .from('staff')
+      .select('id, name, role')
+      .eq('status', 'approved')
+      .then(({ data }) => setStaffList((data ?? []) as Staff[]));
+    supabase.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null));
+  }, [supabase, refreshTodos]);
+
+  const lanes = useMemo(() => assignEventLanes(events), [events]);
+  const dayEntries = useMemo(
     () =>
       buildDayEntries(
-        events.map((e) => ({ id: e.id, eventDate: e.eventDate, title: e.title })),
+        events.map((e) => ({ id: e.id, title: e.title, startDate: e.startDate, endDate: e.endDate })),
         leaves.map((l) => ({ id: l.id, staffName: l.staffName, startDate: l.startDate, endDate: l.endDate, halfDay: l.halfDay })),
         from,
         to
@@ -68,34 +111,96 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     [events, leaves, from, to]
   );
 
-  async function handleAddEvent(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-    setSaving(true);
-    setError('');
+  // 주마다 필요한 이벤트 줄 수 — 그 주에 걸친 이벤트의 가장 큰 줄 번호 + 1.
+  const weekLaneCounts = useMemo(
+    () =>
+      weeks.map((week) => {
+        let max = -1;
+        for (const e of events) {
+          if (e.startDate <= week[6] && e.endDate >= week[0]) max = Math.max(max, lanes.get(e.id) ?? 0);
+        }
+        return max + 1;
+      }),
+    [weeks, events, lanes]
+  );
+
+  const filterId = assigneeFilter === MINE ? myId : staffList.some((s) => s.id === assigneeFilter) ? assigneeFilter : null;
+
+  function openTodoCount(date: string): number {
+    return todosForDate(todos, date, today, filterId).filter((t) => !t.done).length;
+  }
+
+  function changeFilter(value: string) {
+    setAssigneeFilter(value);
+    saveFilter(value);
+  }
+
+  async function toggleTodo(todo: Todo) {
+    const done = !todo.done;
+    setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, done, doneAt: done ? today : null } : t)));
     try {
-      await createClinicEvent(supabase, { eventDate: newDate, title: newTitle.trim(), createdBy: myId });
-      setNewTitle('');
-      await refresh();
+      await setTodoDone(supabase, todo.id, done);
     } catch {
-      setError('일정을 추가하지 못했습니다.');
-    } finally {
-      setSaving(false);
+      setError('저장에 실패했습니다.');
+      await refreshTodos();
     }
   }
 
-  async function handleDeleteEvent(id: string) {
-    if (!(await confirmDialog('이 일정을 삭제할까요?'))) return;
+  // × 를 빠르게 두 번 눌러도 확인창이 두 개 뜨지 않게, 확인창이 열려 있는 항목은 무시한다.
+  const confirming = useRef(new Set<string>());
+
+  async function removeTodo(todo: Todo) {
+    if (confirming.current.has(todo.id)) return;
+    confirming.current.add(todo.id);
+    let ok = false;
+    try {
+      ok = await confirmDialog(`"${todo.text}" 을(를) 삭제할까요?`, { confirmLabel: '삭제' });
+    } finally {
+      confirming.current.delete(todo.id);
+    }
+    if (!ok) return;
+    setTodos((prev) => prev.filter((t) => t.id !== todo.id));
+    try {
+      await deleteTodo(supabase, todo.id);
+    } catch {
+      setError('삭제에 실패했습니다.');
+      await refreshTodos();
+    }
+  }
+
+  async function addTodo(text: string, assigneeStaffId: string | null) {
     setError('');
     try {
-      await deleteClinicEvent(supabase, id);
-      await refresh();
+      await createTodo(supabase, { text, dueDate: selectedDate, assigneeStaffId, createdBy: myId });
+      await refreshTodos();
+    } catch {
+      setError('추가에 실패했습니다.');
+    }
+  }
+
+  async function addEvent(title: string, startDate: string, endDate: string) {
+    setError('');
+    try {
+      await createClinicEvent(supabase, { title, startDate, endDate, createdBy: myId });
+      await refreshCalendar();
+    } catch {
+      setError('이벤트를 추가하지 못했습니다.');
+    }
+  }
+
+  async function removeEvent(event: ClinicEvent) {
+    if (!(await confirmDialog(`"${event.title}" 이벤트를 삭제할까요?`, { confirmLabel: '삭제' }))) return;
+    setError('');
+    try {
+      await deleteClinicEvent(supabase, event.id);
+      await refreshCalendar();
     } catch {
       setError('삭제하지 못했습니다.');
     }
   }
 
-  const today = todayKst();
+  const selectedEntries = dayEntries.get(selectedDate);
+  const selectedEvents = events.filter((e) => e.startDate <= selectedDate && e.endDate >= selectedDate);
 
   return (
     <div className="card" style={{ padding: 16 }}>
@@ -120,67 +225,113 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
               {label}
             </div>
           ))}
-          {weeks.flatMap((week) =>
-            week.map((date) => {
+          {weeks.flatMap((week, wi) =>
+            week.map((date, col) => {
               const inMonth = date.slice(0, 7) === month;
               const isToday = date === today;
-              const day = entriesByDate.get(date);
-              const chips = [
-                ...(day?.events.map((e) => ({ kind: 'event' as const, id: e.id, label: e.title })) ?? []),
-                ...(day?.leaves.map((l) => ({
-                  kind: 'leave' as const,
-                  id: l.id,
-                  label: `${l.staffName}${l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}`,
-                })) ?? []),
-              ];
-              const shown = chips.slice(0, 2);
-              const overflow = chips.length - shown.length;
+              const isSelected = date === selectedDate;
+              const day = dayEntries.get(date);
+              const leaveChips = day?.leaves ?? [];
+              const shownLeaves = leaveChips.slice(0, 2);
+              const leaveOverflow = leaveChips.length - shownLeaves.length;
+              const openTodos = openTodoCount(date);
               return (
                 <div
                   key={date}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedDate(date)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedDate(date);
+                    }
+                  }}
                   style={{
-                    minHeight: 54,
+                    minHeight: 58,
                     borderRadius: 6,
-                    border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
-                    background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
-                    opacity: inMonth ? 1 : 0.5,
-                    padding: 3,
+                    border: isSelected ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
+                    margin: isSelected ? -1 : 0,
+                    background: isSelected ? 'rgba(44, 143, 214, 0.10)' : inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
+                    opacity: inMonth ? 1 : 0.55,
+                    cursor: 'pointer',
+                    position: 'relative',
                   }}
                 >
-                  <div style={{ fontSize: 10, fontWeight: isToday ? 700 : 500, marginBottom: 2 }}>{Number(date.slice(8, 10))}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {shown.map((chip) => (
-                      <span
-                        key={chip.id}
-                        title={chip.label}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 3px 2px' }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: isToday ? 700 : 500,
+                        color: isToday ? '#fff' : 'var(--color-ink)',
+                        background: isToday ? 'var(--color-brand-b)' : 'transparent',
+                        borderRadius: 999,
+                        padding: isToday ? '0 5px' : 0,
+                      }}
+                    >
+                      {Number(date.slice(8, 10))}
+                    </span>
+                    {openTodos > 0 && (
+                      <span title={`남은 할 일 ${openTodos}건`} style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-green)' }}>
+                        ✓{openTodos}
+                      </span>
+                    )}
+                  </div>
+
+                  {Array.from({ length: weekLaneCounts[wi] }, (_, lane) => {
+                    const ev = events.find((e) => lanes.get(e.id) === lane && eventSegment(e, date, col) !== null);
+                    const seg = ev ? eventSegment(ev, date, col) : null;
+                    if (!ev || !seg) return <div key={lane} style={{ height: LANE_HEIGHT, marginBottom: 2 }} />;
+                    return (
+                      <div
+                        key={lane}
+                        title={`${ev.title}${ev.startDate === ev.endDate ? '' : ` (${ev.startDate.slice(5)} ~ ${ev.endDate.slice(5)})`}`}
                         style={{
-                          fontSize: 9,
-                          padding: '1px 3px',
-                          borderRadius: 4,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          color: '#fff',
-                          background: chip.kind === 'event' ? 'var(--color-orange)' : 'var(--color-blue)',
+                          position: 'relative',
+                          height: LANE_HEIGHT,
+                          marginBottom: 2,
+                          marginLeft: seg.isStart ? 3 : 0,
+                          marginRight: seg.isEnd || col === 6 ? (seg.isEnd ? 3 : 0) : -5,
+                          background: 'var(--color-orange)',
+                          borderRadius: `${seg.isStart ? 4 : 0}px ${seg.isEnd ? 4 : 0}px ${seg.isEnd ? 4 : 0}px ${seg.isStart ? 4 : 0}px`,
+                          zIndex: 1,
                         }}
                       >
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{chip.label}</span>
-                        {chip.kind === 'event' && isOwner && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteEvent(chip.id)}
-                            aria-label="일정 삭제"
-                            style={{ border: 'none', background: 'transparent', color: '#fff', fontSize: 9, lineHeight: 1, padding: 0, cursor: 'pointer', flexShrink: 0 }}
+                        {seg.showLabel && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              left: 3,
+                              top: 0,
+                              width: `calc(${seg.span * 100}% + ${(seg.span - 1) * 5}px - 8px)`,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontSize: 9,
+                              lineHeight: `${LANE_HEIGHT}px`,
+                              color: '#fff',
+                              zIndex: 2,
+                            }}
                           >
-                            ×
-                          </button>
+                            {ev.title}
+                          </span>
                         )}
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '0 3px 3px' }}>
+                    {shownLeaves.map((l) => (
+                      <span
+                        key={l.id}
+                        title={l.staffName}
+                        style={{ fontSize: 9, padding: '1px 3px', borderRadius: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', background: 'var(--color-blue)' }}
+                      >
+                        {l.staffName}
+                        {l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}
                       </span>
                     ))}
-                    {overflow > 0 && <span style={{ fontSize: 9, color: 'var(--color-muted)' }}>+{overflow}</span>}
+                    {leaveOverflow > 0 && <span style={{ fontSize: 9, color: 'var(--color-muted)' }}>+{leaveOverflow}</span>}
                   </div>
                 </div>
               );
@@ -189,21 +340,23 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
         </div>
       )}
 
-      {isOwner && (
-        <form onSubmit={handleAddEvent} style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-          <input className="input-field" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: 130, padding: '5px 6px', fontSize: 12 }} />
-          <input
-            className="input-field"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="일정 추가"
-            style={{ flex: 1, padding: '5px 6px', fontSize: 12 }}
-          />
-          <button type="submit" className="btn-primary" disabled={saving || !newTitle.trim()} style={{ padding: '5px 10px', fontSize: 12 }}>
-            추가
-          </button>
-        </form>
-      )}
+      <HomeDayPanel
+        key={selectedDate}
+        date={selectedDate}
+        today={today}
+        isOwner={isOwner}
+        events={selectedEvents}
+        leaves={selectedEntries?.leaves ?? []}
+        todos={todosForDate(todos, selectedDate, today, filterId)}
+        staffList={staffList}
+        assigneeFilter={assigneeFilter}
+        onChangeFilter={changeFilter}
+        onToggleTodo={toggleTodo}
+        onDeleteTodo={removeTodo}
+        onAddTodo={addTodo}
+        onAddEvent={addEvent}
+        onDeleteEvent={removeEvent}
+      />
     </div>
   );
 }

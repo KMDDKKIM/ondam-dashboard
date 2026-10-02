@@ -16,6 +16,21 @@ export function visibleTodos(todos: Todo[], today: string, assigneeStaffId: stri
     });
 }
 
+// 달력에서 어떤 날짜 칸을 눌렀을 때 아래에 보여줄 할 일. 오늘은 "오늘 할 일"과 똑같이(밀린
+// 것 자동 이월 포함), 다른 날짜는 예정일이 정확히 그날인 것만 — 미래 예약도 미리 볼 수 있다.
+export function todosForDate(
+  todos: Todo[],
+  date: string,
+  today: string,
+  assigneeStaffId: string | null = null
+): Todo[] {
+  if (date === today) return visibleTodos(todos, today, assigneeStaffId);
+  return todos
+    .filter((t) => t.dueDate === date)
+    .filter((t) => !assigneeStaffId || t.assigneeStaffId === assigneeStaffId)
+    .sort((a, b) => Number(a.done) - Number(b.done));
+}
+
 // 서버에서 끝난 할 일을 며칠 전 것까지 가져올지(안 끝난 건 날짜와 무관하게 전부 가져온다).
 export const COMPLETED_WINDOW_DAYS = 7;
 

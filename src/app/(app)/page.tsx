@@ -1,6 +1,5 @@
 import { AnnouncementBanner } from '@/components/home/AnnouncementBanner';
 import { HomeCalendar } from '@/components/home/HomeCalendar';
-import { TodoChecklist } from '@/components/TodoChecklist';
 import { TodayHappyCalls } from '@/components/TodayHappyCalls';
 import { TodayStatus } from '@/components/TodayStatus';
 import { MonthlyStatsPanel } from '@/components/MonthlyStatsPanel';
@@ -90,7 +89,7 @@ export default async function HomePage() {
 
       <AnnouncementBanner />
 
-      {/* 이번 달 현황(좁게)과 한의원 달력(이벤트·연차)을 나란히, 아래에는 같은 높이의 카드 3장(확인할 것 · 해피콜 · 할 일) */}
+      {/* 이번 달 현황(좁게)과 한의원 달력(이벤트·연차)을 나란히, 아래에는 같은 높이의 카드 2장(확인할 것 · 해피콜) — 할 일은 달력 날짜를 누르면 달력 아래에 뜬다 */}
       <div className="home-top-row" style={{ marginBottom: 20 }}>
         <div>
           {summary ? (
@@ -121,9 +120,6 @@ export default async function HomePage() {
         </div>
         <div>
           <TodayHappyCalls />
-        </div>
-        <div>
-          <TodoChecklist />
         </div>
       </div>
     </div>

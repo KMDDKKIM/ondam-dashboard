@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completedWindowStart, visibleTodos } from './todoVisibility';
+import { completedWindowStart, todosForDate, visibleTodos } from './todoVisibility';
 import type { Todo } from './types';
 
 function makeTodo(overrides: Partial<Todo>): Todo {
@@ -67,5 +67,33 @@ describe('completedWindowStart', () => {
 
   it('달이 바뀌어도 맞다', () => {
     expect(completedWindowStart('2026-03-03')).toBe('2026-02-24');
+  });
+});
+
+describe('todosForDate', () => {
+  const today = '2026-09-18';
+
+  it('오늘 칸은 "오늘 할 일"과 같다(밀린 것 이월 포함)', () => {
+    const todos = [makeTodo({ id: 'a', dueDate: '2026-09-15' }), makeTodo({ id: 'b', dueDate: '2026-09-18' })];
+    expect(todosForDate(todos, today, today).map((t) => t.id)).toEqual(['a', 'b']);
+  });
+
+  it('미래 날짜 칸은 그날 예정인 것만 미리 보여준다', () => {
+    const todos = [makeTodo({ id: 'a', dueDate: '2026-09-21' }), makeTodo({ id: 'b', dueDate: '2026-09-22' })];
+    expect(todosForDate(todos, '2026-09-21', today).map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('지난 날짜 칸은 그날 예정이던 것만(끝난 것 포함)', () => {
+    const todos = [
+      makeTodo({ id: 'a', dueDate: '2026-09-10', done: true, doneAt: '2026-09-10' }),
+      makeTodo({ id: 'b', dueDate: '2026-09-10' }),
+      makeTodo({ id: 'c', dueDate: '2026-09-11' }),
+    ];
+    expect(todosForDate(todos, '2026-09-10', today).map((t) => t.id)).toEqual(['b', 'a']);
+  });
+
+  it('담당자로 거른다', () => {
+    const todos = [makeTodo({ id: 'a', dueDate: '2026-09-21', assigneeStaffId: 's1' }), makeTodo({ id: 'b', dueDate: '2026-09-21' })];
+    expect(todosForDate(todos, '2026-09-21', today, 's1').map((t) => t.id)).toEqual(['a']);
   });
 });
