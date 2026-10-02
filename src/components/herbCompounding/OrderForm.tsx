@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
@@ -20,9 +20,34 @@ interface OrderFormProps {
 const labelStyle = { display: 'block', fontSize: 12, color: 'var(--color-muted)', marginBottom: 4 };
 const fieldStyle = { marginBottom: 14 };
 
+// 약재 목록 표에서 Tab으로 다음 줄의 같은 칸으로 내려가게 한다(기본은 옆 칸으로 가는데,
+// 한 칸씩 쭉 내려 채우는 입력 방식이 더 빨라서 — 원장 요청, 2026-10-02). 칸 순서: 약재명 → 수치 → 1첩당(g).
+const HERB_ROW_COLS = 3;
+
 export function OrderForm({ value, onChange, herbNameOptions, knownPatients, incompleteLines }: OrderFormProps) {
   const [bulkText, setBulkText] = useState('');
   const [bulkWarning, setBulkWarning] = useState('');
+  const herbCellRefs = useRef<(HTMLInputElement | null)[][]>([]);
+
+  function setHerbCellRef(row: number, col: number, el: HTMLInputElement | null) {
+    if (!herbCellRefs.current[row]) herbCellRefs.current[row] = [];
+    herbCellRefs.current[row][col] = el;
+  }
+
+  function handleHerbCellTab(e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const rowCount = value.herbs.length;
+    if (rowCount === 0) return;
+    let r = row;
+    let c = col + (e.shiftKey ? -1 : 1);
+    if (c >= HERB_ROW_COLS) { c = 0; r += 1; }
+    if (c < 0) { c = HERB_ROW_COLS - 1; r -= 1; }
+    r = ((r % rowCount) + rowCount) % rowCount;
+    const target = herbCellRefs.current[r]?.[c];
+    target?.focus();
+    target?.select();
+  }
 
   function set<K extends keyof HerbCompoundingOrder>(key: K, v: HerbCompoundingOrder[K]) {
     onChange({ ...value, [key]: v });
@@ -228,6 +253,7 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
           <tr>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 30 }}>No.</th>
             <th style={{ textAlign: 'left', padding: '4px 4px' }}>약재명</th>
+            <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 1첩당(g)
@@ -252,7 +278,6 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
               </span>
             </th>
             <th style={{ textAlign: 'left', padding: '4px 4px', width: 110 }}>총용량(g)</th>
-            <th style={{ textAlign: 'left', padding: '4px 4px', width: 90 }}>수치</th>
             <th style={{ width: 40 }} />
           </tr>
         </thead>
@@ -262,32 +287,38 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
               <td style={{ padding: '2px 4px', color: 'var(--color-muted)' }}>{i + 1}</td>
               <td style={{ padding: '2px 4px' }}>
                 <input
+                  ref={(el) => setHerbCellRef(i, 0, el)}
                   className="input-field"
                   list="herb-name-options"
                   value={herb.herbName}
                   onChange={(e) => updateHerb(i, { herbName: e.target.value })}
+                  onKeyDown={(e) => handleHerbCellTab(e, i, 0)}
                   placeholder="당귀"
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>
                 <input
+                  ref={(el) => setHerbCellRef(i, 1, el)}
+                  className="input-field"
+                  value={herb.prepMethod}
+                  onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
+                  onKeyDown={(e) => handleHerbCellTab(e, i, 1)}
+                />
+              </td>
+              <td style={{ padding: '2px 4px' }}>
+                <input
+                  ref={(el) => setHerbCellRef(i, 2, el)}
                   className="input-field"
                   type="number"
                   min={0}
                   step={0.1}
                   value={herb.gramsPerPacket || ''}
                   onChange={(e) => updateHerb(i, { gramsPerPacket: Number(e.target.value) || 0 })}
+                  onKeyDown={(e) => handleHerbCellTab(e, i, 2)}
                   placeholder="6"
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>{herbLineTotal(herb, value.packetCount)}</td>
-              <td style={{ padding: '2px 4px' }}>
-                <input
-                  className="input-field"
-                  value={herb.prepMethod}
-                  onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
-                />
-              </td>
               <td style={{ padding: '2px 4px', textAlign: 'right' }}>
                 <button type="button" onClick={() => removeHerbRow(i)} style={{ padding: '4px 8px', fontSize: 12 }}>
                   삭제
