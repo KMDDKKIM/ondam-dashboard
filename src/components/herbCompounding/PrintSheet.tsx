@@ -60,17 +60,16 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
         </tbody>
       </table>
 
-      {/* 약재명 바로 옆에 1첩당·총용량을 두어 한눈에 보이게 하고, 수치(포제)는 참고용이라
-          맨 끝 칸으로 뺐다(OK차트 출력 참고 — 약재명·총용량이 너무 멀리 떨어져 있다는 지적,
-          원장 2026-09-29). */}
+      {/* 수치(포제)를 약재명 바로 옆으로 옮겼다(원장 요청, 2026-10-02 — 입력 화면 OrderForm과
+          순서를 맞춤). 2026-09-29의 "약재명·총용량을 붙여 보이게" 배치는 더는 유지하지 않는다. */}
       <table className="rx-herb-table">
         <thead>
           <tr>
             <th>No.</th>
             <th>약재명</th>
+            <th>수치</th>
             <th>1첩당(g)</th>
             <th>총용량(g)</th>
-            <th>수치</th>
           </tr>
         </thead>
         <tbody>
@@ -78,9 +77,9 @@ export function PrintSheet({ order }: { order: HerbCompoundingOrder }) {
             <tr key={i} className={(i + 1) % GROUP_SIZE === 0 ? 'rx-group-end' : undefined}>
               <td>{i + 1}</td>
               <td>{h.herbName}</td>
+              <td>{h.prepMethod}</td>
               <td>{h.gramsPerPacket}</td>
               <td>{herbLineTotal(h, order.packetCount)}</td>
-              <td>{h.prepMethod}</td>
             </tr>
           ))}
         </tbody>
