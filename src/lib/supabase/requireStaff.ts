@@ -17,3 +17,18 @@ export async function requireApprovedStaff(): Promise<NextResponse | null> {
   }
   return null;
 }
+
+/**
+ * requireApprovedStaff()로 이미 통과를 확인한 라우트에서, "이 요청을 보낸 사람이
+ * 누구인지"(본인 id·원장 여부)가 추가로 필요할 때 쓴다. 승인된 직원이 아니면 null.
+ */
+export async function getCurrentApprovedStaff(): Promise<{ id: string; isOwner: boolean } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: staff } = await supabase.from('staff').select('role, status').eq('id', user.id).maybeSingle();
+  if (staff?.status !== 'approved') return null;
+  return { id: user.id, isOwner: staff.role === 'owner' };
+}

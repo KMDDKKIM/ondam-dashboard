@@ -23,6 +23,8 @@ interface SidebarProps {
   supplyOpenCount?: number;
   /** 승인을 기다리는 직원 가입 신청 수 — 직원 승인 메뉴(원장님에게만 보임)에 숫자 배지를 붙인다. */
   pendingStaffCount?: number;
+  /** 로그인한 사람의 인센티브 프로필이 있는지 — 있을 때만(원장 포함) "인센티브" 메뉴가 보인다. */
+  hasIncentiveProfile?: boolean;
 }
 
 // 무거운 배지(오늘 걸 해피콜 수, 초진·재초진 등록 누락)는 메뉴가 뜬 뒤에 따로 읽는다.
@@ -35,7 +37,17 @@ const RAIL_WIDTH = 60;
 
 // 도구를 묶어 항상 보여 주는 왼쪽 메뉴. 표가 넓은 화면이나 좁은 창에서는 처음에 아이콘만
 // 남겨 접어 두고, 아래 버튼으로 직접 펴고 접을 수 있다(직접 고른 선택은 기억한다).
-export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = false, remoteNewCount = 0, herbQueueCount = 0, supplyOpenCount = 0, pendingStaffCount = 0 }: SidebarProps) {
+export function Sidebar({
+  isOwner,
+  grade = null,
+  unreadCount,
+  closingMissing = false,
+  remoteNewCount = 0,
+  herbQueueCount = 0,
+  supplyOpenCount = 0,
+  pendingStaffCount = 0,
+  hasIncentiveProfile = false,
+}: SidebarProps) {
   const pathname = usePathname();
   const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null, naverTalkTalkUnread: null });
   const inFlight = useRef(false);
@@ -157,7 +169,7 @@ export function Sidebar({ isOwner, grade = null, unreadCount, closingMissing = f
       </Link>
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: collapsed ? '0 8px' : '0 10px' }}>
-        {visibleGroups(isOwner, grade).map((group, gi) => (
+        {visibleGroups(isOwner, grade, hasIncentiveProfile).map((group, gi) => (
           <div key={group.title ?? `g${gi}`} style={{ marginBottom: 6 }}>
             {group.title &&
               (collapsed ? (

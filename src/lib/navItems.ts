@@ -8,6 +8,8 @@ export interface NavItem {
   ownerOnly?: boolean;
   /** 원장님(대표원장·부원장)에게만 보이는 메뉴 — 상담 녹음 차팅 */
   doctorsOnly?: boolean;
+  /** 원장이거나, 본인 인센티브 프로필이 있는 사람에게만 보이는 메뉴 — 인센티브 */
+  incentiveOnly?: boolean;
   soon?: boolean;
 }
 
@@ -47,7 +49,11 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: '매출',
-    items: [{ href: '/non-covered-patients', label: '비급여 현황', icon: '💰' }],
+    items: [
+      { href: '/non-covered-patients', label: '비급여 현황', icon: '💰' },
+      { href: '/incentive', label: '인센티브', icon: '💵', incentiveOnly: true },
+      { href: '/incentive-entry', label: '진료 실적 입력', icon: '🧮' },
+    ],
   },
   {
     title: '운영',
@@ -74,9 +80,18 @@ export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function visibleGroups(isOwner: boolean, grade: StaffGrade | null = null): NavGroup[] {
+export function visibleGroups(
+  isOwner: boolean,
+  grade: StaffGrade | null = null,
+  hasIncentiveProfile = false
+): NavGroup[] {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => (!i.ownerOnly || isOwner) && (!i.doctorsOnly || canUseConsultChart(isOwner ? '대표원장' : grade))),
+    items: g.items.filter(
+      (i) =>
+        (!i.ownerOnly || isOwner) &&
+        (!i.doctorsOnly || canUseConsultChart(isOwner ? '대표원장' : grade)) &&
+        (!i.incentiveOnly || isOwner || hasIncentiveProfile)
+    ),
   })).filter((g) => g.items.length > 0);
 }

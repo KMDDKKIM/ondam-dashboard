@@ -56,4 +56,17 @@ describe('visibleGroups', () => {
     const all = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
     expect(new Set(all).size).toBe(all.length);
   });
+
+  it('인센티브는 대표원장이거나, 본인 인센티브 프로필이 있는 사람에게만 보인다', () => {
+    const visible = (owner: boolean, hasProfile: boolean) =>
+      visibleGroups(owner, null, hasProfile).flatMap((g) => g.items.map((i) => i.href));
+    expect(visible(true, false)).toContain('/incentive');
+    expect(visible(false, true)).toContain('/incentive');
+    expect(visible(false, false)).not.toContain('/incentive');
+  });
+
+  it('진료 실적 입력은 누구에게나 보인다', () => {
+    expect(hrefs(false)).toContain('/incentive-entry');
+    expect(hrefs(true)).toContain('/incentive-entry');
+  });
 });
