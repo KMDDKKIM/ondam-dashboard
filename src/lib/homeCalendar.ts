@@ -11,6 +11,8 @@ export interface CalendarLeave {
   id: string;
   staffName: string;
   halfDay: 'am' | 'pm' | null;
+  /** 승인 대기 중이면 달력에서 점선으로 구분한다. */
+  status: 'pending' | 'approved';
 }
 
 export interface DayEntries {
@@ -31,10 +33,11 @@ export interface LeaveInput {
   startDate: string;
   endDate: string;
   halfDay: 'am' | 'pm' | null;
+  status: 'pending' | 'approved';
 }
 
 /**
- * 이벤트(기간)와 승인된 연차 신청(기간)을 날짜별로 합친다. [from, to] 범위 밖으로 넘치는
+ * 이벤트(기간)와 연차 신청(기간, 승인 대기 포함)을 날짜별로 합친다. [from, to] 범위 밖으로 넘치는
  * 구간은 범위 안쪽만 잘라서 담는다(달력 그리드에 보일 날짜만 있으면 되므로).
  */
 export function buildDayEntries(
@@ -65,7 +68,7 @@ export function buildDayEntries(
 
   for (const e of events) eachDay(e.startDate, e.endDate, (d) => entryFor(d).events.push({ id: e.id, title: e.title }));
   for (const l of leaves) {
-    eachDay(l.startDate, l.endDate, (d) => entryFor(d).leaves.push({ id: l.id, staffName: l.staffName, halfDay: l.halfDay }));
+    eachDay(l.startDate, l.endDate, (d) => entryFor(d).leaves.push({ id: l.id, staffName: l.staffName, halfDay: l.halfDay, status: l.status }));
   }
 
   return map;

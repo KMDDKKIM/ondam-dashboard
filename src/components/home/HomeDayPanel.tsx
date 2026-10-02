@@ -130,7 +130,7 @@ export function HomeDayPanel(props: HomeDayPanelProps) {
               <span style={{ color: 'var(--color-blue)' }}>●</span>
               <span className="muted-text">연차</span>
               <span style={{ fontWeight: 600 }}>
-                {leaves.map((l) => `${l.staffName}${l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}`).join(', ')}
+                {leaves.map((l) => `${l.staffName}${l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}${l.status === 'pending' ? ' (승인 대기)' : ''}`).join(', ')}
               </span>
             </div>
           )}

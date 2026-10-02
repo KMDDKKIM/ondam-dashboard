@@ -37,21 +37,23 @@ describe('buildDayEntries', () => {
     const map = buildDayEntries(
       [],
       [
-        { id: 'l1', staffName: '박소은', startDate: '2026-10-05', endDate: '2026-10-06', halfDay: null },
-        { id: 'l2', staffName: '이정민', startDate: '2026-10-05', endDate: '2026-10-05', halfDay: 'am' },
+        { id: 'l1', staffName: '박소은', startDate: '2026-10-05', endDate: '2026-10-06', halfDay: null, status: 'approved' },
+        { id: 'l2', staffName: '이정민', startDate: '2026-10-05', endDate: '2026-10-05', halfDay: 'am', status: 'pending' },
       ],
       '2026-10-01',
       '2026-10-31'
     );
     expect(map.get('2026-10-05')?.leaves).toHaveLength(2);
     expect(map.get('2026-10-05')?.leaves[1].halfDay).toBe('am');
+    expect(map.get('2026-10-05')?.leaves[0].status).toBe('approved');
+    expect(map.get('2026-10-05')?.leaves[1].status).toBe('pending');
     expect(map.get('2026-10-06')?.leaves).toHaveLength(1);
   });
 
   it('같은 날 이벤트와 연차가 같이 담긴다', () => {
     const map = buildDayEntries(
       [ev('e1', '2026-10-05')],
-      [{ id: 'l1', staffName: '박소은', startDate: '2026-10-05', endDate: '2026-10-05', halfDay: null }],
+      [{ id: 'l1', staffName: '박소은', startDate: '2026-10-05', endDate: '2026-10-05', halfDay: null, status: 'approved' }],
       '2026-10-01',
       '2026-10-31'
     );

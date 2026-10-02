@@ -64,10 +64,10 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     try {
       const [eventRows, leaveRows] = await Promise.all([
         listClinicEvents(supabase, { from, to }),
-        listLeaveRequests(supabase, { range: { from, to }, status: 'approved' }),
+        listLeaveRequests(supabase, { range: { from, to } }),
       ]);
       setEvents(eventRows);
-      setLeaves(leaveRows);
+      setLeaves(leaveRows.filter((l) => l.status !== 'rejected'));
     } catch {
       setError('달력을 불러오지 못했습니다.');
     } finally {
@@ -104,7 +104,14 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     () =>
       buildDayEntries(
         events.map((e) => ({ id: e.id, title: e.title, startDate: e.startDate, endDate: e.endDate })),
-        leaves.map((l) => ({ id: l.id, staffName: l.staffName, startDate: l.startDate, endDate: l.endDate, halfDay: l.halfDay })),
+        leaves.map((l) => ({
+          id: l.id,
+          staffName: l.staffName,
+          startDate: l.startDate,
+          endDate: l.endDate,
+          halfDay: l.halfDay,
+          status: l.status as 'pending' | 'approved',
+        })),
         from,
         to
       ),
@@ -322,8 +329,18 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     {leaveChips.map((l) => (
                       <span
                         key={l.id}
-                        title={l.staffName}
-                        style={{ fontSize: 9, padding: '1px 3px', borderRadius: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', background: 'var(--color-blue)' }}
+                        title={`${l.staffName}${l.status === 'pending' ? ' (승인 대기)' : ''}`}
+                        style={{
+                          fontSize: 9,
+                          padding: '1px 3px',
+                          borderRadius: 4,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          color: l.status === 'pending' ? 'var(--color-blue)' : '#fff',
+                          background: l.status === 'pending' ? 'transparent' : 'var(--color-blue)',
+                          border: l.status === 'pending' ? '1px dashed var(--color-blue)' : '1px solid transparent',
+                        }}
                       >
                         {l.staffName}
                         {l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}
