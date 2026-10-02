@@ -234,7 +234,19 @@ a.card:hover {
   outline: none;
 }
 
-/* 홈("오늘") 배치: 위에 현황(전체 폭), 아래에 같은 높이 카드 3장. 좁은 화면에서는 아래 카드가 한 줄씩 쌓인다. */
+/* 홈("오늘") 배치: 현황(좁게)과 한의원 달력을 나란히, 그 아래에 같은 높이 카드 3장.
+   좁은 화면에서는 둘 다 한 줄씩 쌓인다. */
+.home-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.home-top-row > div > .card {
+  margin-bottom: 0 !important;
+}
+
 .home-bottom {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -255,6 +267,9 @@ a.card:hover {
 }
 
 @media (max-width: 1200px) {
+  .home-top-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .home-bottom {
     grid-template-columns: minmax(0, 1fr);
   }

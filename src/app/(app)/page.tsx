@@ -1,4 +1,5 @@
-import { QuoteBanner } from '@/components/QuoteBanner';
+import { AnnouncementBanner } from '@/components/home/AnnouncementBanner';
+import { HomeCalendar } from '@/components/home/HomeCalendar';
 import { TodoChecklist } from '@/components/TodoChecklist';
 import { TodayHappyCalls } from '@/components/TodayHappyCalls';
 import { TodayStatus } from '@/components/TodayStatus';
@@ -87,15 +88,20 @@ export default async function HomePage() {
         </span>
       </div>
 
-      <QuoteBanner />
+      <AnnouncementBanner />
 
-      {/* 한눈에: 위에는 이번 달 현황을 전체 폭으로 가장 크게, 아래에는 같은 높이의 카드 3장(확인할 것 · 해피콜 · 할 일) */}
-      <div style={{ marginBottom: 20 }}>
-        {summary ? (
-          <MonthlyStatsPanel initial={summary} isOwner={isOwner} large />
-        ) : (
-          <p className="error-text">{summaryError}</p>
-        )}
+      {/* 이번 달 현황(좁게)과 한의원 달력(이벤트·연차)을 나란히, 아래에는 같은 높이의 카드 3장(확인할 것 · 해피콜 · 할 일) */}
+      <div className="home-top-row" style={{ marginBottom: 20 }}>
+        <div>
+          {summary ? (
+            <MonthlyStatsPanel initial={summary} isOwner={isOwner} />
+          ) : (
+            <p className="error-text">{summaryError}</p>
+          )}
+        </div>
+        <div>
+          <HomeCalendar isOwner={isOwner} />
+        </div>
       </div>
 
       <div className="home-bottom">
