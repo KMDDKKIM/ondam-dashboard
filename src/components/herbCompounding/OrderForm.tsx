@@ -39,11 +39,11 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
     e.preventDefault();
     const rowCount = value.herbs.length;
     if (rowCount === 0) return;
-    let r = row;
-    let c = col + (e.shiftKey ? -1 : 1);
-    if (c >= HERB_ROW_COLS) { c = 0; r += 1; }
-    if (c < 0) { c = HERB_ROW_COLS - 1; r -= 1; }
-    r = ((r % rowCount) + rowCount) % rowCount;
+    let r = row + (e.shiftKey ? -1 : 1);
+    let c = col;
+    if (r >= rowCount) { r = 0; c += 1; }
+    if (r < 0) { r = rowCount - 1; c -= 1; }
+    c = ((c % HERB_ROW_COLS) + HERB_ROW_COLS) % HERB_ROW_COLS;
     const target = herbCellRefs.current[r]?.[c];
     target?.focus();
     target?.select();
