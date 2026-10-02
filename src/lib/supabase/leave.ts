@@ -182,3 +182,10 @@ export async function createAdjustment(supabase: SupabaseClient, input: NewAdjus
   });
   if (error) throw error;
 }
+
+// 원장 전용(RLS가 강제) — 잘못 입력한 부여·조정을 지운다.
+export async function deleteAdjustment(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from('leave_adjustments').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제할 수 없습니다.');
+}

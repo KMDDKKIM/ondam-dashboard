@@ -10,6 +10,7 @@ import {
   createAdjustment,
   createLeaveRequest,
   decideLeaveRequest,
+  deleteAdjustment,
   listAdjustments,
   listLeaveRequests,
   type LeaveAdjustment,
@@ -224,6 +225,8 @@ export default function LeavePage() {
     return map;
   }, [staffList, staffAdjustments, staffApprovedRequests]);
 
+  const staffNameById = useMemo(() => new Map(staffList.map((s) => [s.id, s.name])), [staffList]);
+
   async function handleSubmitRequest(e: React.FormEvent) {
     e.preventDefault();
     if (!me) return;
@@ -297,6 +300,17 @@ export default function LeavePage() {
       setError('조정을 추가하지 못했습니다.');
     } finally {
       setSavingAdj(false);
+    }
+  }
+
+  async function handleDeleteAdjustment(id: string) {
+    if (!(await confirmDialog('이 부여·조정 내역을 지울까요?'))) return;
+    setError('');
+    try {
+      await deleteAdjustment(supabase, id);
+      await refreshStaffPanel();
+    } catch {
+      setError('지우지 못했습니다.');
     }
   }
 
@@ -513,6 +527,29 @@ export default function LeavePage() {
               {savingAdj ? '추가 중...' : '부여·조정 추가'}
             </button>
           </form>
+
+          {staffAdjustments.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <h3 className="muted-text" style={{ fontSize: 13, marginBottom: 8 }}>최근 부여·조정 내역</h3>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {staffAdjustments.map((a) => (
+                  <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--color-line)', fontSize: 13 }}>
+                    <span style={{ fontWeight: 600 }}>{staffNameById.get(a.staffId) ?? '(삭제된 직원)'}</span>
+                    <span className="muted-text">{kindLabel[a.kind]}</span>
+                    <span style={{ fontWeight: 600 }}>{a.days > 0 ? `+${a.days}` : a.days}일</span>
+                    <span className="muted-text">{a.reason}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAdjustment(a.id)}
+                      style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--color-error)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      삭제
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

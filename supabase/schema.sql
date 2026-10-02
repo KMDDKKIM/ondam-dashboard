@@ -1622,3 +1622,8 @@ create policy "own or owner can read leave_adjustments" on leave_adjustments
 drop policy if exists "owner can insert leave_adjustments" on leave_adjustments;
 create policy "owner can insert leave_adjustments" on leave_adjustments
   for insert to authenticated with check (public.is_owner());
+
+-- 부여·조정이 이제 잔여일수의 유일한 기준이라, 잘못 입력했을 때 원장이 지울 수 있어야 한다.
+drop policy if exists "owner can delete leave_adjustments" on leave_adjustments;
+create policy "owner can delete leave_adjustments" on leave_adjustments
+  for delete to authenticated using (public.is_owner());
