@@ -274,7 +274,7 @@ export default function IncentivePage() {
               <select className="input-field" value={cloneFromId} onChange={(e) => setCloneFromId(e.target.value)} style={{ width: 180 }}>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.staffName}과 똑같이 시작
+                    {p.staffName}
                   </option>
                 ))}
                 <option value="">빈 상태로 시작</option>
