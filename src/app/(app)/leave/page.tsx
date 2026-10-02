@@ -311,7 +311,7 @@ export default function LeavePage() {
   async function handleCancelRequest(r: LeaveRequest) {
     const confirmed = r.status === 'approved';
     const message = confirmed
-      ? `확정된 ${describeRequest(r)}을(를) 취소할까요? 잔여일수가 다시 돌아와요.`
+      ? `확정된 ${describeRequest(r)} 신청을 취소할까요? 잔여일수가 다시 돌아와요.`
       : `${describeRequest(r)} 신청을 취소할까요?`;
     if (!(await confirmDialog(message, { confirmLabel: '취소하기' }))) return;
     setError('');
