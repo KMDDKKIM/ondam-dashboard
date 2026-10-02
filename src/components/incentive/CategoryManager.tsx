@@ -148,7 +148,7 @@ export function CategoryManager({ profileId, categories, editable, onChanged }: 
   return (
     <div className="card" style={{ padding: 16, marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: open ? 10 : 0 }}>
-        <span style={{ fontWeight: 700 }}>항목·인센티브 비율</span>
+        <span style={{ fontWeight: 700 }}>항목·비율</span>
         {editable && (
           <button
             type="button"

@@ -200,8 +200,8 @@ export default function IncentivePage() {
   if (!isOwner && profiles.length === 0) {
     return (
       <div>
-        <h1 style={{ marginBottom: 6 }}>인센티브</h1>
-        <p className="muted-text">볼 수 있는 인센티브 정보가 없어요.</p>
+        <h1 style={{ marginBottom: 6 }}>마이페이지</h1>
+        <p className="muted-text">볼 수 있는 정보가 없어요.</p>
       </div>
     );
   }
@@ -210,9 +210,9 @@ export default function IncentivePage() {
 
   return (
     <div>
-      <h1 style={{ marginBottom: 6 }}>💵 인센티브</h1>
+      <h1 style={{ marginBottom: 6 }}>👤 마이페이지</h1>
       <p className="muted-text" style={{ marginBottom: 20 }}>
-        {isOwner ? '부원장별 인센티브를 확인·관리해요.' : '내 인센티브 내역이에요. 나만 볼 수 있어요.'}
+        {isOwner ? '부원장별 내역을 확인·관리해요.' : '내 개인 내역이에요. 나만 볼 수 있어요.'}
       </p>
 
       {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}
@@ -339,7 +339,7 @@ export default function IncentivePage() {
             </button>
           </form>
 
-          <p style={{ fontWeight: 700, marginBottom: 10 }}>{month} 인센티브 합계: {total.toLocaleString('ko-KR')}원</p>
+          <p style={{ fontWeight: 700, marginBottom: 10 }}>{month} 합계: {total.toLocaleString('ko-KR')}원</p>
 
           {entries.length === 0 ? (
             <p className="muted-text">이 달 입력된 내역이 없어요.</p>
@@ -348,7 +348,7 @@ export default function IncentivePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                    {['날짜', '환자명', '구분', '결제금액', '인센티브', '메모', ''].map((h) => (
+                    {['날짜', '환자명', '구분', '결제금액', '지급액', '메모', ''].map((h) => (
                       <th key={h} style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                         {h}
                       </th>
