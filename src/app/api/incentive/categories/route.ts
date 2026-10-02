@@ -4,7 +4,10 @@ import { requireApprovedStaff, getCurrentApprovedStaff } from '@/lib/supabase/re
 import { requireOwner } from '@/lib/supabase/requireOwner';
 import { createCategory, getProfile, listCategories } from '@/lib/supabase/incentive';
 
-// GET ?profileId= : 비율·금액까지 포함한 항목 목록 — 원장이거나 본인 프로필일 때만.
+// GET ?profileId= : 항목 목록 — 원장이거나 본인 프로필일 때만 볼 수 있다. 비율·고정금액은
+// 원장에게만 보여준다(부원장은 본인 항목 이름·색은 보되, 정확한 비율은 못 보게 해달라는
+// 요청, 2026-10-02) — 부원장도 실적을 적을 땐 "어떤 구분인지"는 알아야 해서 이름/색/
+// 계산방식(금액칸이 필요한지)까지는 내려주고, percent·fixedAmount 숫자만 뺀다.
 export async function GET(request: Request) {
   const denied = await requireApprovedStaff();
   if (denied) return denied;
@@ -22,7 +25,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: '볼 수 없습니다.' }, { status: 403 });
     }
     const categories = await listCategories(admin, profileId);
-    return NextResponse.json(categories);
+    const visible = me.isOwner ? categories : categories.map((c) => ({ ...c, percent: null, fixedAmount: null }));
+    return NextResponse.json(visible);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: '불러오지 못했습니다.' }, { status: 500 });

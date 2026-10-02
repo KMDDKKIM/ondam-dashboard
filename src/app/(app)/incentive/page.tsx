@@ -279,7 +279,11 @@ export default function IncentivePage() {
 
       {selectedProfile && (
         <>
-          <CategoryManager profileId={selectedProfile.id} categories={categories} editable={canEditCategories} onChanged={refreshDetail} />
+          {/* 항목·비율 설정은 원장만 보고 고친다 — 부원장은 비율을 보거나 고칠 수 없다(원장 요청, 2026-10-02).
+              부원장도 실적을 적을 땐 구분 이름은 알아야 하니, 그건 아래 "내역 추가" 드롭다운에서 보여준다. */}
+          {isOwner && (
+            <CategoryManager profileId={selectedProfile.id} categories={categories} editable={canEditCategories} onChanged={refreshDetail} />
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <label className="muted-text" style={{ fontSize: 13 }}>
