@@ -1,52 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, computePolicyEntitlement, leaveDaysUsed, monthGridWeeks, monthsBetween, summarizeBalance } from './leave';
-
-describe('monthsBetween', () => {
-  it('꽉 찬 달만 센다', () => {
-    expect(monthsBetween('2026-01-15', '2026-04-15')).toBe(3);
-    expect(monthsBetween('2026-01-15', '2026-04-14')).toBe(2); // 아직 하루 모자람
-    expect(monthsBetween('2026-01-15', '2026-04-16')).toBe(3);
-  });
-
-  it('입사일과 오늘이 같으면 0', () => {
-    expect(monthsBetween('2026-01-15', '2026-01-15')).toBe(0);
-  });
-
-  it('해가 바뀌어도 계산된다', () => {
-    expect(monthsBetween('2025-11-01', '2026-02-01')).toBe(3);
-  });
-
-  it('음수가 되면 0으로 고정', () => {
-    expect(monthsBetween('2026-05-01', '2026-01-01')).toBe(0);
-  });
-});
-
-describe('computePolicyEntitlement', () => {
-  it('입사일이 없으면 0, 0', () => {
-    expect(computePolicyEntitlement(null, '2026-06-01')).toEqual({ monthly: 0, annual: 0 });
-  });
-
-  it('수습기간(3개월 미만)엔 월차·연차 모두 0', () => {
-    expect(computePolicyEntitlement('2026-01-01', '2026-03-31')).toEqual({ monthly: 0, annual: 0 });
-  });
-
-  it('수습 3개월이 끝나는 날 월차 1일 생긴다', () => {
-    expect(computePolicyEntitlement('2026-01-01', '2026-04-01')).toEqual({ monthly: 1, annual: 0 });
-  });
-
-  it('수습 끝난 뒤 한 달마다 월차가 하나씩 늘어난다', () => {
-    expect(computePolicyEntitlement('2026-01-01', '2026-05-01')).toEqual({ monthly: 2, annual: 0 });
-    expect(computePolicyEntitlement('2026-01-01', '2026-06-01')).toEqual({ monthly: 3, annual: 0 });
-  });
-
-  it('입사 1년이 되는 날 법정연차(15일)로 바뀌고 월차는 더 안 늘어난다', () => {
-    expect(computePolicyEntitlement('2026-01-01', '2027-01-01')).toEqual({ monthly: 9, annual: 15 });
-  });
-
-  it('1년이 한참 지나도 그대로', () => {
-    expect(computePolicyEntitlement('2020-01-01', '2026-06-01')).toEqual({ monthly: 9, annual: 15 });
-  });
-});
+import { computeBalances, leaveDaysUsed, monthGridWeeks, summarizeBalance } from './leave';
 
 describe('leaveDaysUsed', () => {
   it('하루 연차', () => {
@@ -123,31 +76,27 @@ describe('summarizeBalance', () => {
 });
 
 describe('computeBalances', () => {
-  it('월차·연차를 종류별로 따로 계산한다(수습 끝~1년 사이)', () => {
+  it('월차·연차를 종류별로 따로 계산한다(부여=조정 합계)', () => {
     const balances = computeBalances(
-      '2026-01-01',
-      '2026-06-01', // 5개월째 — 월차 3일
-      [{ kind: 'monthly', days: 1 }],
-      [{ kind: 'monthly', days: 2 }]
+      [{ kind: 'monthly', days: 1 }, { kind: 'monthly', days: 1 }],
+      [{ kind: 'monthly', days: 1 }]
     );
-    expect(balances.monthly).toEqual({ entitled: 4, used: 2, available: 2 });
+    expect(balances.monthly).toEqual({ entitled: 2, used: 1, available: 1 });
     expect(balances.annual).toEqual({ entitled: 0, used: 0, available: 0 });
   });
 
-  it('1년 지나면 연차 쪽만 움직인다', () => {
+  it('연차 부여·사용은 월차와 섞이지 않는다', () => {
     const balances = computeBalances(
-      '2025-01-01',
-      '2026-06-01',
-      [{ kind: 'annual', days: -2 }],
+      [{ kind: 'annual', days: 15 }, { kind: 'monthly', days: 3 }],
       [{ kind: 'annual', days: 5 }, { kind: 'monthly', days: 1 }]
     );
-    expect(balances.annual).toEqual({ entitled: 13, used: 5, available: 8 });
-    expect(balances.monthly).toEqual({ entitled: 9, used: 1, available: 8 });
+    expect(balances.annual).toEqual({ entitled: 15, used: 5, available: 10 });
+    expect(balances.monthly).toEqual({ entitled: 3, used: 1, available: 2 });
   });
 
-  it('입사일이 없으면 둘 다 0에서 시작', () => {
-    const balances = computeBalances(null, '2026-06-01', [], []);
-    expect(balances.monthly.entitled).toBe(0);
-    expect(balances.annual.entitled).toBe(0);
+  it('부여·사용 둘 다 없으면 0', () => {
+    const balances = computeBalances([], []);
+    expect(balances.monthly).toEqual({ entitled: 0, used: 0, available: 0 });
+    expect(balances.annual).toEqual({ entitled: 0, used: 0, available: 0 });
   });
 });

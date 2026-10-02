@@ -21,13 +21,11 @@ interface Me {
   id: string;
   name: string;
   isOwner: boolean;
-  hireDate: string | null;
 }
 
 interface StaffOption {
   id: string;
   name: string;
-  hireDate: string | null;
 }
 
 function shiftMonth(month: string, delta: number): string {
@@ -103,13 +101,12 @@ export default function LeavePage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return null;
-    const { data } = await supabase.from('staff').select('id, name, role, hire_date').eq('id', user.id).maybeSingle();
+    const { data } = await supabase.from('staff').select('id, name, role').eq('id', user.id).maybeSingle();
     if (!data) return null;
     return {
       id: data.id as string,
       name: data.name as string,
       isOwner: data.role === 'owner',
-      hireDate: (data.hire_date as string | null) ?? null,
     };
   }, [supabase]);
 
@@ -146,16 +143,10 @@ export default function LeavePage() {
   const refreshStaffPanel = useCallback(async () => {
     const { data } = await supabase
       .from('staff')
-      .select('id, name, hire_date')
+      .select('id, name')
       .eq('status', 'approved')
       .order('name');
-    setStaffList(
-      ((data ?? []) as { id: string; name: string; hire_date: string | null }[]).map((s) => ({
-        id: s.id,
-        name: s.name,
-        hireDate: s.hire_date,
-      }))
-    );
+    setStaffList((data ?? []) as { id: string; name: string }[]);
     const [adjustments, approvedRequests] = await Promise.all([
       listAdjustments(supabase),
       listLeaveRequests(supabase, { status: 'approved' }),
@@ -205,13 +196,11 @@ export default function LeavePage() {
     () =>
       me
         ? computeBalances(
-            me.hireDate,
-            today,
             myAdjustments.map((a) => ({ kind: a.kind, days: a.days })),
             myApprovedRequests.map((r) => ({ kind: r.kind, days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay) }))
           )
         : null,
-    [me, today, myAdjustments, myApprovedRequests]
+    [me, myAdjustments, myApprovedRequests]
   );
 
   useEffect(() => {
@@ -230,10 +219,10 @@ export default function LeavePage() {
       const used = staffApprovedRequests
         .filter((r) => r.staffId === s.id)
         .map((r) => ({ kind: r.kind, days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay) }));
-      map.set(s.id, computeBalances(s.hireDate, today, adj, used));
+      map.set(s.id, computeBalances(adj, used));
     }
     return map;
-  }, [staffList, staffAdjustments, staffApprovedRequests, today]);
+  }, [staffList, staffAdjustments, staffApprovedRequests]);
 
   async function handleSubmitRequest(e: React.FormEvent) {
     e.preventDefault();
@@ -328,11 +317,6 @@ export default function LeavePage() {
         <div className="card" style={{ display: 'flex', gap: 24, padding: 16, marginBottom: 20 }}>
           <BalanceTile label="월차" balance={balances.monthly} />
           <BalanceTile label="연차" balance={balances.annual} />
-          {!me.hireDate && (
-            <p className="muted-text" style={{ fontSize: 12, alignSelf: 'center' }}>
-              입사일이 아직 등록되지 않았어요. 원장님께 직원 승인 화면에서 입력을 요청하세요.
-            </p>
-          )}
         </div>
       )}
 
@@ -464,12 +448,15 @@ export default function LeavePage() {
 
       {me.isOwner && (
         <div className="card" style={{ padding: 20 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 12 }}>직원별 잔여일수</h2>
+          <h2 style={{ fontSize: 15, marginBottom: 4 }}>직원별 연차·월차 부여</h2>
+          <p className="muted-text" style={{ fontSize: 12, marginBottom: 12 }}>
+            입사일 자동 계산 없이, 아래 폼으로 직접 부여해요 — 월차는 보통 매달 1일씩, 연차는 일년에 정해진 일수만큼 넣어주세요.
+          </p>
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                  {['이름', '입사일', '월차(부여/사용/남음)', '연차(부여/사용/남음)'].map((h) => (
+                  {['이름', '월차(부여/사용/남음)', '연차(부여/사용/남음)'].map((h) => (
                     <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -482,7 +469,6 @@ export default function LeavePage() {
                   return (
                     <tr key={s.id}>
                       <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', fontWeight: 600 }}>{s.name}</td>
-                      <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>{s.hireDate ?? '-'}</td>
                       <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>
                         {b ? `${b.monthly.entitled} / ${b.monthly.used} / ${b.monthly.available}` : '-'}
                       </td>
@@ -521,10 +507,10 @@ export default function LeavePage() {
             </div>
             <div>
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유</label>
-              <input className="input-field" value={adjReason} onChange={(e) => setAdjReason(e.target.value)} placeholder="예: 전년도 미사용 이월" style={{ width: 200 }} />
+              <input className="input-field" value={adjReason} onChange={(e) => setAdjReason(e.target.value)} placeholder="예: 10월 월차 부여, 2026년 연차 부여" style={{ width: 200 }} />
             </div>
             <button type="submit" className="btn-primary" disabled={savingAdj || !adjStaffId || !adjReason.trim() || !Number(adjDays)} style={{ padding: '7px 16px' }}>
-              {savingAdj ? '추가 중...' : '조정 추가'}
+              {savingAdj ? '추가 중...' : '부여·조정 추가'}
             </button>
           </form>
         </div>
