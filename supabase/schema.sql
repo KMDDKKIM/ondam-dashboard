@@ -1597,11 +1597,20 @@ drop policy if exists "owner can update leave_requests" on leave_requests;
 create policy "owner can update leave_requests" on leave_requests
   for update to authenticated using (public.is_owner()) with check (public.is_owner());
 
+-- 본인은 결정 상태와 상관없이 자기 신청을 취소(삭제)할 수 있고, 원장은 전부. (migration_leave_requests_manage.sql)
 drop policy if exists "own pending or owner can delete leave_requests" on leave_requests;
-create policy "own pending or owner can delete leave_requests" on leave_requests
+drop policy if exists "own or owner can delete leave_requests" on leave_requests;
+create policy "own or owner can delete leave_requests" on leave_requests
   for delete to authenticated using (
-    (requested_by = auth.uid() and status = 'pending') or public.is_owner()
+    staff_id = auth.uid() or requested_by = auth.uid() or public.is_owner()
   );
+
+-- 본인은 자기 신청을 고칠 수 있되, 고친 결과는 반드시 승인 대기여야 한다(스스로 승인 불가).
+drop policy if exists "own can re-request leave_requests" on leave_requests;
+create policy "own can re-request leave_requests" on leave_requests
+  for update to authenticated
+  using (staff_id = auth.uid())
+  with check (staff_id = auth.uid() and status = 'pending');
 
 create table if not exists leave_adjustments (
   id uuid primary key default gen_random_uuid(),

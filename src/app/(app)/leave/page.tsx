@@ -13,10 +13,13 @@ import {
   deleteAdjustment,
   listAdjustments,
   listLeaveRequests,
+  updateLeaveRequest,
   type LeaveAdjustment,
   type LeaveRequest,
+  type LeaveRequestEdit,
 } from '@/lib/supabase/leave';
 import { MonthCalendar, type CalendarEntry } from '@/components/leave/MonthCalendar';
+import { LeaveRequestList } from '@/components/leave/LeaveRequestList';
 
 interface Me {
   id: string;
@@ -255,6 +258,19 @@ export default function LeavePage() {
     return map;
   }, [staffList, staffAdjustments, staffApprovedRequests, viewYear]);
 
+  // 앞으로 예정(끝나는 날이 오늘 이후)인 내 신청 — 대기 + 확정. 지난 건은 변경·취소 대상이 아니다.
+  const myActiveRequests = useMemo(
+    () =>
+      [...myPendingRequests, ...myApprovedRequests]
+        .filter((r) => r.endDate >= today)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [myPendingRequests, myApprovedRequests, today]
+  );
+  const upcomingApproved = useMemo(
+    () => staffApprovedRequests.filter((r) => r.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [staffApprovedRequests, today]
+  );
+
   const staffNameById = useMemo(() => new Map(staffList.map((s) => [s.id, s.name])), [staffList]);
 
   async function handleSubmitRequest(e: React.FormEvent) {
@@ -286,14 +302,38 @@ export default function LeavePage() {
     }
   }
 
-  async function handleCancel(id: string) {
-    if (!(await confirmDialog('이 신청을 취소할까요?'))) return;
+  function describeRequest(r: LeaveRequest): string {
+    const range = r.endDate !== r.startDate ? `${r.startDate} ~ ${r.endDate}` : r.startDate;
+    return `${range}${r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''} ${kindLabel[r.kind]}`;
+  }
+
+  // 대기 중이든 확정이든 취소(삭제)할 수 있다 — 확정을 취소하면 잔여일수가 다시 돌아온다.
+  async function handleCancelRequest(r: LeaveRequest) {
+    const confirmed = r.status === 'approved';
+    const message = confirmed
+      ? `확정된 ${describeRequest(r)}을(를) 취소할까요? 잔여일수가 다시 돌아와요.`
+      : `${describeRequest(r)} 신청을 취소할까요?`;
+    if (!(await confirmDialog(message, { confirmLabel: '취소하기' }))) return;
     setError('');
     try {
-      await cancelLeaveRequest(supabase, id);
+      await cancelLeaveRequest(supabase, r.id);
       await refreshAfterMutation();
     } catch {
       setError('취소하지 못했습니다.');
+    }
+  }
+
+  // 직원이 확정된 건을 고치면 승인 대기로 돌아가고, 원장이 고치면 그 내용으로 바로 확정된다.
+  async function handleSaveRequest(r: LeaveRequest, edit: LeaveRequestEdit): Promise<boolean> {
+    if (!me) return false;
+    setError('');
+    try {
+      await updateLeaveRequest(supabase, r.id, edit, { id: me.id, isOwner: me.isOwner, currentStatus: r.status });
+      await refreshAfterMutation();
+      return true;
+    } catch {
+      setError('변경하지 못했습니다.');
+      return false;
     }
   }
 
@@ -464,32 +504,33 @@ export default function LeavePage() {
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 15, marginBottom: 12 }}>내 대기 중인 신청 ({myPendingRequests.length}건)</h2>
-        {myPendingRequests.length === 0 ? (
-          <p className="muted-text">대기 중인 신청이 없어요.</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {myPendingRequests.map((r) => (
-              <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
-                <span style={{ fontWeight: 600 }}>
-                  {r.startDate}
-                  {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
-                  {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
-                </span>
-                <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
-                {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
-                <button
-                  type="button"
-                  onClick={() => handleCancel(r.id)}
-                  style={{ marginLeft: 'auto', border: 'none', background: 'transparent', color: 'var(--color-error)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  취소
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>내 신청 ({myActiveRequests.length}건)</h2>
+        <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
+          확정된 연차도 날짜·반차를 바꾸거나 취소할 수 있어요. {me.isOwner ? '' : '내용을 바꾸면 원장님 승인을 다시 받아요.'}
+        </p>
+        <LeaveRequestList
+          requests={myActiveRequests}
+          emptyText="앞으로 예정된 신청이 없어요."
+          onSave={handleSaveRequest}
+          onCancel={handleCancelRequest}
+          editNeedsReapproval={!me.isOwner}
+        />
       </div>
+
+      {me.isOwner && (
+        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+          <h2 style={{ fontSize: 15, marginBottom: 4 }}>확정된 일정 — 전체 ({upcomingApproved.length}건)</h2>
+          <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>앞으로 예정된 확정 연차예요. 바꾸면 그 내용으로 바로 확정되고, 직원에게 알림이 가요.</p>
+          <LeaveRequestList
+            requests={upcomingApproved}
+            showStaffName
+            emptyText="앞으로 예정된 확정 일정이 없어요."
+            onSave={handleSaveRequest}
+            onCancel={handleCancelRequest}
+            editNeedsReapproval={false}
+          />
+        </div>
+      )}
 
       {me.isOwner && (
         <div className="card" style={{ padding: 20 }}>

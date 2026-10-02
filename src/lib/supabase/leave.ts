@@ -124,7 +124,55 @@ export async function decideLeaveRequest(
   if (error) throw error;
 }
 
-// 본인의 아직 결정 안 난 신청을 취소하거나(RLS가 본인+pending만 허용), 원장이 아무거나 지운다.
+export interface LeaveRequestEdit {
+  startDate: string;
+  endDate: string;
+  halfDay: 'am' | 'pm' | null;
+  kind: LeaveKind;
+  memo: string;
+}
+
+/**
+ * 신청 내용을 고친다. 본인이 고치면 다시 원장 승인을 받아야 해서 승인 대기로 돌리고(결정 기록
+ * 삭제), 원장이 고치면 상태는 그대로 두되 확정된 건이면 "원장이 이 내용으로 확정했다"로
+ * 결정 기록(decided_by/at)을 갱신한다 — 직원에게 변경된 내용으로 확정 알림이 간다.
+ * RLS가 본인은 "고친 결과가 pending"일 때만 허용하므로, 안 맞으면 0행이 바뀌어 에러가 난다.
+ */
+export function buildLeaveEditPatch(
+  edit: LeaveRequestEdit,
+  actor: { id: string; isOwner: boolean; currentStatus: LeaveStatus },
+  now: Date = new Date()
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    start_date: edit.startDate,
+    end_date: edit.endDate,
+    half_day: edit.startDate === edit.endDate ? edit.halfDay : null,
+    kind: edit.kind,
+    memo: edit.memo || null,
+  };
+  if (!actor.isOwner) {
+    patch.status = 'pending';
+    patch.decided_by = null;
+    patch.decided_at = null;
+  } else if (actor.currentStatus === 'approved') {
+    patch.decided_by = actor.id;
+    patch.decided_at = now.toISOString();
+  }
+  return patch;
+}
+
+export async function updateLeaveRequest(
+  supabase: SupabaseClient,
+  id: string,
+  edit: LeaveRequestEdit,
+  actor: { id: string; isOwner: boolean; currentStatus: LeaveStatus }
+): Promise<void> {
+  const { data, error } = await supabase.from('leave_requests').update(buildLeaveEditPatch(edit, actor)).eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('변경할 수 없습니다.');
+}
+
+// 신청을 취소(삭제)한다 — 본인은 결정 상태와 상관없이 자기 신청을(RLS), 원장은 아무거나.
 export async function cancelLeaveRequest(supabase: SupabaseClient, id: string): Promise<void> {
   const { data, error } = await supabase.from('leave_requests').delete().eq('id', id).select('id');
   if (error) throw error;

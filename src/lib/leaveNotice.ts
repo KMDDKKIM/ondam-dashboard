@@ -12,6 +12,11 @@ export interface NoticeCandidate {
 /** 결정된 지 이 기간(일)이 지난 건은 뒤늦게 팝업으로 띄우지 않는다(처음 접속한 기기에 옛 결과가 우르르 뜨는 것 방지). */
 export const NOTICE_WINDOW_DAYS = 14;
 
+/** 본 기록의 키 — 같은 신청이 변경 후 다시 결정되면 결정 시각이 달라져 새 알림으로 취급된다. */
+export function noticeKey(r: { id: string; decidedAt: string | null }): string {
+  return `${r.id}@${r.decidedAt ?? ''}`;
+}
+
 /**
  * 아직 안 보여 준 결과 알림 대상 — 내가 신청한 건 중 승인/반려가 난 것, 내가 직접 처리한
  * 건(원장이 자기 신청을 승인)은 제외, 오래된 건 제외, 오래된 결정 순.
@@ -26,7 +31,7 @@ export function unseenNotices<T extends NoticeCandidate>(
   return requests
     .filter((r) => r.staffId === myId && r.status !== 'pending' && r.decidedAt !== null)
     .filter((r) => r.decidedBy !== myId)
-    .filter((r) => !seenIds.has(r.id))
+    .filter((r) => !seenIds.has(noticeKey(r)))
     .filter((r) => new Date(r.decidedAt as string).getTime() >= cutoff)
     .sort((a, b) => (a.decidedAt as string).localeCompare(b.decidedAt as string));
 }

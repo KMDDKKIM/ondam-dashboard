@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unseenNotices, type NoticeCandidate } from './leaveNotice';
+import { noticeKey, unseenNotices, type NoticeCandidate } from './leaveNotice';
 
 const NOW = new Date('2026-10-10T00:00:00Z');
 
@@ -25,7 +25,14 @@ describe('unseenNotices', () => {
   });
 
   it('이미 본 것은 다시 알리지 않는다', () => {
-    expect(unseenNotices([req({ id: 'r1' })], 'me', new Set(['r1']), NOW)).toHaveLength(0);
+    const r = req({ id: 'r1' });
+    expect(unseenNotices([r], 'me', new Set([noticeKey(r)]), NOW)).toHaveLength(0);
+  });
+
+  it('변경 후 다시 결정돼 결정 시각이 달라지면 새 알림으로 본다', () => {
+    const before = req({ id: 'r1', decidedAt: '2026-10-08T00:00:00Z' });
+    const after = req({ id: 'r1', decidedAt: '2026-10-09T00:00:00Z' });
+    expect(unseenNotices([after], 'me', new Set([noticeKey(before)]), NOW)).toHaveLength(1);
   });
 
   it('내가 직접 처리한 것(원장이 자기 신청 승인)은 알리지 않는다', () => {

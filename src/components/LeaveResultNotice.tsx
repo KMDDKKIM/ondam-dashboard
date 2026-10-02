@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
-import { unseenNotices } from '@/lib/leaveNotice';
+import { noticeKey, unseenNotices } from '@/lib/leaveNotice';
 
 const SEEN_KEY = 'leave.seenResults';
 const CHECK_INTERVAL_MS = 60000;
@@ -68,7 +68,7 @@ export function LeaveResultNotice() {
 
   function close() {
     const seen = readSeen();
-    seen.add(current.id);
+    seen.add(noticeKey(current));
     saveSeen(seen);
     setQueue((prev) => prev.slice(1));
   }
