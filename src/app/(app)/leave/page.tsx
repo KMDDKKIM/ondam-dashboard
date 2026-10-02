@@ -452,7 +452,7 @@ export default function LeavePage() {
         </p>
       </form>
 
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 20, maxWidth: 520 }}>
         <MonthCalendar
           month={month}
           weeks={weeks}

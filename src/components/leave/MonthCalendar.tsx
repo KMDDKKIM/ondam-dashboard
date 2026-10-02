@@ -29,21 +29,21 @@ const KIND_COLOR: Record<LeaveKind, string> = {
 
 export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth, onNextMonth }: MonthCalendarProps) {
   return (
-    <div className="card" style={{ padding: 16 }}>
+    <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 12 }}>
         <button
           type="button"
           onClick={onPrevMonth}
-          style={{ border: 'none', background: 'transparent', fontSize: 16, cursor: 'pointer', padding: '4px 8px' }}
+          style={{ border: 'none', background: 'transparent', fontSize: 14, cursor: 'pointer', padding: '2px 6px' }}
           aria-label="이전 달"
         >
           ◀
         </button>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>{month}</span>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>{month}</span>
         <button
           type="button"
           onClick={onNextMonth}
-          style={{ border: 'none', background: 'transparent', fontSize: 16, cursor: 'pointer', padding: '4px 8px' }}
+          style={{ border: 'none', background: 'transparent', fontSize: 14, cursor: 'pointer', padding: '2px 6px' }}
           aria-label="다음 달"
         >
           ▶
@@ -56,10 +56,10 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
             key={label}
             style={{
               textAlign: 'center',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 600,
               color: i === 0 ? 'var(--color-error)' : 'var(--color-muted)',
-              padding: '4px 0',
+              padding: '2px 0',
             }}
           >
             {label}
@@ -76,15 +76,15 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
               <div
                 key={date}
                 style={{
-                  minHeight: 76,
+                  minHeight: 52,
                   borderRadius: 8,
                   border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                   background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
-                  padding: 6,
+                  padding: 3,
                   opacity: inMonth ? 1 : 0.5,
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: isToday ? 700 : 500, marginBottom: 2 }}>
                   {dayNum}
                   {holiday && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}
                 </div>
@@ -93,9 +93,9 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                     <span
                       key={entry.id}
                       style={{
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: 600,
-                        padding: '1px 5px',
+                        padding: '1px 4px',
                         borderRadius: 999,
                         color: entry.status === 'approved' ? '#fff' : KIND_COLOR[entry.kind],
                         background: entry.status === 'approved' ? KIND_COLOR[entry.kind] : 'transparent',
@@ -115,6 +115,12 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
             );
           })
         )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10, color: 'var(--color-muted)', justifyContent: 'center' }}>
+        <span><span style={{ color: KIND_COLOR.monthly }}>●</span> 월차</span>
+        <span><span style={{ color: KIND_COLOR.annual }}>●</span> 연차</span>
+        <span>점선 = 승인 대기</span>
       </div>
     </div>
   );

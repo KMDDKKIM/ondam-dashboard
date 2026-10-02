@@ -232,8 +232,6 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
               const isSelected = date === selectedDate;
               const day = dayEntries.get(date);
               const leaveChips = day?.leaves ?? [];
-              const shownLeaves = leaveChips.slice(0, 2);
-              const leaveOverflow = leaveChips.length - shownLeaves.length;
               const openTodos = openTodoCount(date);
               return (
                 <div
@@ -321,7 +319,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                   })}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '0 3px 3px' }}>
-                    {shownLeaves.map((l) => (
+                    {leaveChips.map((l) => (
                       <span
                         key={l.id}
                         title={l.staffName}
@@ -331,7 +329,6 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                         {l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}
                       </span>
                     ))}
-                    {leaveOverflow > 0 && <span style={{ fontSize: 9, color: 'var(--color-muted)' }}>+{leaveOverflow}</span>}
                   </div>
                 </div>
               );
