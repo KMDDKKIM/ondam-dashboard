@@ -2,7 +2,7 @@
 
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useState } from 'react';
-import type { IncentiveCategory } from '@/lib/incentive';
+import type { IncentiveCalcType, IncentiveCategory } from '@/lib/incentive';
 
 interface CategoryManagerProps {
   profileId: string;
@@ -12,43 +12,77 @@ interface CategoryManagerProps {
   onChanged: () => void;
 }
 
+interface CategoryForm {
+  name: string;
+  color: string;
+  calcType: IncentiveCalcType;
+  percent: string;
+  fixedAmount: string;
+}
+
 const DEFAULT_COLOR = '#c0392b';
 
+function emptyForm(): CategoryForm {
+  return { name: '', color: DEFAULT_COLOR, calcType: 'percent_of_amount', percent: '10', fixedAmount: '5000' };
+}
+
 // 항목(구분)·인센티브 비율 설정 — 원장이 자유롭게 조절할 수 있게 한다(하드코딩 금지 요청).
+// 배지를 눌러 기존 항목을 이름·색·비율까지 그대로 고칠 수 있다(언제든 수정 가능 요청, 2026-10-02).
 export function CategoryManager({ profileId, categories, editable, onChanged }: CategoryManagerProps) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [color, setColor] = useState(DEFAULT_COLOR);
-  const [calcType, setCalcType] = useState<'percent_of_amount' | 'fixed_per_entry'>('percent_of_amount');
-  const [percent, setPercent] = useState('10');
-  const [fixedAmount, setFixedAmount] = useState('5000');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleAdd(e: React.FormEvent) {
+  function startAdd() {
+    setEditingId(null);
+    setForm(emptyForm());
+    setOpen(true);
+  }
+
+  function startEdit(c: IncentiveCategory) {
+    setEditingId(c.id);
+    setForm({
+      name: c.name,
+      color: c.color,
+      calcType: c.calcType,
+      percent: String(Math.round((c.percent ?? 0) * 100)),
+      fixedAmount: String(c.fixedAmount ?? 0),
+    });
+    setOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
     setError('');
+    const payload = {
+      name: form.name.trim(),
+      color: form.color,
+      calcType: form.calcType,
+      percent: form.calcType === 'percent_of_amount' ? (Number(form.percent) || 0) / 100 : null,
+      fixedAmount: form.calcType === 'fixed_per_entry' ? Number(form.fixedAmount) || 0 : null,
+    };
     try {
-      const res = await fetch('/api/incentive/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profileId,
-          name: name.trim(),
-          color,
-          calcType,
-          percent: calcType === 'percent_of_amount' ? (Number(percent) || 0) / 100 : null,
-          fixedAmount: calcType === 'fixed_per_entry' ? Number(fixedAmount) || 0 : null,
-          sortOrder: categories.length,
-        }),
-      });
+      const res = editingId
+        ? await fetch(`/api/incentive/categories/${editingId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/incentive/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profileId, sortOrder: categories.length, ...payload }),
+          });
       if (!res.ok) throw new Error();
-      setName('');
+      setForm(emptyForm());
+      setEditingId(null);
       onChanged();
     } catch {
-      setError('추가하지 못했습니다.');
+      setError(editingId ? '수정하지 못했습니다.' : '추가하지 못했습니다.');
     } finally {
       setSaving(false);
     }
@@ -89,7 +123,18 @@ export function CategoryManager({ profileId, categories, editable, onChanged }: 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontWeight: 700 }}>항목·인센티브 비율</span>
         {editable && (
-          <button type="button" onClick={() => setOpen((v) => !v)} className="muted-text" style={{ background: 'none', border: 'none', textDecoration: 'underline' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (open) {
+                setOpen(false);
+              } else {
+                startAdd();
+              }
+            }}
+            className="muted-text"
+            style={{ background: 'none', border: 'none', textDecoration: 'underline' }}
+          >
             {open ? '접기' : '항목 추가/편집'}
           </button>
         )}
@@ -113,12 +158,16 @@ export function CategoryManager({ profileId, categories, editable, onChanged }: 
                 color: '#fff',
                 background: c.color,
                 opacity: c.active ? 1 : 0.4,
+                outline: editingId === c.id ? '2px solid var(--color-ink)' : undefined,
               }}
             >
               {c.name}
               {c.calcType === 'percent_of_amount' ? ` · ${Math.round((c.percent ?? 0) * 100)}%` : ` · ${(c.fixedAmount ?? 0).toLocaleString('ko-KR')}원/건`}
               {editable && (
                 <>
+                  <button type="button" onClick={() => startEdit(c)} title="이름·색·비율 고치기" style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, fontSize: 12 }}>
+                    ✎
+                  </button>
                   <button type="button" onClick={() => setActive(c.id, !c.active)} title={c.active ? '비활성화' : '다시 활성화'} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, fontSize: 12 }}>
                     {c.active ? '⏸' : '▶'}
                   </button>
@@ -133,36 +182,41 @@ export function CategoryManager({ profileId, categories, editable, onChanged }: 
       </div>
 
       {editable && open && (
-        <form onSubmit={handleAdd} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', paddingTop: 10, borderTop: '1px solid var(--color-line)' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', paddingTop: 10, borderTop: '1px solid var(--color-line)' }}>
           <div>
             <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>이름</label>
-            <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 한약(티케팅)" style={{ width: 140 }} />
+            <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="예: 한약(티케팅)" style={{ width: 140 }} />
           </div>
           <div>
             <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>색상</label>
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 34, padding: 2 }} />
+            <input type="color" value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} style={{ width: 40, height: 34, padding: 2 }} />
           </div>
           <div>
             <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>계산 방식</label>
-            <select className="input-field" value={calcType} onChange={(e) => setCalcType(e.target.value as typeof calcType)} style={{ width: 150 }}>
+            <select className="input-field" value={form.calcType} onChange={(e) => setForm((f) => ({ ...f, calcType: e.target.value as typeof f.calcType }))} style={{ width: 150 }}>
               <option value="percent_of_amount">결제금액 × 비율</option>
               <option value="fixed_per_entry">건당 고정 금액</option>
             </select>
           </div>
-          {calcType === 'percent_of_amount' ? (
+          {form.calcType === 'percent_of_amount' ? (
             <div>
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>비율(%)</label>
-              <input className="input-field" type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(e.target.value)} style={{ width: 80 }} />
+              <input className="input-field" type="number" min={0} max={100} value={form.percent} onChange={(e) => setForm((f) => ({ ...f, percent: e.target.value }))} style={{ width: 80 }} />
             </div>
           ) : (
             <div>
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>건당 금액(원)</label>
-              <input className="input-field" type="number" min={0} value={fixedAmount} onChange={(e) => setFixedAmount(e.target.value)} style={{ width: 100 }} />
+              <input className="input-field" type="number" min={0} value={form.fixedAmount} onChange={(e) => setForm((f) => ({ ...f, fixedAmount: e.target.value }))} style={{ width: 100 }} />
             </div>
           )}
           <button type="submit" className="btn-primary" disabled={saving} style={{ padding: '7px 16px' }}>
-            {saving ? '추가 중...' : '항목 추가'}
+            {saving ? '저장 중...' : editingId ? '저장' : '항목 추가'}
           </button>
+          {editingId && (
+            <button type="button" onClick={startAdd} className="muted-text" style={{ background: 'none', border: 'none', textDecoration: 'underline', padding: '7px 0' }}>
+              취소하고 새로 추가하기
+            </button>
+          )}
         </form>
       )}
       {error && <p className="error-text" style={{ marginTop: 8 }}>{error}</p>}
