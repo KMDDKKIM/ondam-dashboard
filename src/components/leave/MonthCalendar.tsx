@@ -24,10 +24,8 @@ interface MonthCalendarProps {
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
-const KIND_COLOR: Record<LeaveKind, string> = {
-  monthly: '#3b82f6',
-  annual: '#16a34a',
-};
+// 월차·연차는 색으로 나누지 않고 같은 색을 쓴다(홈 달력과 동일, 원장 요청 2026-10-02).
+const LEAVE_COLOR = 'var(--color-blue)';
 
 export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth, onNextMonth, compact = false }: MonthCalendarProps) {
   return (
@@ -99,9 +97,9 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                         fontWeight: 600,
                         padding: '1px 4px',
                         borderRadius: 999,
-                        color: entry.status === 'approved' ? '#fff' : KIND_COLOR[entry.kind],
-                        background: entry.status === 'approved' ? KIND_COLOR[entry.kind] : 'transparent',
-                        border: entry.status === 'pending' ? `1px dashed ${KIND_COLOR[entry.kind]}` : 'none',
+                        color: entry.status === 'approved' ? '#fff' : LEAVE_COLOR,
+                        background: entry.status === 'approved' ? LEAVE_COLOR : 'transparent',
+                        border: entry.status === 'pending' ? `1px dashed ${LEAVE_COLOR}` : 'none',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -120,8 +118,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 10, color: 'var(--color-muted)', justifyContent: 'center' }}>
-        <span><span style={{ color: KIND_COLOR.monthly }}>●</span> 월차</span>
-        <span><span style={{ color: KIND_COLOR.annual }}>●</span> 연차</span>
+        <span><span style={{ color: LEAVE_COLOR }}>●</span> 확정</span>
         <span>점선 = 승인 대기</span>
       </div>
     </div>
