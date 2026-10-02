@@ -52,7 +52,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/non-covered-patients', label: '비급여 현황', icon: '💰' },
       { href: '/incentive', label: '인센티브', icon: '💵', incentiveOnly: true },
-      { href: '/incentive-entry', label: '진료 실적 입력', icon: '🧮' },
     ],
   },
   {

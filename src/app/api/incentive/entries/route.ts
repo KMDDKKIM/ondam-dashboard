@@ -5,8 +5,7 @@ import { createEntry, getProfile, listCategories, listEntries } from '@/lib/supa
 import { computeEntryIncentive } from '@/lib/incentive';
 
 // GET ?profileId=&month=(YYYY-MM) : 계산된 인센티브 금액까지 포함한 내역 — 원장이거나
-// 본인 프로필일 때만. (직원용 "진료 실적 입력" 화면은 /api/incentive/entry-options와
-// 별도의 "본인이 입력한 최근 내역"만 보고, 이 엔드포인트는 쓰지 않는다.)
+// 본인 프로필일 때만.
 export async function GET(request: Request) {
   const denied = await requireApprovedStaff();
   if (denied) return denied;
@@ -35,8 +34,8 @@ export async function GET(request: Request) {
   }
 }
 
-// POST: 실적 한 건 추가 — 승인된 직원 누구나(원장·부원장·팀장·사원). 계산된 인센티브
-// 금액은 응답에 담지 않는다 — 민감 정보를 직원 화면에 돌려주지 않기 위함.
+// POST: 실적 한 건 추가 — 원장이거나 본인 프로필일 때만(직원·팀장용 입력 화면은 없앴다,
+// 2026-10-02). 계산된 인센티브 금액은 응답에 담지 않는다.
 export async function POST(request: Request) {
   const denied = await requireApprovedStaff();
   if (denied) return denied;
@@ -52,6 +51,11 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   try {
+    const profile = await getProfile(admin, body.profileId);
+    if (!profile) return NextResponse.json({ error: '프로필을 찾을 수 없습니다.' }, { status: 404 });
+    if (!me.isOwner && profile.staffId !== me.id) {
+      return NextResponse.json({ error: '추가할 수 없습니다.' }, { status: 403 });
+    }
     await createEntry(admin, {
       profileId: body.profileId,
       categoryId: body.categoryId,

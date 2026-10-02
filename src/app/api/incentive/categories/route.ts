@@ -5,7 +5,6 @@ import { requireOwner } from '@/lib/supabase/requireOwner';
 import { createCategory, getProfile, listCategories } from '@/lib/supabase/incentive';
 
 // GET ?profileId= : 비율·금액까지 포함한 항목 목록 — 원장이거나 본인 프로필일 때만.
-// (직원용 "진료 실적 입력" 화면은 이 엔드포인트를 쓰지 않는다 — /api/incentive/entry-options를 쓴다.)
 export async function GET(request: Request) {
   const denied = await requireApprovedStaff();
   if (denied) return denied;

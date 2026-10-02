@@ -258,75 +258,9 @@ export async function deleteEntry(admin: SupabaseClient, id: string): Promise<vo
   if (error) throw error;
 }
 
-// "진료 실적 입력" 화면(전 직원 공용)이 쓰는 목록 — 금액/비율을 절대 담지 않는다.
-export interface EntryOption {
-  profileId: string;
-  doctorName: string;
-  categories: { id: string; name: string; color: string; needsAmount: boolean }[];
-}
-
-export async function listEntryOptionsForStaff(admin: SupabaseClient): Promise<EntryOption[]> {
-  const profiles = await listProfiles(admin);
-  const active = profiles.filter((p) => p.active);
-  const options: EntryOption[] = [];
-  for (const p of active) {
-    const categories = await listCategories(admin, p.id);
-    options.push({
-      profileId: p.id,
-      doctorName: p.staffName,
-      categories: categories
-        .filter((c) => c.active)
-        .map((c) => ({ id: c.id, name: c.name, color: c.color, needsAmount: c.calcType === 'percent_of_amount' })),
-    });
-  }
-  return options;
-}
-
-// "진료 실적 입력" 화면이 보여주는 최근 내역 — 역시 금액까지는 괜찮지만(직원이 결제금액
-// 자체는 이미 알고 있다) 계산된 인센티브 금액/비율은 절대 담지 않는다.
-export interface StaffVisibleEntry {
-  id: string;
-  profileId: string;
-  doctorName: string;
-  entryDate: string;
-  patientName: string;
-  categoryName: string;
-  amount: number;
-  note: string;
-}
-
-export async function listRecentEntriesForStaff(admin: SupabaseClient, limit = 50): Promise<StaffVisibleEntry[]> {
-  const { data, error } = await admin
-    .from('incentive_entries')
-    .select(
-      'id, profile_id, entry_date, patient_name, amount, note, category:category_id(name), profile:profile_id(staff:staff_id(name))'
-    )
-    .order('created_at', { ascending: false })
-    .limit(limit);
+// 이 건이 어느 프로필 소속인지 — entries 쓰기 API가 "원장이거나 본인 프로필일 때만" 허용하는지 확인할 때 쓴다.
+export async function getEntryProfileId(admin: SupabaseClient, entryId: string): Promise<string | null> {
+  const { data, error } = await admin.from('incentive_entries').select('profile_id').eq('id', entryId).maybeSingle();
   if (error) throw error;
-  interface Row {
-    id: string;
-    profile_id: string;
-    entry_date: string;
-    patient_name: string;
-    amount: number;
-    note: string | null;
-    category: { name: string } | { name: string }[] | null;
-    profile: { staff: { name: string } | { name: string }[] | null } | { staff: { name: string } | { name: string }[] | null }[] | null;
-  }
-  const rows = data as unknown as Row[];
-  return rows.map((r) => {
-    const category = Array.isArray(r.category) ? r.category[0] : r.category;
-    const profile = Array.isArray(r.profile) ? r.profile[0] : r.profile;
-    return {
-      id: r.id,
-      profileId: r.profile_id,
-      doctorName: staffNameOf(profile?.staff ?? null),
-      entryDate: r.entry_date,
-      patientName: r.patient_name,
-      categoryName: category?.name ?? '',
-      amount: Number(r.amount),
-      note: r.note ?? '',
-    };
-  });
+  return data?.profile_id ?? null;
 }

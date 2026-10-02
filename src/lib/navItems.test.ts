@@ -64,9 +64,4 @@ describe('visibleGroups', () => {
     expect(visible(false, true)).toContain('/incentive');
     expect(visible(false, false)).not.toContain('/incentive');
   });
-
-  it('진료 실적 입력은 누구에게나 보인다', () => {
-    expect(hrefs(false)).toContain('/incentive-entry');
-    expect(hrefs(true)).toContain('/incentive-entry');
-  });
 });
