@@ -23,6 +23,8 @@ export interface TodayStatusProps {
   firstVisitMissing?: FirstVisitMissingProp | null;
   /** 오늘 걸 해피콜(예정일 ≤ 오늘인 미완료)과 그중 연체 수. null 이면 조회 실패, 생략하면 항목 없음. */
   calls?: { open: number; overdue: number } | null;
+  /** 원장 승인을 기다리는 연차 신청 수 — 원장에게만 내려주고, 0건·조회 실패면 항목을 감춘다. */
+  leavePending?: number | null;
 }
 
 type Row = TodayRow;
@@ -40,6 +42,7 @@ export function TodayStatus({
   todayReservations,
   firstVisitMissing,
   calls,
+  leavePending,
 }: TodayStatusProps) {
   const rows: Row[] = [];
 
@@ -63,6 +66,10 @@ export function TodayStatus({
   if (firstVisit) rows.push(firstVisit);
   const callRow = callsRow(calls);
   if (callRow) rows.push(callRow);
+
+  if (leavePending != null && leavePending > 0) {
+    rows.push({ key: 'leave', icon: '🗓️', text: `연차 신청 ${leavePending}건이 승인을 기다려요`, state: 'todo', badge: '승인하기', href: '/leave' });
+  }
 
   rows.push(herbStockRow(zeroStockCount, herbTotal));
 

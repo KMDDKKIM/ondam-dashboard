@@ -194,3 +194,16 @@ export async function deleteAdjustment(supabase: SupabaseClient, id: string): Pr
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('삭제할 수 없습니다.');
 }
+
+// 왼쪽 메뉴·홈 배지용 — 원장 승인을 기다리는 연차/월차 신청 수(원장에게만 보여준다). 못 읽으면 null(배지를 숨긴다).
+export async function countPendingLeaveRequests(supabase: SupabaseClient): Promise<number | null> {
+  try {
+    const { count, error } = await supabase
+      .from('leave_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+    return error ? null : (count ?? 0);
+  } catch {
+    return null;
+  }
+}

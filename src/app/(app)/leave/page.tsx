@@ -182,6 +182,26 @@ export default function LeavePage() {
     refreshCalendar(month).catch(() => setError('달력을 불러오지 못했습니다.'));
   }, [month, refreshCalendar]);
 
+  // 다른 사람이 신청·승인한 내용이 화면을 새로 열지 않아도 보이게, 30초마다 + 탭으로 돌아올 때 다시 읽는다.
+  useEffect(() => {
+    if (!me) return;
+    const reload = () => {
+      if (document.visibilityState !== 'visible') return;
+      Promise.all([
+        refreshCalendar(month),
+        refreshMine(me.id),
+        me.isOwner ? refreshOwnerQueue() : Promise.resolve(),
+        me.isOwner ? refreshStaffPanel() : Promise.resolve(),
+      ]).catch(() => {});
+    };
+    const timer = window.setInterval(reload, 30000);
+    document.addEventListener('visibilitychange', reload);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', reload);
+    };
+  }, [me, month, refreshCalendar, refreshMine, refreshOwnerQueue, refreshStaffPanel]);
+
   async function refreshAfterMutation() {
     if (!me) return;
     await Promise.all([
@@ -338,6 +358,42 @@ export default function LeavePage() {
       </p>
       {error && <p className="error-text" style={{ marginBottom: 16 }}>{error}</p>}
 
+      {me.isOwner && (
+        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+          <h2 style={{ fontSize: 15, marginBottom: 12 }}>승인 대기 중 — 전체 ({ownerPendingRequests.length}건)</h2>
+          {ownerPendingRequests.length === 0 ? (
+            <p className="muted-text">대기 중인 신청이 없어요.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {ownerPendingRequests.map((r) => (
+                <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
+                  <span style={{ fontWeight: 600 }}>{r.staffName}</span>
+                  <span style={{ fontSize: 13 }}>
+                    {r.startDate}
+                    {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
+                    {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
+                  </span>
+                  <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
+                  {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
+                      승인
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDecide(r.id, 'rejected')}
+                      style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
+                    >
+                      반려
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {balances && (
         <div className="card" style={{ display: 'flex', gap: 24, padding: 16, marginBottom: 20 }}>
           <BalanceTile label="월차" balance={balances.monthly} />
@@ -385,7 +441,7 @@ export default function LeavePage() {
           </div>
         )}
         <div>
-          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>메모</label>
+          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유</label>
           <input className="input-field" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ width: 160 }} />
         </div>
         <button type="submit" className="btn-primary" disabled={submitting || startDate > endDate} style={{ padding: '7px 16px' }}>
@@ -434,42 +490,6 @@ export default function LeavePage() {
           </ul>
         )}
       </div>
-
-      {me.isOwner && (
-        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 12 }}>승인 대기 중 — 전체 ({ownerPendingRequests.length}건)</h2>
-          {ownerPendingRequests.length === 0 ? (
-            <p className="muted-text">대기 중인 신청이 없어요.</p>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {ownerPendingRequests.map((r) => (
-                <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
-                  <span style={{ fontWeight: 600 }}>{r.staffName}</span>
-                  <span style={{ fontSize: 13 }}>
-                    {r.startDate}
-                    {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
-                    {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
-                  </span>
-                  <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
-                  {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                    <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
-                      승인
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDecide(r.id, 'rejected')}
-                      style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
-                    >
-                      거절
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       {me.isOwner && (
         <div className="card" style={{ padding: 20 }}>

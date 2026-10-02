@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
 import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countOpenSupplyRequests } from '@/lib/supabase/supplyCounts';
+import { countPendingLeaveRequests } from '@/lib/supabase/leave';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 import { listDoctors } from '@/lib/supabase/doctors';
@@ -34,7 +35,7 @@ export default async function HomePage() {
 
   // 이번 달 현황과 "오늘 확인할 것" 조회를 순서대로 기다리지 않고 한꺼번에 시작한다(화면이 뜨는 시간이 가장 느린 것 하나로 줄어든다).
   const today = todayKst();
-  const [summaryResult, missingClosing, zeroStock, herbTotal, supplyResult, remoteNew, doctorNames, todayReservations, firstVisitMissing, calls] = await Promise.all([
+  const [summaryResult, missingClosing, zeroStock, herbTotal, supplyResult, remoteNew, doctorNames, todayReservations, firstVisitMissing, calls, leavePending] = await Promise.all([
     getMonthlySummary().then(
       (value) => ({ value, error: '' }),
       () => ({ value: undefined, error: '이번달 현황을 불러오지 못했습니다.' })
@@ -65,6 +66,8 @@ export default async function HomePage() {
     withTimeout(countReservationsByDates([today]).then((counts) => counts[today] ?? 0), LOOKUP_TIMEOUT_MS),
     withTimeout(getFirstVisitMissing(today), LOOKUP_TIMEOUT_MS),
     withTimeout(getOpenCallCounts(today), LOOKUP_TIMEOUT_MS),
+    // 연차 승인 대기는 원장에게만 "오늘 확인할 것"에 보여준다.
+    isOwner ? countPendingLeaveRequests(supabase) : Promise.resolve(null),
   ]);
   const summary = summaryResult.value;
   const summaryError = summaryResult.error;
@@ -89,37 +92,38 @@ export default async function HomePage() {
 
       <AnnouncementBanner />
 
-      {/* 이번 달 현황(좁게)과 한의원 달력(이벤트·연차)을 나란히, 아래에는 같은 높이의 카드 2장(확인할 것 · 해피콜) — 할 일은 달력 날짜를 누르면 달력 아래에 뜬다 */}
-      <div className="home-top-row" style={{ marginBottom: 20 }}>
-        <div>
+      {/* 왼쪽(넓게): 이번 달 현황 + 그 아래 같은 폭의 카드 2장(확인할 것 · 해피콜).
+          오른쪽(좁게): 달력과 날짜별 할 일을 세로로 길게. */}
+      <div className="home-top-row">
+        <div className="home-left">
           {summary ? (
             <MonthlyStatsPanel initial={summary} isOwner={isOwner} />
           ) : (
             <p className="error-text">{summaryError}</p>
           )}
+          <div className="home-bottom">
+            <div>
+              <TodayStatus
+                missingClosing={missingClosing}
+                zeroStockCount={zeroStock}
+                supply={supplyResult.error ? null : supplyResult}
+                remoteNew={remoteNew}
+                herbWaiting={herbWaiting}
+                herbWaitingIsMine={herbDoctorFilter !== null}
+                herbTotal={herbTotal}
+                todayReservations={todayReservations}
+                firstVisitMissing={firstVisitMissing}
+                calls={calls}
+                leavePending={leavePending}
+              />
+            </div>
+            <div>
+              <TodayHappyCalls />
+            </div>
+          </div>
         </div>
-        <div>
+        <div className="home-right">
           <HomeCalendar isOwner={isOwner} />
-        </div>
-      </div>
-
-      <div className="home-bottom">
-        <div>
-          <TodayStatus
-            missingClosing={missingClosing}
-            zeroStockCount={zeroStock}
-            supply={supplyResult.error ? null : supplyResult}
-            remoteNew={remoteNew}
-            herbWaiting={herbWaiting}
-            herbWaitingIsMine={herbDoctorFilter !== null}
-            herbTotal={herbTotal}
-            todayReservations={todayReservations}
-            firstVisitMissing={firstVisitMissing}
-            calls={calls}
-          />
-        </div>
-        <div>
-          <TodayHappyCalls />
         </div>
       </div>
     </div>

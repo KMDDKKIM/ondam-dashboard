@@ -23,6 +23,8 @@ interface SidebarProps {
   supplyOpenCount?: number;
   /** 승인을 기다리는 직원 가입 신청 수 — 직원 승인 메뉴(원장님에게만 보임)에 숫자 배지를 붙인다. */
   pendingStaffCount?: number;
+  /** 승인을 기다리는 연차 신청 수 — 연차 관리 메뉴(원장에게만 내려옴)에 숫자 배지를 붙인다. */
+  pendingLeaveCount?: number;
   /** 로그인한 사람의 인센티브 프로필이 있는지 — 있을 때만(원장 포함) "인센티브" 메뉴가 보인다. */
   hasIncentiveProfile?: boolean;
 }
@@ -46,6 +48,7 @@ export function Sidebar({
   herbQueueCount = 0,
   supplyOpenCount = 0,
   pendingStaffCount = 0,
+  pendingLeaveCount = 0,
   hasIncentiveProfile = false,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -223,6 +226,9 @@ export function Sidebar({
                     {item.href === '/supply-requests' && supplyOpenCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`${supplyBadgeLabel} ${supplyOpenCount}건`} />
                     )}
+                    {item.href === '/leave' && pendingLeaveCount > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`승인 대기 중인 연차 신청 ${pendingLeaveCount}건`} />
+                    )}
                     {item.href === '/staff-approval' && pendingStaffCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`승인 대기 중인 직원 가입 신청 ${pendingStaffCount}건`} />
                     )}
@@ -257,6 +263,11 @@ export function Sidebar({
                       {item.href === '/supply-requests' && supplyOpenCount > 0 && (
                         <span className="side-badge" title={supplyBadgeLabel}>
                           {supplyOpenCount > 99 ? '99+' : supplyOpenCount}
+                        </span>
+                      )}
+                      {item.href === '/leave' && pendingLeaveCount > 0 && (
+                        <span className="side-badge" title="승인 대기 중인 연차 신청">
+                          {pendingLeaveCount > 99 ? '99+' : pendingLeaveCount}
                         </span>
                       )}
                       {item.href === '/staff-approval' && pendingStaffCount > 0 && (

@@ -4,6 +4,7 @@ import { TopBar } from '@/components/TopBar';
 import { Sidebar } from '@/components/Sidebar';
 import { AppMain } from '@/components/AppMain';
 import { ConfirmHost } from '@/components/ConfirmHost';
+import { LeaveResultNotice } from '@/components/LeaveResultNotice';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
 import { isStaffGrade } from '@/lib/staffGrade';
@@ -12,6 +13,7 @@ import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 import { countSupplyRequestBadges } from '@/lib/supabase/supplyRequests';
 import { countPendingStaff } from '@/lib/supabase/staffApproval';
+import { countPendingLeaveRequests } from '@/lib/supabase/leave';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { hasActiveProfile } from '@/lib/supabase/incentive';
 import { listDoctors } from '@/lib/supabase/doctors';
@@ -39,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // 왼쪽 메뉴의 숫자 표시들은 서로 상관없으니 한꺼번에 읽는다(하나씩 기다리면 화면마다 그만큼 느려진다).
   // (해피콜 콜 수·초진 등록 누락처럼 무거운 배지는 여기서 기다리지 않고, 메뉴가 뜬 뒤 /api/sidebar-badges 로 따로 읽는다.)
-  const [unreadCount, closingMissing, remoteNewCount, doctorNames, supplyBadges, pendingStaffCount, hasIncentiveProfile] = await Promise.all([
+  const [unreadCount, closingMissing, remoteNewCount, doctorNames, supplyBadges, pendingStaffCount, pendingLeaveCount, hasIncentiveProfile] = await Promise.all([
     // 채팅 목록을 못 가져와도 나머지 화면은 정상적으로 보여준다.
     listRoomsWithUnread(supabase).then(totalUnreadCount, () => 0),
     // 어제 결산이 비어 있으면 왼쪽 메뉴의 일일결산에 빨간 표시를 붙인다(조회 실패는 무시).
@@ -51,6 +53,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     countSupplyRequestBadges(supabase),
     // 직원 승인 메뉴는 원장님만 보이니, 원장님이 아니면 조회할 필요가 없다.
     isOwner ? countPendingStaff(supabase).then((n) => n ?? 0) : Promise.resolve(0),
+    // 연차 승인 대기 건수도 원장에게만 — 일반 직원은 자기 신청 결과를 알림 팝업으로 받는다.
+    isOwner ? countPendingLeaveRequests(supabase).then((n) => n ?? 0) : Promise.resolve(0),
     // incentive_* 표는 일반 클라이언트가 아예 못 읽으므로(RLS 전면 차단) admin 클라이언트로 조회한다.
     hasActiveProfile(createAdminClient(), user.id).catch(() => false),
   ]);
@@ -70,6 +74,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         herbQueueCount={herbQueueCount}
         supplyOpenCount={supplyOpenCount}
         pendingStaffCount={pendingStaffCount}
+        pendingLeaveCount={pendingLeaveCount}
         hasIncentiveProfile={hasIncentiveProfile}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -77,6 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppMain>{children}</AppMain>
       </div>
       <ConfirmHost />
+      <LeaveResultNotice />
     </div>
   );
 }
