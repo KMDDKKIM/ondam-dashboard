@@ -10,6 +10,7 @@ import { ASSIGNABLE_GRADES, DEFAULT_GRADE, type AssignableGrade, type StaffGrade
 interface StaffRow extends Staff {
   status: 'pending' | 'approved';
   grade: StaffGrade;
+  hire_date: string | null;
 }
 
 const removeButtonStyle = {
@@ -41,6 +42,7 @@ export default function StaffApprovalPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [pendingGrades, setPendingGrades] = useState<Record<string, AssignableGrade>>({});
   const [changingId, setChangingId] = useState<string | null>(null);
+  const [savingHireDateId, setSavingHireDateId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   // 임시 비밀번호는 모달이 떠 있는 동안만 이 state에 두고, 닫으면 null로 비운다(저장소에는 넣지 않는다).
@@ -68,7 +70,7 @@ export default function StaffApprovalPage() {
 
       const { data, error: listError } = await supabase
         .from('staff')
-        .select('id, name, role, status, grade')
+        .select('id, name, role, status, grade, hire_date')
         .order('name');
       if (listError) {
         setError(listError.message);
@@ -124,6 +126,27 @@ export default function StaffApprovalPage() {
       await load();
     } finally {
       setChangingId(null);
+    }
+  }
+
+  // 연차/월차 적립 계산의 기준이 되는 입사일 — blur 시 자동저장(코드베이스 자동저장 관례와 동일).
+  async function handleHireDateChange(staffId: string, hireDate: string) {
+    setSavingHireDateId(staffId);
+    setError('');
+    try {
+      const response = await fetch('/api/staff/hire-date', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId, hireDate: hireDate || null }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(body.error ?? '입사일을 저장하지 못했습니다.');
+        return;
+      }
+      await load();
+    } finally {
+      setSavingHireDateId(null);
     }
   }
 
@@ -224,6 +247,18 @@ export default function StaffApprovalPage() {
                   🙋
                 </span>
                 <span style={{ flex: 1, fontWeight: 600 }}>{s.name}</span>
+                <input
+                  type="date"
+                  className="input-field"
+                  defaultValue={s.hire_date ?? ''}
+                  disabled={savingHireDateId === s.id}
+                  onBlur={(event) => {
+                    if (event.target.value !== (s.hire_date ?? '')) handleHireDateChange(s.id, event.target.value);
+                  }}
+                  title="입사일 — 연차/월차 계산 기준"
+                  aria-label={`${s.name} 입사일`}
+                  style={{ width: 140, padding: '6px 8px' }}
+                />
                 <select
                   className="input-field"
                   value={pendingGrades[s.id] ?? DEFAULT_GRADE}
@@ -275,6 +310,18 @@ export default function StaffApprovalPage() {
               }}
             >
               <span style={{ fontWeight: 600 }}>{s.name}</span>
+              <input
+                type="date"
+                className="input-field"
+                defaultValue={s.hire_date ?? ''}
+                disabled={savingHireDateId === s.id}
+                onBlur={(event) => {
+                  if (event.target.value !== (s.hire_date ?? '')) handleHireDateChange(s.id, event.target.value);
+                }}
+                title="입사일 — 연차/월차 계산 기준"
+                aria-label={`${s.name} 입사일`}
+                style={{ width: 140, padding: '6px 8px' }}
+              />
               {s.role === 'owner' ? (
                 <span className="muted-text">대표원장</span>
               ) : (

@@ -56,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/supply-requests', label: '물품신청', icon: '📦' },
       { href: '/chat', label: '채팅', icon: '💬' },
+      { href: '/leave', label: '연차 관리', icon: '🗓️' },
       // "인센티브"라고 바로 드러나면 옆에서 봐도 알 수 있어서, 이름·아이콘 모두 중립적으로
       // 둔다(원장 요청, 2026-10-02) — 운영 메뉴들 사이에 자연스럽게 섞어 둔다.
       { href: '/incentive', label: '마이페이지', icon: '👤', incentiveOnly: true },
