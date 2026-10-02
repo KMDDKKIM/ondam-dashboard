@@ -237,7 +237,15 @@ export default function IncentivePage() {
             </button>
           ))}
           <button
-            onClick={() => setShowAddProfile((v) => !v)}
+            onClick={() => {
+              setShowAddProfile((v) => {
+                const next = !v;
+                // 새로 열 때마다 "일단은 기존 부원장과 똑같이" 기본 선택해 둔다 — 원장이 매번 고르지
+                // 않아도 되게(원장 요청, 2026-10-02). 물론 추가 뒤에는 자유롭게 바꿀 수 있다.
+                if (next) setCloneFromId((prev) => prev || profiles[0]?.id || '');
+                return next;
+              });
+            }}
             style={{ padding: '6px 14px', borderRadius: 999, border: '1px dashed var(--color-line)', background: 'transparent', fontSize: 13, fontWeight: 600 }}
           >
             + 새 부원장 추가
@@ -260,20 +268,25 @@ export default function IncentivePage() {
           </div>
           {profiles.length > 0 && (
             <div>
-              <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>항목 복사(선택)</label>
-              <select className="input-field" value={cloneFromId} onChange={(e) => setCloneFromId(e.target.value)} style={{ width: 160 }}>
-                <option value="">빈 상태로 시작</option>
+              <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>
+                일단 어떤 항목으로 시작할까요?
+              </label>
+              <select className="input-field" value={cloneFromId} onChange={(e) => setCloneFromId(e.target.value)} style={{ width: 180 }}>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.staffName}의 항목 복사
+                    {p.staffName}과 똑같이 시작
                   </option>
                 ))}
+                <option value="">빈 상태로 시작</option>
               </select>
             </div>
           )}
           <button type="submit" className="btn-primary" disabled={addingProfile || !newStaffId} style={{ padding: '7px 16px' }}>
             {addingProfile ? '추가 중...' : '추가'}
           </button>
+          <p className="muted-text" style={{ width: '100%', fontSize: 12, margin: 0 }}>
+            일단 똑같이 시작해도, 추가한 뒤에 이 부원장만 따로 항목·비율을 자유롭게 바꿀 수 있어요.
+          </p>
         </form>
       )}
 
