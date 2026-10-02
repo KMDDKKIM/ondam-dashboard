@@ -71,6 +71,22 @@ export interface LeaveBalances {
 }
 
 /**
+ * 원장이 부여해 준 종류(부여 합계가 0보다 큰 것)만, 월차 → 연차 순으로. 화면 상단 카드와
+ * 신청란의 구분 선택지에는 부여된 종류만 보여 준다(부여 안 된 건 아예 숨김).
+ */
+export function grantedKinds(balances: LeaveBalances): LeaveKind[] {
+  const kinds: LeaveKind[] = [];
+  if (balances.monthly.entitled > 0) kinds.push('monthly');
+  if (balances.annual.entitled > 0) kinds.push('annual');
+  return kinds;
+}
+
+/** 신청란에서 처음 골라 둘 종류 — 남은 일수가 있는 종류를 우선, 없으면 부여된 첫 종류. 부여된 게 없으면 null. */
+export function defaultLeaveKind(allowed: LeaveKind[], balances: LeaveBalances): LeaveKind | null {
+  return allowed.find((k) => balances[k].available > 0) ?? allowed[0] ?? null;
+}
+
+/**
  * 월차/연차 각각의 잔여일수. DB 타입(LeaveAdjustment/LeaveRequest)에 의존하지 않도록
  * {kind, days, year} 꼴로 받는다 — 신청 건은 호출하는 쪽에서 leaveDaysUsed로 일수를, year는
  * yearOfDate(startDate)로 미리 구해 넘긴다. 자동 계산되는 기본 부여분은 없다(원장이 조정으로

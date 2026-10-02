@@ -4,7 +4,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { addDaysKst, currentMonthKst, todayKst } from '@/lib/kst';
-import { computeBalances, leaveDaysUsed, monthGridWeeks, yearOfDate, type LeaveBalance, type LeaveKind } from '@/lib/leave';
+import { computeBalances, defaultLeaveKind, grantedKinds, leaveDaysUsed, monthGridWeeks, yearOfDate, type LeaveBalance, type LeaveKind } from '@/lib/leave';
 import {
   cancelLeaveRequest,
   createAdjustment,
@@ -56,12 +56,22 @@ function buildEntriesByDate(requests: LeaveRequest[], from: string, to: string):
 
 const kindLabel: Record<LeaveKind, string> = { monthly: '월차', annual: '연차' };
 
+// 부여·사용·남은 일수를 한눈에 — 남은 일수를 가장 크게.
 function BalanceTile({ label, balance }: { label: string; balance: LeaveBalance }) {
+  const cell = (name: string, value: number, strong = false) => (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      <p className="muted-text" style={{ fontSize: 11, marginBottom: 2 }}>{name}</p>
+      <p style={{ fontSize: strong ? 24 : 18, fontWeight: 700, margin: 0, color: strong && value < 0 ? 'var(--color-error)' : undefined }}>{value}</p>
+    </div>
+  );
   return (
-    <div style={{ flex: 1, minWidth: 140 }}>
-      <p className="muted-text" style={{ fontSize: 12, marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 22, fontWeight: 700, marginBottom: 2 }}>{balance.available}일</p>
-      <p className="muted-text" style={{ fontSize: 12 }}>부여 {balance.entitled}일 · 사용 {balance.used}일</p>
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{label}</p>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end' }}>
+        {cell('부여', balance.entitled)}
+        {cell('사용', balance.used)}
+        {cell('남음', balance.available, true)}
+      </div>
     </div>
   );
 }
@@ -90,7 +100,6 @@ export default function LeavePage() {
   const [endDate, setEndDate] = useState(today);
   const [halfDay, setHalfDay] = useState<'am' | 'pm' | null>(null);
   const [kind, setKind] = useState<LeaveKind>('monthly');
-  const [kindTouched, setKindTouched] = useState(false);
   const [memo, setMemo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -239,10 +248,13 @@ export default function LeavePage() {
     [me, currentYear, myAdjustments, myApprovedRequests]
   );
 
+  // 원장이 부여해 준 종류만 신청할 수 있다 — 지금 고른 종류가 부여된 게 아니면 부여된 쪽으로 맞춘다.
+  const allowedKinds = useMemo(() => (balances ? grantedKinds(balances) : []), [balances]);
   useEffect(() => {
-    if (!balances || kindTouched) return;
-    setKind(balances.monthly.available > 0 ? 'monthly' : 'annual');
-  }, [balances, kindTouched]);
+    if (!balances || allowedKinds.length === 0 || allowedKinds.includes(kind)) return;
+    const next = defaultLeaveKind(allowedKinds, balances);
+    if (next) setKind(next);
+  }, [balances, allowedKinds, kind]);
 
   useEffect(() => {
     if (startDate !== endDate && halfDay) setHalfDay(null);
@@ -463,73 +475,88 @@ export default function LeavePage() {
         </div>
       )}
 
-      {balances && (
-        <div className="card" style={{ display: 'flex', gap: 24, padding: 16, marginBottom: 20 }}>
-          <BalanceTile label="월차" balance={balances.monthly} />
-          <BalanceTile label={`연차(${currentYear}년)`} balance={balances.annual} />
-        </div>
-      )}
+      <div className="leave-top">
+        <div className="leave-top-left">
+          {allowedKinds.length > 0 && balances ? (
+            <div className="card" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: 16 }}>
+              {allowedKinds.map((k) => (
+                <BalanceTile key={k} label={k === 'annual' ? `연차 (${currentYear}년)` : '월차'} balance={balances[k]} />
+              ))}
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 16 }}>
+              <p className="muted-text" style={{ margin: 0, fontSize: 13 }}>
+                아직 부여된 월차·연차가 없어요. 원장님이 부여해 주시면 여기에 나타나고 신청할 수 있어요.
+              </p>
+            </div>
+          )}
 
-      <form onSubmit={handleSubmitRequest} className="card" style={{ padding: 16, marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
-        <div>
-          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>시작일</label>
-          <input className="input-field" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          {allowedKinds.length > 0 && (
+            <form onSubmit={handleSubmitRequest} className="card" style={{ padding: 16, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+              <div>
+                <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>시작일</label>
+                <input className="input-field" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>종료일</label>
+                <input className="input-field" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>구분</label>
+                {allowedKinds.length === 1 ? (
+                  <div className="input-field" style={{ width: 100, display: 'flex', alignItems: 'center', background: 'var(--color-surface-2)' }}>
+                    {kindLabel[allowedKinds[0]]}
+                  </div>
+                ) : (
+                  <select className="input-field" value={kind} onChange={(e) => setKind(e.target.value as LeaveKind)} style={{ width: 100 }}>
+                    {allowedKinds.map((k) => (
+                      <option key={k} value={k}>
+                        {kindLabel[k]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {startDate === endDate && (
+                <div>
+                  <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>반차</label>
+                  <select
+                    className="input-field"
+                    value={halfDay ?? ''}
+                    onChange={(e) => setHalfDay(e.target.value ? (e.target.value as 'am' | 'pm') : null)}
+                    style={{ width: 110 }}
+                  >
+                    <option value="">종일</option>
+                    <option value="am">오전 반차</option>
+                    <option value="pm">오후 반차</option>
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유</label>
+                <input className="input-field" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ width: 160 }} />
+              </div>
+              <button type="submit" className="btn-primary" disabled={submitting || startDate > endDate} style={{ padding: '7px 16px' }}>
+                {submitting ? '신청 중...' : '신청'}
+              </button>
+              <p className="muted-text" style={{ width: '100%', fontSize: 12, margin: 0 }}>
+                {previewDays}일 차감돼요(원장 승인 전까지는 잔여일수에서 빠지지 않아요).
+              </p>
+            </form>
+          )}
         </div>
-        <div>
-          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>종료일</label>
-          <input className="input-field" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-        <div>
-          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>구분</label>
-          <select
-            className="input-field"
-            value={kind}
-            onChange={(e) => {
-              setKind(e.target.value as LeaveKind);
-              setKindTouched(true);
-            }}
-            style={{ width: 100 }}
-          >
-            <option value="monthly">월차</option>
-            <option value="annual">연차</option>
-          </select>
-        </div>
-        {startDate === endDate && (
-          <div>
-            <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>반차</label>
-            <select
-              className="input-field"
-              value={halfDay ?? ''}
-              onChange={(e) => setHalfDay(e.target.value ? (e.target.value as 'am' | 'pm') : null)}
-              style={{ width: 110 }}
-            >
-              <option value="">종일</option>
-              <option value="am">오전 반차</option>
-              <option value="pm">오후 반차</option>
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유</label>
-          <input className="input-field" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ width: 160 }} />
-        </div>
-        <button type="submit" className="btn-primary" disabled={submitting || startDate > endDate} style={{ padding: '7px 16px' }}>
-          {submitting ? '신청 중...' : '신청'}
-        </button>
-        <p className="muted-text" style={{ width: '100%', fontSize: 12, margin: 0 }}>
-          {previewDays}일 차감돼요(원장 승인 전까지는 잔여일수에서 빠지지 않아요).
-        </p>
-      </form>
 
-      <div style={{ marginBottom: 20, maxWidth: 520 }}>
-        <MonthCalendar
-          month={month}
-          weeks={weeks}
-          today={today}
-          entriesByDate={entriesByDate}
-          onPrevMonth={() => setMonth((m) => shiftMonth(m, -1))}
-          onNextMonth={() => setMonth((m) => shiftMonth(m, 1))}
-        />
+        <div className="leave-top-right">
+          <MonthCalendar
+            month={month}
+            weeks={weeks}
+            today={today}
+            entriesByDate={entriesByDate}
+            onPrevMonth={() => setMonth((m) => shiftMonth(m, -1))}
+            onNextMonth={() => setMonth((m) => shiftMonth(m, 1))}
+            compact
+          />
+        </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 20 }}>
@@ -543,6 +570,7 @@ export default function LeavePage() {
           onSave={handleSaveRequest}
           onCancel={handleCancelRequest}
           editNeedsReapproval={!me.isOwner}
+          allowedKinds={allowedKinds}
         />
       </div>
 

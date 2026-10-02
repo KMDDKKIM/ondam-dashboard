@@ -21,11 +21,13 @@ interface LeaveRequestListProps {
   onCancel: (request: LeaveRequest) => void;
   /** 변경하면 다시 승인을 받아야 하는 사람(직원 본인)에게 안내 문구를 보여 준다. */
   editNeedsReapproval: boolean;
+  /** 변경할 때 고를 수 있는 구분 — 생략하면 월차·연차 모두. 지금 신청의 구분은 항상 포함한다. */
+  allowedKinds?: LeaveKind[];
 }
 
 // 연차 신청 목록 한 줄 한 줄에 "변경"(그 자리에서 날짜·반차·구분·사유를 고침)과 "취소"를 붙인다.
 // 확정된 건도 똑같이 변경·취소할 수 있다(원장 요청, 2026-10-02).
-export function LeaveRequestList({ requests, showStaffName = false, emptyText, onSave, onCancel, editNeedsReapproval }: LeaveRequestListProps) {
+export function LeaveRequestList({ requests, showStaffName = false, emptyText, onSave, onCancel, editNeedsReapproval, allowedKinds }: LeaveRequestListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<LeaveRequestEdit | null>(null);
   const [saving, setSaving] = useState(false);
@@ -114,8 +116,13 @@ export function LeaveRequestList({ requests, showStaffName = false, emptyText, o
                 <div>
                   <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>구분</label>
                   <select className="input-field" value={draft.kind} onChange={(e) => patch({ kind: e.target.value as LeaveKind })} style={{ width: 90, padding: '5px 8px' }}>
-                    <option value="monthly">월차</option>
-                    <option value="annual">연차</option>
+                    {(['monthly', 'annual'] as LeaveKind[])
+                      .filter((k) => !allowedKinds || allowedKinds.includes(k) || k === draft.kind)
+                      .map((k) => (
+                        <option key={k} value={k}>
+                          {kindLabel[k]}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 {draft.startDate === draft.endDate && (

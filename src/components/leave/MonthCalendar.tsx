@@ -18,6 +18,8 @@ interface MonthCalendarProps {
   entriesByDate: Map<string, CalendarEntry[]>;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  /** 우상단에 작게 놓을 때 — 칸 높이·글자를 더 줄인다. */
+  compact?: boolean;
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -27,7 +29,7 @@ const KIND_COLOR: Record<LeaveKind, string> = {
   annual: '#16a34a',
 };
 
-export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth, onNextMonth }: MonthCalendarProps) {
+export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth, onNextMonth, compact = false }: MonthCalendarProps) {
   return (
     <div className="card" style={{ padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 12 }}>
@@ -76,7 +78,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
               <div
                 key={date}
                 style={{
-                  minHeight: 52,
+                  minHeight: compact ? 38 : 52,
                   borderRadius: 8,
                   border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                   background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
@@ -84,7 +86,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                   opacity: inMonth ? 1 : 0.5,
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: isToday ? 700 : 500, marginBottom: 2 }}>
+                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2 }}>
                   {dayNum}
                   {holiday && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}
                 </div>
@@ -93,7 +95,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                     <span
                       key={entry.id}
                       style={{
-                        fontSize: 9,
+                        fontSize: compact ? 8 : 9,
                         fontWeight: 600,
                         padding: '1px 4px',
                         borderRadius: 999,

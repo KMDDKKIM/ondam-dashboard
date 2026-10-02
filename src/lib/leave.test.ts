@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, leaveDaysUsed, monthGridWeeks, summarizeBalance, yearOfDate } from './leave';
+import { computeBalances, defaultLeaveKind, grantedKinds, leaveDaysUsed, monthGridWeeks, summarizeBalance, yearOfDate } from './leave';
 
 describe('yearOfDate', () => {
   it('날짜 문자열에서 연도만 뽑는다', () => {
@@ -126,5 +126,41 @@ describe('computeBalances', () => {
       [{ kind: 'monthly', days: 1, year: 2026 }]
     );
     expect(balances.monthly).toEqual({ entitled: 2, used: 1, available: 1 });
+  });
+});
+
+describe('grantedKinds / defaultLeaveKind', () => {
+  const b = (monthly: number, annual: number, usedAnnual = 0) =>
+    computeBalances(
+      2026,
+      [
+        ...(monthly ? [{ kind: 'monthly' as const, days: monthly, year: 2026 }] : []),
+        ...(annual ? [{ kind: 'annual' as const, days: annual, year: 2026 }] : []),
+      ],
+      usedAnnual ? [{ kind: 'annual', days: usedAnnual, year: 2026 }] : []
+    );
+
+  it('부여된 종류만 월차→연차 순으로', () => {
+    expect(grantedKinds(b(2, 15))).toEqual(['monthly', 'annual']);
+    expect(grantedKinds(b(0, 15))).toEqual(['annual']);
+    expect(grantedKinds(b(3, 0))).toEqual(['monthly']);
+  });
+
+  it('아무것도 부여 안 됐으면 빈 목록', () => {
+    expect(grantedKinds(b(0, 0))).toEqual([]);
+  });
+
+  it('다 써서 남은 게 0이어도 부여된 종류로는 남는다', () => {
+    expect(grantedKinds(b(0, 15, 15))).toEqual(['annual']);
+  });
+
+  it('기본 선택은 남은 일수가 있는 종류를 우선한다', () => {
+    expect(defaultLeaveKind(['monthly', 'annual'], b(2, 15))).toBe('monthly');
+    expect(defaultLeaveKind(['monthly', 'annual'], b(0, 15))).toBe('annual');
+  });
+
+  it('둘 다 남은 게 없으면 부여된 첫 종류, 부여된 게 없으면 null', () => {
+    expect(defaultLeaveKind(['annual'], b(0, 15, 15))).toBe('annual');
+    expect(defaultLeaveKind([], b(0, 0))).toBeNull();
   });
 });
