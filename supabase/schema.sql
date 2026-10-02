@@ -1589,9 +1589,17 @@ drop policy if exists "approved staff can read leave_requests" on leave_requests
 create policy "approved staff can read leave_requests" on leave_requests
   for select to authenticated using (public.is_approved_staff());
 
+-- 일반 직원은 본인 명의의 승인 대기 신청만 만들 수 있다(스스로 승인 상태로 넣기 불가). 원장은 제한 없음.
+-- (migration_leave_requests_insert_fix.sql)
 drop policy if exists "approved staff can insert leave_requests" on leave_requests;
 create policy "approved staff can insert leave_requests" on leave_requests
-  for insert to authenticated with check (public.is_approved_staff());
+  for insert to authenticated with check (
+    public.is_approved_staff()
+    and (
+      (staff_id = auth.uid() and status = 'pending' and decided_by is null and decided_at is null)
+      or public.is_owner()
+    )
+  );
 
 drop policy if exists "owner can update leave_requests" on leave_requests;
 create policy "owner can update leave_requests" on leave_requests
