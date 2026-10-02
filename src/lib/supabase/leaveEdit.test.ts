@@ -7,7 +7,7 @@ const edit: LeaveRequestEdit = { startDate: '2026-10-12', endDate: '2026-10-12',
 describe('buildLeaveEditPatch', () => {
   it('직원이 고치면 승인 대기로 돌리고 결정 기록을 지운다', () => {
     const patch = buildLeaveEditPatch(edit, { id: 'me', isOwner: false, currentStatus: 'approved' }, NOW);
-    expect(patch).toMatchObject({ status: 'pending', decided_by: null, decided_at: null, start_date: '2026-10-12', half_day: 'pm', kind: 'annual', memo: '병원' });
+    expect(patch).toMatchObject({ status: 'pending', decided_by: null, decided_at: null, decision_note: null, start_date: '2026-10-12', half_day: 'pm', kind: 'annual', memo: '병원' });
   });
 
   it('원장이 확정된 건을 고치면 상태는 두고 결정 기록만 갱신한다', () => {

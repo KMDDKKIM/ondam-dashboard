@@ -20,6 +20,8 @@ export interface LeaveRequest {
   requestedBy: string | null;
   decidedBy: string | null;
   decidedAt: string | null;
+  /** 반려 사유(반려된 건에만 있다). */
+  decisionNote: string;
   createdAt: string;
 }
 
@@ -35,6 +37,7 @@ interface RequestRow {
   requested_by: string | null;
   decided_by: string | null;
   decided_at: string | null;
+  decision_note: string | null;
   created_at: string;
   staff: { name: string } | { name: string }[] | null;
 }
@@ -58,11 +61,12 @@ function rowToRequest(r: RequestRow): LeaveRequest {
     requestedBy: r.requested_by,
     decidedBy: r.decided_by,
     decidedAt: r.decided_at,
+    decisionNote: r.decision_note ?? '',
     createdAt: r.created_at,
   };
 }
 
-const SELECT_WITH_STAFF = 'id, staff_id, start_date, end_date, half_day, kind, status, memo, requested_by, decided_by, decided_at, created_at, staff:staff_id(name)';
+const SELECT_WITH_STAFF = 'id, staff_id, start_date, end_date, half_day, kind, status, memo, requested_by, decided_by, decided_at, decision_note, created_at, staff:staff_id(name)';
 
 export interface ListLeaveRequestsOptions {
   /** [from, to] 기간과 겹치는 신청만(달력용 월 단위 조회). */
@@ -110,16 +114,22 @@ export async function createLeaveRequest(supabase: SupabaseClient, input: NewLea
   if (error) throw error;
 }
 
-// 원장 전용(RLS가 강제) — 승인/거절.
+// 원장 전용(RLS가 강제) — 승인/반려. 반려할 때는 사유(note)를 같이 남긴다.
 export async function decideLeaveRequest(
   supabase: SupabaseClient,
   id: string,
   status: 'approved' | 'rejected',
-  decidedBy: string | null
+  decidedBy: string | null,
+  note: string = ''
 ): Promise<void> {
   const { error } = await supabase
     .from('leave_requests')
-    .update({ status, decided_by: decidedBy, decided_at: new Date().toISOString() })
+    .update({
+      status,
+      decided_by: decidedBy,
+      decided_at: new Date().toISOString(),
+      decision_note: status === 'rejected' ? note.trim() || null : null,
+    })
     .eq('id', id);
   if (error) throw error;
 }
@@ -154,6 +164,7 @@ export function buildLeaveEditPatch(
     patch.status = 'pending';
     patch.decided_by = null;
     patch.decided_at = null;
+    patch.decision_note = null;
   } else if (actor.currentStatus === 'approved') {
     patch.decided_by = actor.id;
     patch.decided_at = now.toISOString();

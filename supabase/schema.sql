@@ -1578,6 +1578,7 @@ create table if not exists leave_requests (
   requested_by uuid references staff(id) on delete set null,
   decided_by uuid references staff(id) on delete set null,
   decided_at timestamptz,
+  decision_note text, -- 반려 사유(반려할 때 원장이 적는다) — migration_leave_decision_note.sql
   created_at timestamptz not null default now(),
   constraint leave_requests_range check (end_date >= start_date),
   constraint leave_requests_half_day_single_day check (half_day is null or start_date = end_date)

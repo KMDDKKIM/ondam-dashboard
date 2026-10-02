@@ -100,6 +100,8 @@ export default function LeavePage() {
   const [adjDays, setAdjDays] = useState('');
   const [adjYear, setAdjYear] = useState(currentYear);
   const [adjReason, setAdjReason] = useState('');
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [savingAdj, setSavingAdj] = useState(false);
 
   // 원장 전용 "직원별 연차·월차 부여" 표의 기준 연도 — 연차는 연도별로 끊어서 계산되므로.
@@ -337,11 +339,13 @@ export default function LeavePage() {
     }
   }
 
-  async function handleDecide(id: string, status: 'approved' | 'rejected') {
+  async function handleDecide(id: string, status: 'approved' | 'rejected', note = '') {
     if (!me) return;
     setError('');
     try {
-      await decideLeaveRequest(supabase, id, status, me.id);
+      await decideLeaveRequest(supabase, id, status, me.id, note);
+      setRejectingId(null);
+      setRejectReason('');
       await refreshAfterMutation();
     } catch {
       setError('처리하지 못했습니다.');
@@ -350,7 +354,7 @@ export default function LeavePage() {
 
   async function handleAddAdjustment(e: React.FormEvent) {
     e.preventDefault();
-    if (!me || !adjStaffId || !adjReason.trim()) return;
+    if (!me || !adjStaffId) return;
     const days = Number(adjDays);
     if (!days) return;
     setSavingAdj(true);
@@ -406,27 +410,52 @@ export default function LeavePage() {
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {ownerPendingRequests.map((r) => (
-                <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
-                  <span style={{ fontWeight: 600 }}>{r.staffName}</span>
-                  <span style={{ fontSize: 13 }}>
-                    {r.startDate}
-                    {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
-                    {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
-                  </span>
-                  <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
-                  {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                    <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
-                      승인
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDecide(r.id, 'rejected')}
-                      style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
-                    >
-                      반려
-                    </button>
+                <li key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600 }}>{r.staffName}</span>
+                    <span style={{ fontSize: 13 }}>
+                      {r.startDate}
+                      {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
+                      {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
+                    </span>
+                    <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
+                    {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
+                        승인
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRejectingId(rejectingId === r.id ? null : r.id);
+                          setRejectReason('');
+                        }}
+                        style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
+                      >
+                        반려
+                      </button>
+                    </div>
                   </div>
+                  {rejectingId === r.id && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <input
+                        className="input-field"
+                        autoFocus
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        placeholder="반려 사유 (필수) — 신청한 직원에게 보여요"
+                        style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: 13 }}
+                      />
+                      <button
+                        type="button"
+                        disabled={!rejectReason.trim()}
+                        onClick={() => handleDecide(r.id, 'rejected', rejectReason)}
+                        style={{ padding: '6px 14px', fontSize: 13, borderRadius: 8, border: 'none', background: 'var(--color-error)', color: '#fff', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed', opacity: rejectReason.trim() ? 1 : 0.5 }}
+                      >
+                        반려하기
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -605,10 +634,10 @@ export default function LeavePage() {
               <input className="input-field" type="number" step={0.5} value={adjDays} onChange={(e) => setAdjDays(e.target.value)} style={{ width: 90 }} />
             </div>
             <div>
-              <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유</label>
+              <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>사유(선택)</label>
               <input className="input-field" value={adjReason} onChange={(e) => setAdjReason(e.target.value)} placeholder="예: 10월 월차 부여, 2026년 연차 부여" style={{ width: 200 }} />
             </div>
-            <button type="submit" className="btn-primary" disabled={savingAdj || !adjStaffId || !adjReason.trim() || !Number(adjDays)} style={{ padding: '7px 16px' }}>
+            <button type="submit" className="btn-primary" disabled={savingAdj || !adjStaffId || !Number(adjDays)} style={{ padding: '7px 16px' }}>
               {savingAdj ? '추가 중...' : '부여·조정 추가'}
             </button>
           </form>

@@ -98,6 +98,12 @@ export function LeaveResultNotice() {
           {approved ? `${kind} 확정이 완료됐어요!` : `${kind} 신청이 반려됐어요`}
         </h2>
         <p style={{ margin: '0 0 4px', fontWeight: 700 }}>{describe(current)}</p>
+        {!approved && current.decisionNote && (
+          <p style={{ margin: '4px 0 6px', padding: '8px 12px', borderRadius: 8, background: 'var(--color-surface-2)', fontSize: 13, textAlign: 'left' }}>
+            <span className="muted-text">반려 사유 </span>
+            {current.decisionNote}
+          </p>
+        )}
         <p className="muted-text" style={{ margin: '0 0 18px', fontSize: 13 }}>
           {approved ? '푹 쉬고 오세요 😊' : '궁금한 점은 원장님께 여쭤봐 주세요.'}
         </p>
