@@ -4,7 +4,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { addDaysKst, currentMonthKst, todayKst } from '@/lib/kst';
-import { computeBalances, leaveDaysUsed, monthGridWeeks, type LeaveBalance, type LeaveKind } from '@/lib/leave';
+import { computeBalances, leaveDaysUsed, monthGridWeeks, yearOfDate, type LeaveBalance, type LeaveKind } from '@/lib/leave';
 import {
   cancelLeaveRequest,
   createAdjustment,
@@ -82,6 +82,7 @@ export default function LeavePage() {
 
   // 신청 폼
   const today = todayKst();
+  const currentYear = yearOfDate(today);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [halfDay, setHalfDay] = useState<'am' | 'pm' | null>(null);
@@ -94,8 +95,12 @@ export default function LeavePage() {
   const [adjStaffId, setAdjStaffId] = useState('');
   const [adjKind, setAdjKind] = useState<LeaveKind>('monthly');
   const [adjDays, setAdjDays] = useState('');
+  const [adjYear, setAdjYear] = useState(currentYear);
   const [adjReason, setAdjReason] = useState('');
   const [savingAdj, setSavingAdj] = useState(false);
+
+  // 원장 전용 "직원별 연차·월차 부여" 표의 기준 연도 — 연차는 연도별로 끊어서 계산되므로.
+  const [viewYear, setViewYear] = useState(currentYear);
 
   const loadMe = useCallback(async (): Promise<Me | null> => {
     const {
@@ -197,11 +202,16 @@ export default function LeavePage() {
     () =>
       me
         ? computeBalances(
-            myAdjustments.map((a) => ({ kind: a.kind, days: a.days })),
-            myApprovedRequests.map((r) => ({ kind: r.kind, days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay) }))
+            currentYear,
+            myAdjustments.map((a) => ({ kind: a.kind, days: a.days, year: a.year })),
+            myApprovedRequests.map((r) => ({
+              kind: r.kind,
+              days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay),
+              year: yearOfDate(r.startDate),
+            }))
           )
         : null,
-    [me, myAdjustments, myApprovedRequests]
+    [me, currentYear, myAdjustments, myApprovedRequests]
   );
 
   useEffect(() => {
@@ -216,14 +226,14 @@ export default function LeavePage() {
   const staffBalances = useMemo(() => {
     const map = new Map<string, { monthly: LeaveBalance; annual: LeaveBalance }>();
     for (const s of staffList) {
-      const adj = staffAdjustments.filter((a) => a.staffId === s.id).map((a) => ({ kind: a.kind, days: a.days }));
+      const adj = staffAdjustments.filter((a) => a.staffId === s.id).map((a) => ({ kind: a.kind, days: a.days, year: a.year }));
       const used = staffApprovedRequests
         .filter((r) => r.staffId === s.id)
-        .map((r) => ({ kind: r.kind, days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay) }));
-      map.set(s.id, computeBalances(adj, used));
+        .map((r) => ({ kind: r.kind, days: leaveDaysUsed(r.startDate, r.endDate, r.halfDay), year: yearOfDate(r.startDate) }));
+      map.set(s.id, computeBalances(viewYear, adj, used));
     }
     return map;
-  }, [staffList, staffAdjustments, staffApprovedRequests]);
+  }, [staffList, staffAdjustments, staffApprovedRequests, viewYear]);
 
   const staffNameById = useMemo(() => new Map(staffList.map((s) => [s.id, s.name])), [staffList]);
 
@@ -290,6 +300,7 @@ export default function LeavePage() {
         staffId: adjStaffId,
         kind: adjKind,
         days,
+        year: adjYear,
         reason: adjReason.trim(),
         createdBy: me.id,
       });
@@ -330,7 +341,7 @@ export default function LeavePage() {
       {balances && (
         <div className="card" style={{ display: 'flex', gap: 24, padding: 16, marginBottom: 20 }}>
           <BalanceTile label="월차" balance={balances.monthly} />
-          <BalanceTile label="연차" balance={balances.annual} />
+          <BalanceTile label={`연차(${currentYear}년)`} balance={balances.annual} />
         </div>
       )}
 
@@ -462,15 +473,22 @@ export default function LeavePage() {
 
       {me.isOwner && (
         <div className="card" style={{ padding: 20 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 4 }}>직원별 연차·월차 부여</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <h2 style={{ fontSize: 15, margin: 0 }}>직원별 연차·월차 부여</h2>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button type="button" onClick={() => setViewYear((y) => y - 1)} style={{ border: 'none', background: 'transparent', fontSize: 13, cursor: 'pointer', padding: '2px 4px' }} aria-label="이전 연도">◀</button>
+              <span className="muted-text" style={{ fontSize: 13, fontWeight: 600 }}>{viewYear}년 연차 기준</span>
+              <button type="button" onClick={() => setViewYear((y) => y + 1)} style={{ border: 'none', background: 'transparent', fontSize: 13, cursor: 'pointer', padding: '2px 4px' }} aria-label="다음 연도">▶</button>
+            </div>
+          </div>
           <p className="muted-text" style={{ fontSize: 12, marginBottom: 12 }}>
-            입사일 자동 계산 없이, 아래 폼으로 직접 부여해요 — 월차는 보통 매달 1일씩, 연차는 일년에 정해진 일수만큼 넣어주세요.
+            입사일 자동 계산 없이, 아래 폼으로 직접 부여해요 — 월차는 보통 매달 1일씩 누적되고, 연차는 해마다 정해진 일수를 부여하면 그 해가 지날 때 미사용분이 소멸돼요(이월 없음).
           </p>
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                  {['이름', '월차(부여/사용/남음)', '연차(부여/사용/남음)'].map((h) => (
+                  {['이름', '월차(부여/사용/남음, 누적)', `연차(${viewYear}년 부여/사용/남음)`].map((h) => (
                     <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
@@ -515,6 +533,12 @@ export default function LeavePage() {
                 <option value="annual">연차</option>
               </select>
             </div>
+            {adjKind === 'annual' && (
+              <div>
+                <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>연도</label>
+                <input className="input-field" type="number" value={adjYear} onChange={(e) => setAdjYear(Number(e.target.value) || currentYear)} style={{ width: 90 }} />
+              </div>
+            )}
             <div>
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>일수(+/-)</label>
               <input className="input-field" type="number" step={0.5} value={adjDays} onChange={(e) => setAdjDays(e.target.value)} style={{ width: 90 }} />
@@ -535,7 +559,7 @@ export default function LeavePage() {
                 {staffAdjustments.map((a) => (
                   <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--color-line)', fontSize: 13 }}>
                     <span style={{ fontWeight: 600 }}>{staffNameById.get(a.staffId) ?? '(삭제된 직원)'}</span>
-                    <span className="muted-text">{kindLabel[a.kind]}</span>
+                    <span className="muted-text">{kindLabel[a.kind]}{a.kind === 'annual' ? `(${a.year}년)` : ''}</span>
                     <span style={{ fontWeight: 600 }}>{a.days > 0 ? `+${a.days}` : a.days}일</span>
                     <span className="muted-text">{a.reason}</span>
                     <button

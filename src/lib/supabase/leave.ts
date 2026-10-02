@@ -136,6 +136,8 @@ export interface LeaveAdjustment {
   staffId: string;
   kind: LeaveKind;
   days: number;
+  /** 이 부여·조정이 적용되는 연도. 연차는 이 연도의 부여·사용만 묶어 계산해 해가 지나면 미사용분이 소멸되게 한다(월차는 연도 무관 누적). */
+  year: number;
   reason: string;
   createdAt: string;
 }
@@ -145,18 +147,19 @@ interface AdjustmentRow {
   staff_id: string;
   kind: LeaveKind;
   days: number;
+  year: number;
   reason: string | null;
   created_at: string;
 }
 
 function rowToAdjustment(r: AdjustmentRow): LeaveAdjustment {
-  return { id: r.id, staffId: r.staff_id, kind: r.kind, days: Number(r.days), reason: r.reason ?? '', createdAt: r.created_at };
+  return { id: r.id, staffId: r.staff_id, kind: r.kind, days: Number(r.days), year: r.year, reason: r.reason ?? '', createdAt: r.created_at };
 }
 
 // staffId를 주면 그 사람 것만(원장이 특정 직원 내역을 볼 때), 안 주면 RLS가 걸러준 대로
 // (본인은 자기 것만, 원장은 전체) 받는다.
 export async function listAdjustments(supabase: SupabaseClient, staffId?: string): Promise<LeaveAdjustment[]> {
-  let query = supabase.from('leave_adjustments').select('id, staff_id, kind, days, reason, created_at').order('created_at', { ascending: false });
+  let query = supabase.from('leave_adjustments').select('id, staff_id, kind, days, year, reason, created_at').order('created_at', { ascending: false });
   if (staffId) query = query.eq('staff_id', staffId);
   const { data, error } = await query;
   if (error) throw error;
@@ -167,6 +170,7 @@ export interface NewAdjustment {
   staffId: string;
   kind: LeaveKind;
   days: number;
+  year: number;
   reason: string;
   createdBy: string | null;
 }
@@ -177,6 +181,7 @@ export async function createAdjustment(supabase: SupabaseClient, input: NewAdjus
     staff_id: input.staffId,
     kind: input.kind,
     days: input.days,
+    year: input.year,
     reason: input.reason || null,
     created_by: input.createdBy,
   });

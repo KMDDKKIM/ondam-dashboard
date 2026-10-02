@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, leaveDaysUsed, monthGridWeeks, summarizeBalance } from './leave';
+import { computeBalances, leaveDaysUsed, monthGridWeeks, summarizeBalance, yearOfDate } from './leave';
+
+describe('yearOfDate', () => {
+  it('날짜 문자열에서 연도만 뽑는다', () => {
+    expect(yearOfDate('2026-01-15')).toBe(2026);
+    expect(yearOfDate('2027-12-31')).toBe(2027);
+  });
+});
 
 describe('leaveDaysUsed', () => {
   it('하루 연차', () => {
@@ -78,8 +85,9 @@ describe('summarizeBalance', () => {
 describe('computeBalances', () => {
   it('월차·연차를 종류별로 따로 계산한다(부여=조정 합계)', () => {
     const balances = computeBalances(
-      [{ kind: 'monthly', days: 1 }, { kind: 'monthly', days: 1 }],
-      [{ kind: 'monthly', days: 1 }]
+      2026,
+      [{ kind: 'monthly', days: 1, year: 2026 }, { kind: 'monthly', days: 1, year: 2026 }],
+      [{ kind: 'monthly', days: 1, year: 2026 }]
     );
     expect(balances.monthly).toEqual({ entitled: 2, used: 1, available: 1 });
     expect(balances.annual).toEqual({ entitled: 0, used: 0, available: 0 });
@@ -87,16 +95,36 @@ describe('computeBalances', () => {
 
   it('연차 부여·사용은 월차와 섞이지 않는다', () => {
     const balances = computeBalances(
-      [{ kind: 'annual', days: 15 }, { kind: 'monthly', days: 3 }],
-      [{ kind: 'annual', days: 5 }, { kind: 'monthly', days: 1 }]
+      2026,
+      [{ kind: 'annual', days: 15, year: 2026 }, { kind: 'monthly', days: 3, year: 2026 }],
+      [{ kind: 'annual', days: 5, year: 2026 }, { kind: 'monthly', days: 1, year: 2026 }]
     );
     expect(balances.annual).toEqual({ entitled: 15, used: 5, available: 10 });
     expect(balances.monthly).toEqual({ entitled: 3, used: 1, available: 2 });
   });
 
   it('부여·사용 둘 다 없으면 0', () => {
-    const balances = computeBalances([], []);
+    const balances = computeBalances(2026, [], []);
     expect(balances.monthly).toEqual({ entitled: 0, used: 0, available: 0 });
     expect(balances.annual).toEqual({ entitled: 0, used: 0, available: 0 });
+  });
+
+  it('연차는 해가 지나면 전년도 미사용분이 소멸된다(이월 없음)', () => {
+    // 2026년에 15일 부여, 3일만 사용 → 2026년 기준 12일 남지만, 2027년 조회에는 안 잡힌다.
+    const balances2027 = computeBalances(
+      2027,
+      [{ kind: 'annual', days: 15, year: 2026 }, { kind: 'annual', days: 10, year: 2027 }],
+      [{ kind: 'annual', days: 3, year: 2026 }]
+    );
+    expect(balances2027.annual).toEqual({ entitled: 10, used: 0, available: 10 });
+  });
+
+  it('월차는 연도와 무관하게 전부 누적된다', () => {
+    const balances = computeBalances(
+      2027,
+      [{ kind: 'monthly', days: 1, year: 2026 }, { kind: 'monthly', days: 1, year: 2027 }],
+      [{ kind: 'monthly', days: 1, year: 2026 }]
+    );
+    expect(balances.monthly).toEqual({ entitled: 2, used: 1, available: 1 });
   });
 });

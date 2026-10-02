@@ -1608,6 +1608,9 @@ create table if not exists leave_adjustments (
   staff_id uuid not null references staff(id) on delete cascade,
   kind text not null check (kind in ('monthly', 'annual')),
   days numeric not null,
+  -- 이 부여·조정이 적용되는 연도. 연차는 이 연도의 부여·사용만 묶어 계산해 해가 지나면
+  -- 미사용분이 소멸된다(월차는 연도 무관 누적) — migration_leave_adjustments_year.sql 참고.
+  year integer not null default extract(year from (now() at time zone 'Asia/Seoul'))::integer,
   reason text,
   created_by uuid references staff(id) on delete set null,
   created_at timestamptz not null default now()

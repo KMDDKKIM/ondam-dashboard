@@ -7,6 +7,11 @@ import { countHolidaysInRange } from './clinicHolidays';
 
 export type LeaveKind = 'monthly' | 'annual';
 
+/** 'YYYY-MM-DD' → 연도(숫자). 연차는 연도가 바뀌면 전년도 잔여분이 소멸되므로 이 기준으로 끊는다. */
+export function yearOfDate(date: string): number {
+  return Number(date.slice(0, 4));
+}
+
 /** 신청 기간의 실제 차감 일수 — 추석·설 휴진일은 원래 아무도 안 쉬는 날이라 빼고 센다. 반차면 0.5. */
 export function leaveDaysUsed(startDate: string, endDate: string, halfDay: 'am' | 'pm' | null): number {
   if (halfDay) return 0.5;
@@ -67,19 +72,23 @@ export interface LeaveBalances {
 
 /**
  * 월차/연차 각각의 잔여일수. DB 타입(LeaveAdjustment/LeaveRequest)에 의존하지 않도록
- * {kind, days} 꼴로 받는다 — 신청 건은 호출하는 쪽에서 leaveDaysUsed로 일수를 미리 구해 넘긴다.
- * 자동 계산되는 기본 부여분은 없다(원장이 조정으로 넣은 만큼이 전부) — summarizeBalance의
- * entitlement 인자는 항상 0.
+ * {kind, days, year} 꼴로 받는다 — 신청 건은 호출하는 쪽에서 leaveDaysUsed로 일수를, year는
+ * yearOfDate(startDate)로 미리 구해 넘긴다. 자동 계산되는 기본 부여분은 없다(원장이 조정으로
+ * 넣은 만큼이 전부) — summarizeBalance의 entitlement 인자는 항상 0.
+ *
+ * 연차는 year가 일치하는 부여·사용만 더해 그 해가 지나면 미사용분이 소멸되게 한다(이월 없음).
+ * 월차는 매달 쌓이는 누적분이라 year와 무관하게 전체를 더한다.
  */
 export function computeBalances(
-  adjustments: { kind: LeaveKind; days: number }[],
-  approvedUsage: { kind: LeaveKind; days: number }[]
+  year: number,
+  adjustments: { kind: LeaveKind; days: number; year: number }[],
+  approvedUsage: { kind: LeaveKind; days: number; year: number }[]
 ): LeaveBalances {
-  const forKind = (kind: LeaveKind) =>
-    summarizeBalance(
-      0,
-      adjustments.filter((a) => a.kind === kind).map((a) => a.days),
-      approvedUsage.filter((a) => a.kind === kind).map((a) => a.days)
-    );
+  const forKind = (kind: LeaveKind) => {
+    const scoped = kind === 'annual';
+    const adj = adjustments.filter((a) => a.kind === kind && (!scoped || a.year === year));
+    const used = approvedUsage.filter((a) => a.kind === kind && (!scoped || a.year === year));
+    return summarizeBalance(0, adj.map((a) => a.days), used.map((a) => a.days));
+  };
   return { monthly: forKind('monthly'), annual: forKind('annual') };
 }
