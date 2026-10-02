@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { IncentiveCalcType, IncentiveCategory, IncentiveEntry } from '@/lib/incentive';
+import { nextMonthFirstDay, type IncentiveCalcType, type IncentiveCategory, type IncentiveEntry } from '@/lib/incentive';
 
 // 이 파일의 함수는 전부 admin(service_role) 클라이언트로만 호출한다 — 일반 로그인
 // 클라이언트는 RLS가 막아 애초에 쓸 수 없다(migration_incentive.sql 참고). "누가 뭘
@@ -224,7 +224,7 @@ export async function listEntries(admin: SupabaseClient, profileId: string, mont
     .eq('profile_id', profileId)
     .order('entry_date', { ascending: false })
     .order('created_at', { ascending: false });
-  if (month) query = query.gte('entry_date', `${month}-01`).lt('entry_date', `${month}-32`);
+  if (month) query = query.gte('entry_date', `${month}-01`).lt('entry_date', nextMonthFirstDay(month));
   const { data, error } = await query;
   if (error) throw error;
   return (data as EntryRow[]).map(rowToEntry);

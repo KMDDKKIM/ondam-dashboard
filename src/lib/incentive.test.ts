@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryNeedsAmount, computeEntryIncentive, isInMonth, sumIncentive } from './incentive';
+import { categoryNeedsAmount, computeEntryIncentive, isInMonth, nextMonthFirstDay, sumIncentive } from './incentive';
 
 const categories = [
   { id: 'c1', calcType: 'percent_of_amount' as const, percent: 0.1, fixedAmount: null },
@@ -47,6 +47,24 @@ describe('isInMonth', () => {
 
   it('다른 달이면 false', () => {
     expect(isInMonth('2026-10-01', '2026-09')).toBe(false);
+  });
+});
+
+describe('nextMonthFirstDay', () => {
+  it('보통 달', () => {
+    expect(nextMonthFirstDay('2026-09')).toBe('2026-10-01');
+  });
+
+  it('31일까지 있는 달도 정확하다(존재하지 않는 "32일" 같은 값을 안 만든다)', () => {
+    expect(nextMonthFirstDay('2026-10')).toBe('2026-11-01');
+  });
+
+  it('12월은 다음 해 1월로 넘어간다', () => {
+    expect(nextMonthFirstDay('2026-12')).toBe('2027-01-01');
+  });
+
+  it('2월(윤년 여부 상관없이 날짜 계산이 아니라 달만 넘긴다)', () => {
+    expect(nextMonthFirstDay('2028-02')).toBe('2028-03-01');
   });
 });
 

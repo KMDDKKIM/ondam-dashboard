@@ -50,6 +50,15 @@ export function isInMonth(date: string, month: string): boolean {
   return date.startsWith(month);
 }
 
+/** YYYY-MM 달의 다음 달 1일(YYYY-MM-DD). date 범위 쿼리의 상한(미만)으로 쓴다 —
+ * "YYYY-MM-32"처럼 존재하지 않는 날짜를 문자열로 비교하는 트릭은 실제 date 컬럼엔 안 통한다. */
+export function nextMonthFirstDay(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const nextMonth = m === 12 ? 1 : m + 1;
+  const nextYear = m === 12 ? y + 1 : y;
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+}
+
 /** 구분 입력칸에서 금액 칸이 의미 있는지 — fixed_per_entry면 결제금액과 무관하므로 숨겨도 된다. */
 export function categoryNeedsAmount(category: Pick<IncentiveCategory, 'calcType'> | null | undefined): boolean {
   return (category?.calcType ?? 'percent_of_amount') === 'percent_of_amount';
