@@ -7,7 +7,7 @@ import { currentMonthKst, todayKst } from '@/lib/kst';
 import { monthGridWeeks } from '@/lib/leave';
 import { holidayName } from '@/lib/publicHolidays';
 import { assignEventLanes, buildDayEntries, eventSegment } from '@/lib/homeCalendar';
-import { buildWorkBoard, dayChips, workItemsForDate, type DayChip, type WorkItem, type WorkKind } from '@/lib/workItems';
+import { buildWorkBoard, dayChips, removeAction, workItemsForDate, type DayChip, type WorkItem, type WorkKind } from '@/lib/workItems';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
 import { createClinicEvent, deleteClinicEvent, listClinicEvents, type ClinicEvent } from '@/lib/supabase/clinicEvents';
 import { createWorkItems, deleteWorkItem, listWorkItems, setWorkItemDone } from '@/lib/supabase/workItems';
@@ -159,8 +159,8 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   }
 
   async function removeWork(item: WorkItem) {
-    const label = item.kind === 'self' || item.doneAt ? '삭제' : '취소';
-    if (!(await confirmDialog(`"${item.content}" 을(를) ${label}할까요?`, { confirmLabel: label }))) return;
+    const { verb, confirmLabel } = removeAction(item);
+    if (!(await confirmDialog(`"${item.content}" 을(를) ${verb}할까요?`, { confirmLabel }))) return;
     setWorkItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
       await deleteWorkItem(supabase, item.id);

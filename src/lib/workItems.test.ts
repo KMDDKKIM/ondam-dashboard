@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionLabel, buildWorkBoard, calendarDateOf, dayChips, deadlineLabel, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
+import { actionLabel, buildWorkBoard, calendarDateOf, dayChips, deadlineLabel, doneLabel, formatKstTime, isOverdue, kstDateOf, removeAction, workItemsForDate, type WorkItem } from './workItems';
 
 // 사람·내용은 모두 시험용 가짜 값이다.
 const ME = 'me';
@@ -178,6 +178,23 @@ describe('달력 날짜', () => {
     expect(dayChips(items, ME, '2026-10-06', TODAY, NOW).map((c) => [c.id, c.deadlineDay])).toEqual([
       ['a', false],
     ]);
+  });
+});
+
+describe('removeAction', () => {
+  it('내 할 일은 "삭제"', () => {
+    expect(removeAction(item({ kind: 'self', createdBy: ME, assigneeId: ME }))).toEqual({ verb: '삭제', confirmLabel: '삭제' });
+  });
+
+  it('상대가 이미 확인한 요청·전달은 기록을 지우는 것이라 "삭제"', () => {
+    expect(removeAction(item({ createdBy: ME, assigneeId: OTHER, doneAt: '2026-10-05T01:00:00Z' }))).toEqual({ verb: '삭제', confirmLabel: '삭제' });
+  });
+
+  it('아직 확인 안 한 요청·전달은 "취소"지만, 확인창 버튼은 "취소하기" — 확인창 기본 "취소"와 이름이 같으면 취소 버튼이 두 개로 보인다', () => {
+    const action = removeAction(item({ createdBy: ME, assigneeId: OTHER }));
+    expect(action.verb).toBe('취소');
+    expect(action.confirmLabel).toBe('취소하기');
+    expect(action.confirmLabel).not.toBe('취소');
   });
 });
 

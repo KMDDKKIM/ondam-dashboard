@@ -49,6 +49,17 @@ export function kindLabel(kind: WorkKind): string {
   return kind === 'self' ? '할 일' : '요청·전달';
 }
 
+/**
+ * 항목을 지울 때의 말과 확인창 버튼 이름. 내 할 일이거나 상대가 이미 확인한 것은 기록을 지우는 "삭제",
+ * 아직 확인 안 한 요청·전달을 거두는 건 "취소"다. 다만 확인창에는 늘 기본 "취소" 버튼이 있어서, 확인
+ * 버튼까지 "취소"면 취소 버튼이 두 개로 보인다 — 그래서 확인 버튼은 "취소하기"로 한다
+ * (연차 화면의 취소 확인창과 같은 이름).
+ */
+export function removeAction(item: WorkItem): { verb: '삭제' | '취소'; confirmLabel: '삭제' | '취소하기' } {
+  if (item.kind === 'self' || item.doneAt) return { verb: '삭제', confirmLabel: '삭제' };
+  return { verb: '취소', confirmLabel: '취소하기' };
+}
+
 function isRecentlyDone(item: WorkItem, nowMs: number): boolean {
   if (!item.doneAt) return false;
   const doneMs = Date.parse(item.doneAt);
