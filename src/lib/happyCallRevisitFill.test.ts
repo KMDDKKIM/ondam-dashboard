@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { personKey, planRevisitFill, type ReceptionVisit, type RevisitTarget } from './happyCallRevisitFill';
+import { birthKey, personKey, planRevisitFill, type ReceptionVisit, type RevisitTarget } from './happyCallRevisitFill';
 
 // 이름·생년월일은 모두 시험용 가짜 값이다(실제 환자 정보를 넣지 않는다).
 const COVERAGE = '2026-09-22';
@@ -91,5 +91,22 @@ describe('personKey', () => {
     expect(personKey(' 가나다 ', ' 80.1.1 ')).toBe('가나다|80.1.1');
     expect(personKey('가나다', null)).toBeNull();
     expect(personKey('', '80.1.1')).toBeNull();
+  });
+});
+
+describe('birthKey — 표기가 달라도 같은 생년월일', () => {
+  it('점·하이픈·붙여쓰기·4자리 연도를 같게 만든다', () => {
+    const keys = ['80.1.1', '80.01.01', '1980-01-01', '800101', '19800101', ' 80.1.1 '].map(birthKey);
+    expect(new Set(keys)).toEqual(new Set(['80.1.1']));
+  });
+
+  it('읽을 수 없는 표기는 그대로, 빈 값은 빈 문자열', () => {
+    expect(birthKey('모름')).toBe('모름');
+    expect(birthKey(null)).toBe('');
+  });
+
+  it('접수기록부에 날마다 다른 표기로 적혀도 2진을 찾는다', () => {
+    const plan = planRevisitFill([target({ birthDate: '1980-01-01' })], [visit('2026-09-25', { birthDate: '80.1.1' })], COVERAGE, TODAY);
+    expect(plan.fills).toEqual([{ id: 't1', revisit1: '2026-09-25' }]);
   });
 });

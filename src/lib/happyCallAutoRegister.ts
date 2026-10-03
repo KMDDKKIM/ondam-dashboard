@@ -2,6 +2,8 @@
 // 원장 결정(2026-10-03): 성함+생년월일이 겹치는 경우는 없다고 보고, 접수기록부의 초진·재초진을 그대로 올리고
 // 이후 2진·3진도 성함+생년월일로 이어서 찾는다.
 
+import { birthKey } from './happyCallRevisitFill';
+
 export interface ReceptionEntry {
   visitDate: string;
   patientName: string;
@@ -81,7 +83,8 @@ export function planBirthFill(
         .map((e) => clean(e.birthDate))
         .filter((b): b is string => !!b)
     );
-    if (births.size === 1) out.push({ id: p.id, birthDate: [...births][0] });
+    // 표기만 다른 같은 생년월일(80.1.1 / 1980-01-01)은 하나로 본다.
+    if (new Set([...births].map(birthKey)).size === 1) out.push({ id: p.id, birthDate: [...births][0] });
   }
   return out;
 }

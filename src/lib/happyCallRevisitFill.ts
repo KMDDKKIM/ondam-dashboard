@@ -43,10 +43,26 @@ function clean(value: string | null | undefined): string {
   return (value ?? '').trim();
 }
 
+/**
+ * 생년월일 표기를 하나로 맞춘다 — 접수기록부에는 "80.1.1" · "1980-01-01" · "800101"처럼 날마다 다르게 적혀 있어
+ * 같은 사람이 다른 사람처럼 보이기 때문이다. 연도는 뒤 두 자리, 월·일은 숫자로("80.1.1"). 읽을 수 없는 표기는 그대로 둔다.
+ */
+export function birthKey(birth: string | null | undefined): string {
+  const t = clean(birth);
+  if (!t) return '';
+  let parts = t.split(/[.\-/\s]+/).filter(Boolean);
+  if (parts.length === 1) {
+    const m = t.match(/^(\d{2}|\d{4})(\d{2})(\d{2})$/);
+    if (m) parts = [m[1], m[2], m[3]];
+  }
+  if (parts.length !== 3 || parts.some((x) => !/^\d+$/.test(x))) return t;
+  return `${parts[0].slice(-2)}.${Number(parts[1])}.${Number(parts[2])}`;
+}
+
 /** 성함+생년월일 키. 생년월일이 비어 있으면 null — 같은 사람으로 가릴 수 없다. */
 export function personKey(name: string, birth: string | null | undefined): string | null {
   const n = clean(name);
-  const b = clean(birth);
+  const b = birthKey(birth);
   return n && b ? `${n}|${b}` : null;
 }
 

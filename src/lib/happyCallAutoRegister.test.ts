@@ -66,6 +66,10 @@ describe('planBirthFill', () => {
     expect(planBirthFill([p()], [entry(), entry({ birthDate: '55.5.5' })])).toEqual([]);
   });
 
+  it('표기만 다른 같은 생년월일은 한 사람으로 보고 채운다', () => {
+    expect(planBirthFill([p()], [entry({ birthDate: '1980-01-01' }), entry({ birthDate: '80.1.1' })])).toHaveLength(1);
+  });
+
   it('접수 기록에 생년월일이 없으면 채우지 않는다', () => {
     expect(planBirthFill([p()], [entry({ birthDate: null })])).toEqual([]);
   });
