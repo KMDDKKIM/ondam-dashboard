@@ -66,14 +66,12 @@ export default function HappyCallRegisterPage() {
   // 초진일 오래된 순(오름차순) — 새로 등록한 환자는 맨 아래 등록 줄 바로 위에 붙는다.
   const oldCount = useMemo(() => patients.filter((p) => isPastHideWindow(p.firstVisitDate, today)).length, [patients, today]);
   const visiblePatients = useMemo(() => {
-    // 통계에서 고른 주(노란 줄)에 걸린 환자는 3주가 지났어도 접지 않는다 — 노란 줄을 찾아볼 수 있어야 해서.
-    const inHighlight = (p: HappyCallPatient) =>
-      !!highlightRange && p.firstVisitDate >= highlightRange.start && p.firstVisitDate <= highlightRange.end;
+    // "재내원 미입력만 보기"는 3주가 지난 환자가 대상이라 접힘과 상관없이 그대로 보여 준다.
     const base = onlyUnreconciled
       ? patients.filter((p) => isUnreconciledRevisit(p, today))
-      : patients.filter((p) => showOld || !isPastHideWindow(p.firstVisitDate, today) || inHighlight(p));
+      : patients.filter((p) => showOld || !isPastHideWindow(p.firstVisitDate, today));
     return [...base].sort(compareByFirstVisitAsc);
-  }, [patients, onlyUnreconciled, showOld, highlightRange, today]);
+  }, [patients, onlyUnreconciled, showOld, today]);
   const todayYear = Number(today.slice(0, 4));
 
   // 진료의 선택 칸·통계 필터·시트 붙여넣기는 (id, name) 목록을 받는다 — 활성 진료의를 그 모양으로 넘긴다.
@@ -276,6 +274,7 @@ export default function HappyCallRegisterPage() {
           <p style={{ marginTop: 16, fontSize: 12, color: '#7a5b00' }}>
             <span style={{ display: 'inline-block', width: 12, height: 12, background: '#fff3cd', border: '1px solid #e6d28a', verticalAlign: '-2px', marginRight: 6 }} />
             노란 줄 = 위에서 고른 주 기준으로 이탈·삼진이 집계되는 초진 {highlightRange.start.slice(5).replace('-', '/')} ~ {highlightRange.end.slice(5).replace('-', '/')}
+            {!showOld && !onlyUnreconciled && oldCount > 0 && ' (3주 지나 접힌 환자는 아래 "펼쳐서 보기"를 눌러야 보여요)'}
           </p>
         )}
         {oldCount > 0 && !onlyUnreconciled && (
