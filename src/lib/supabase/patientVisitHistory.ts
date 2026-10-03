@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VisitHistoryRow } from '@/lib/visitHistoryImport';
+import type { HistoryContact } from '@/lib/happyCallContactFill';
+import { fetchAllPages } from '@/lib/fetchAllPages';
 
 const CHUNK = 200;
 
@@ -45,3 +47,32 @@ export async function getVisitHistorySummary(supabase: SupabaseClient): Promise<
     periodEnd: (end.data?.[0] as { period_end: string } | undefined)?.period_end ?? null,
   };
 }
+
+interface HistoryContactRow {
+  chart_no: string;
+  patient_name: string;
+  phone: string | null;
+  registered_date: string | null;
+  first_visit: string | null;
+}
+
+// 해피콜 표의 빈 차트번호·연락처를 채울 때 쓰는, 저장해 둔 내원 이력(이름·차트번호·연락처·등록일·처음 내원일).
+// 이력은 처음 한 번 가져오면 되고, 새로 가져오지 않아도 저장된 것은 계속 쓴다.
+export async function listVisitHistoryContacts(supabase: SupabaseClient): Promise<HistoryContact[]> {
+  const rows = await fetchAllPages<HistoryContactRow>(async (from, to) => {
+    const { data, error, count } = await supabase
+      .from('patient_visit_history')
+      .select('chart_no, patient_name, phone, registered_date, first_visit', { count: 'exact' })
+      .order('chart_no', { ascending: true })
+      .range(from, to);
+    return { data: data as HistoryContactRow[] | null, error, count };
+  });
+  return rows.map((r) => ({
+    chartNo: r.chart_no,
+    patientName: r.patient_name,
+    phone: r.phone,
+    registeredDate: r.registered_date,
+    firstVisit: r.first_visit,
+  }));
+}
+

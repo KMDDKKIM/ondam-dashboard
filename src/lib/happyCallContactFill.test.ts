@@ -78,4 +78,9 @@ describe('planContactFill', () => {
     const plan = planContactFill([target({ chartNo: '000001', phone: '010-0000-0001' })], [hist({})]);
     expect(plan).toEqual({ fills: [], ambiguous: 0, notFound: 0 });
   });
+
+  it('내원 이력의 날짜는 안 맞아도 일일결산·예약 명단으로 확인된 내원일이 초진일과 같으면 찾는다', () => {
+    const plan = planContactFill([target({})], [hist({ registeredDate: '2019-01-01', firstVisit: '2026-06-30', visitDates: ['2026-09-01'] })]);
+    expect(plan.fills).toHaveLength(1);
+  });
 });

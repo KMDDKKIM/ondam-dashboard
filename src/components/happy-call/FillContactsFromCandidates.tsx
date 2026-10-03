@@ -3,15 +3,17 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { updateHappyCallPatient } from '@/lib/supabase/happyCallPatients';
+import { listVisitHistoryContacts } from '@/lib/supabase/patientVisitHistory';
 import { planContactFill, type ContactFillPlan, type HistoryContact } from '@/lib/happyCallContactFill';
 import type { FirstVisitCandidatesResult } from '@/lib/firstVisit';
 import type { HappyCallPatient } from '@/lib/types';
 
 const CONCURRENCY = 4;
 
-// 차트번호·연락처가 비어 있는 환자를, 그 환자의 초진일에 일일결산·예약 명단에서 뽑은 내원 환자(위 초진 후보 목록과
-// 같은 자료)에서 이름으로 찾아 채운다. 접수기록부에는 차트번호·연락처가 없어서, 그날 일일결산·예약 명단에
-// 같은 사람이 있을 때만 채울 수 있다(없으면 수동 입력). 미리보기 후 확인해야 저장하고, 이미 적힌 값은 건드리지 않는다.
+// 차트번호·연락처가 비어 있는 환자를 두 가지 자료에서 이름+초진일로 찾아 채운다 — (1) 처음 한 번 가져와 저장해 둔
+// 내원 이력, (2) 그 환자의 초진일에 일일결산·예약 명단에서 뽑은 내원 환자(위 초진 후보 목록과 같은 자료).
+// 접수기록부에는 차트번호·연락처가 없다. 두 자료 어디에도 없으면 수동 입력. 미리보기 후 확인해야 저장하고,
+// 이미 적힌 값은 건드리지 않는다.
 export function FillContactsFromCandidates({ patients, onDone }: { patients: HappyCallPatient[]; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
@@ -28,7 +30,13 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
     setPlan(null);
     try {
       const dates = [...new Set(missing.map((p) => p.firstVisitDate))].sort();
-      const source: HistoryContact[] = [];
+      // (1) 저장된 내원 이력 — 없거나 못 읽어도 (2)만으로 진행한다.
+      const byChart = new Map<string, HistoryContact>();
+      try {
+        for (const h of await listVisitHistoryContacts(createClient())) byChart.set(h.chartNo.trim(), { ...h, visitDates: [] });
+      } catch {
+        // 내원 이력이 없으면 일일결산·예약 명단 자료만 쓴다.
+      }
       let done = 0;
       for (let i = 0; i < dates.length; i += CONCURRENCY) {
         await Promise.all(
@@ -39,7 +47,15 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
               for (const c of json.candidates) {
                 // 차트번호가 있는 후보만 쓴다(접수기록부에서 온 이름뿐인 후보는 채울 값이 없다).
                 if (!c.chartNo) continue;
-                source.push({ chartNo: c.chartNo, patientName: c.patientName, phone: c.phone || null, registeredDate: date, firstVisit: date });
+                const key = c.chartNo.trim();
+                const known = byChart.get(key);
+                if (known) {
+                  // 같은 차트는 한 줄로 합친다(두 줄이면 한 환자를 두 번 가리키는 것으로 보여 건너뛰게 된다).
+                  known.visitDates = [...(known.visitDates ?? []), date];
+                  if (!known.phone && c.phone) known.phone = c.phone;
+                } else {
+                  byChart.set(key, { chartNo: c.chartNo, patientName: c.patientName, phone: c.phone || null, registeredDate: date, firstVisit: date, visitDates: [date] });
+                }
               }
             }
             done++;
@@ -50,7 +66,7 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
       setPlan(
         planContactFill(
           missing.map((p) => ({ id: p.id, patientName: p.patientName, chartNo: p.chartNo, phone: p.phone, firstVisitDate: p.firstVisitDate })),
-          source
+          [...byChart.values()]
         )
       );
     } catch {
@@ -88,7 +104,7 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>📇 비어 있는 차트번호·연락처 채우기</span>
         <span className="muted-text" style={{ fontSize: 12 }}>
-          비어 있는 환자 {missing.length}명 · 초진일의 일일결산·예약 명단에서 같은 이름을 찾아 채워요(접수기록부에는 번호가 없어요)
+          비어 있는 환자 {missing.length}명 · 저장된 내원 이력과 초진일의 일일결산·예약 명단에서 같은 이름을 찾아 채워요(접수기록부에는 번호가 없어요)
         </span>
         <button type="button" onClick={preview} disabled={busy || missing.length === 0} style={{ fontSize: 13, padding: '4px 12px', marginLeft: 'auto' }}>
           {busy && !plan ? progress || '확인 중...' : '채울 수 있는지 확인'}
@@ -101,7 +117,7 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
             {plan.fills.length}명을 채울 수 있어요
             <span className="muted-text" style={{ fontWeight: 400 }}>
               {' '}
-              · 같은 이름이 여럿이라 건너뜀 {plan.ambiguous}명 · 일일결산·예약 명단에서 못 찾음 {plan.notFound}명(수동 입력)
+              · 같은 이름이 여럿이라 건너뜀 {plan.ambiguous}명 · 두 자료에서 못 찾음 {plan.notFound}명(수동 입력)
             </span>
           </p>
           <button type="button" className="btn-primary" onClick={apply} disabled={busy || plan.fills.length === 0} style={{ padding: '6px 16px', fontSize: 13 }}>

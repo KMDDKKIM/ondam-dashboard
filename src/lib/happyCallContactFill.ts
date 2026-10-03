@@ -12,6 +12,8 @@ export interface HistoryContact {
   registeredDate: string | null;
   /** 분석 기간 중 처음 내원일 — 재초진·예전 차트 환자는 이 날이 초진일과 같다. */
   firstVisit: string | null;
+  /** 그 밖에 이 차트가 내원한 것으로 확인된 날짜(일일결산·예약 명단) — 초진일과 같으면 같은 사람으로 본다. */
+  visitDates?: string[];
 }
 
 export interface FillTarget {
@@ -76,7 +78,9 @@ export function planContactFill(patients: FillTarget[], history: HistoryContact[
     const ownPhone = normalizePhone(target.phone);
     const narrowed = ownPhone
       ? sameName.filter((h) => normalizePhone(h.phone) === ownPhone)
-      : sameName.filter((h) => h.registeredDate === target.firstVisitDate || h.firstVisit === target.firstVisitDate);
+      : sameName.filter(
+          (h) => h.registeredDate === target.firstVisitDate || h.firstVisit === target.firstVisitDate || !!h.visitDates?.includes(target.firstVisitDate)
+        );
     if (narrowed.length === 1) picks.push({ target, row: narrowed[0] });
     else picks.push(narrowed.length === 0 ? 'notFound' : 'ambiguous');
   }
