@@ -170,7 +170,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     }
   }
 
-  async function addWork(input: { kind: WorkKind; content: string; assigneeIds: string[] }) {
+  async function addWork(input: { kind: WorkKind; content: string; assigneeIds: string[]; deadline: string | null }) {
     if (!myId) return;
     setError('');
     try {
@@ -180,6 +180,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
         createdBy: myId,
         assigneeIds: input.kind === 'self' ? [myId] : input.assigneeIds,
         dueDate: selectedDate,
+        deadline: input.deadline,
       });
       await refreshWork();
     } catch {
@@ -356,7 +357,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     {workChips.slice(0, MAX_WORK_CHIPS).map((c) => (
                       <span
                         key={c.id}
-                        title={`${WORK_ROLE_LABEL[c.role]}: ${c.label}${c.done ? ' (끝남)' : ''}`}
+                        title={`${c.deadlineDay ? '마감일 · ' : ''}${WORK_ROLE_LABEL[c.role]}: ${c.label}${c.done ? ' (끝남)' : ''}`}
                         style={{
                           fontSize: 9,
                           lineHeight: 1.25,
@@ -373,6 +374,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                           borderLeft: `3px solid ${WORK_ROLE_COLOR[c.role]}`,
                         }}
                       >
+                        {c.deadlineDay ? '⏰ ' : ''}
                         {c.label}
                       </span>
                     ))}

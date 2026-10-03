@@ -19,7 +19,7 @@ interface HomeDayPanelProps {
   board: WorkBoard;
   staffList: Staff[];
   myId: string | null;
-  onAddWork: (input: { kind: WorkKind; content: string; assigneeIds: string[] }) => Promise<void>;
+  onAddWork: (input: { kind: WorkKind; content: string; assigneeIds: string[]; deadline: string | null }) => Promise<void>;
   onToggleWork: (item: WorkItem) => void;
   onRemoveWork: (item: WorkItem) => void;
   onAddEvent: (title: string, startDate: string, endDate: string) => Promise<void>;

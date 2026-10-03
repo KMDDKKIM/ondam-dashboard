@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionLabel, buildWorkBoard, calendarDateOf, dayChips, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
+import { actionLabel, buildWorkBoard, calendarDateOf, dayChips, deadlineLabel, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
 
 // 사람·내용은 모두 시험용 가짜 값이다.
 const ME = 'me';
@@ -12,6 +12,7 @@ const item = (o: Partial<WorkItem> = {}): WorkItem => ({
   createdBy: OTHER,
   assigneeId: ME,
   dueDate: null,
+  deadline: null,
   doneAt: null,
   createdAt: '2026-10-05T00:00:00Z',
   ...o,
@@ -65,13 +66,13 @@ describe('buildWorkBoard', () => {
     expect(board.receivedDone.map((i) => i.id)).toEqual(['b']);
   });
 
-  it('마감일이 빠른 것이 먼저, 마감일 없는 것은 만든 순', () => {
+  it('마감기한이 빠른 것이 먼저, 마감기한 없는 것은 만든 순', () => {
     const board = buildWorkBoard(
       [
         item({ id: 'none-late', createdAt: '2026-10-05T02:00:00Z' }),
-        item({ id: 'due-late', dueDate: '2026-10-09' }),
+        item({ id: 'due-late', deadline: '2026-10-09' }),
         item({ id: 'none-early', createdAt: '2026-10-05T01:00:00Z' }),
-        item({ id: 'due-early', dueDate: '2026-10-06' }),
+        item({ id: 'due-early', deadline: '2026-10-06' }),
       ],
       ME,
       NOW
@@ -92,11 +93,26 @@ describe('labels', () => {
 });
 
 describe('isOverdue', () => {
-  it('마감일이 지났고 안 끝났을 때만', () => {
-    expect(isOverdue({ dueDate: '2026-10-04', doneAt: null }, '2026-10-05')).toBe(true);
-    expect(isOverdue({ dueDate: '2026-10-05', doneAt: null }, '2026-10-05')).toBe(false);
-    expect(isOverdue({ dueDate: '2026-10-04', doneAt: '2026-10-04T01:00:00Z' }, '2026-10-05')).toBe(false);
-    expect(isOverdue({ dueDate: null, doneAt: null }, '2026-10-05')).toBe(false);
+  it('마감기한이 지났고 안 끝났을 때만', () => {
+    expect(isOverdue({ deadline: '2026-10-04', doneAt: null }, '2026-10-05')).toBe(true);
+    expect(isOverdue({ deadline: '2026-10-05', doneAt: null }, '2026-10-05')).toBe(false);
+    expect(isOverdue({ deadline: '2026-10-04', doneAt: '2026-10-04T01:00:00Z' }, '2026-10-05')).toBe(false);
+    expect(isOverdue({ deadline: null, doneAt: null }, '2026-10-05')).toBe(false);
+  });
+});
+
+describe('deadlineLabel', () => {
+  const T = '2026-10-05';
+
+  it('마감기한이 없으면 null', () => {
+    expect(deadlineLabel(null, T)).toBeNull();
+  });
+
+  it('지남·오늘은 빨갛게, 내일·그 뒤는 차분하게', () => {
+    expect(deadlineLabel('2026-10-02', T)).toEqual({ text: '마감 지남 10/2', urgent: true });
+    expect(deadlineLabel('2026-10-05', T)).toEqual({ text: '오늘 마감', urgent: true });
+    expect(deadlineLabel('2026-10-06', T)).toEqual({ text: '내일 마감', urgent: false });
+    expect(deadlineLabel('2026-10-12', T)).toEqual({ text: '마감 10/12', urgent: false });
   });
 });
 
@@ -154,6 +170,14 @@ describe('달력 날짜', () => {
       'sent:sent',
     ]);
     expect(dayChips(items, ME, '2026-10-10', TODAY, NOW)).toEqual([]);
+  });
+
+  it('마감기한 날짜 칸에도 안 끝난 것은 "마감"으로 뜬다', () => {
+    const items = [item({ id: 'a', dueDate: '2026-10-06', deadline: '2026-10-09' }), item({ id: 'b', dueDate: '2026-10-06', deadline: '2026-10-09', doneAt: '2026-10-06T01:00:00Z' })];
+    expect(dayChips(items, ME, '2026-10-09', TODAY, NOW).map((c) => [c.id, c.deadlineDay])).toEqual([['a', true]]);
+    expect(dayChips(items, ME, '2026-10-06', TODAY, NOW).map((c) => [c.id, c.deadlineDay])).toEqual([
+      ['a', false],
+    ]);
   });
 });
 

@@ -9,12 +9,13 @@ interface Row {
   created_by: string;
   assignee_id: string;
   due_date: string | null;
+  deadline?: string | null;
   done_at: string | null;
   created_at: string;
 }
 
 function rowToItem(r: Row): WorkItem {
-  return { id: r.id, kind: r.kind, content: r.content, createdBy: r.created_by, assigneeId: r.assignee_id, dueDate: r.due_date, doneAt: r.done_at, createdAt: r.created_at };
+  return { id: r.id, kind: r.kind, content: r.content, createdBy: r.created_by, assigneeId: r.assignee_id, dueDate: r.due_date, deadline: r.deadline ?? null, doneAt: r.done_at, createdAt: r.created_at };
 }
 
 // 내가 보낸 것·받은 것(RLS가 둘만 보게 막는다) 중 안 끝난 것 전부 + 최근에 끝낸 것.
@@ -39,7 +40,10 @@ export interface NewWorkItem {
   createdBy: string;
   /** 받는 사람들 — 내 할 일(self)이면 나 하나. 사람마다 줄이 하나씩 생긴다. */
   assigneeIds: string[];
+  /** 달력에서 올린 날짜 */
   dueDate: string | null;
+  /** 마감기한(선택) */
+  deadline?: string | null;
 }
 
 export async function createWorkItems(supabase: SupabaseClient, input: NewWorkItem): Promise<void> {
@@ -49,6 +53,8 @@ export async function createWorkItems(supabase: SupabaseClient, input: NewWorkIt
     created_by: input.createdBy,
     assignee_id: assigneeId,
     due_date: input.dueDate,
+    // 마감기한 칸이 아직 없는 DB(마이그레이션 전)에 보내지 않도록 값이 있을 때만 넣는다.
+    ...(input.deadline ? { deadline: input.deadline } : {}),
   }));
   if (rows.length === 0) return;
   const { error } = await supabase.from('work_items').insert(rows);

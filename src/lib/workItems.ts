@@ -4,6 +4,8 @@
 //  - notice : 예전에 따로 있던 "전달사항" — 화면에서는 order와 똑같이 다룬다(새로 만들 때는 order를 쓴다).
 // 직원 한 명당 한 줄이다 — 여러 명에게 보내면 사람 수만큼 줄이 생겨서 각자 따로 확인한다.
 
+import { diffDaysKst } from './kst';
+
 export type WorkKind = 'self' | 'order' | 'notice';
 
 export interface WorkItem {
@@ -12,7 +14,10 @@ export interface WorkItem {
   content: string;
   createdBy: string;
   assigneeId: string;
+  /** 달력에서 올린 날짜 — 어느 날 칸에 놓이는지(없으면 올린 날). */
   dueDate: string | null;
+  /** 마감기한(선택). 지나면 빨갛게 보이고, 그 날짜 칸에도 "마감"으로 뜬다. */
+  deadline: string | null;
   doneAt: string | null;
   createdAt: string;
 }
@@ -50,11 +55,11 @@ function isRecentlyDone(item: WorkItem, nowMs: number): boolean {
   return Number.isFinite(doneMs) && nowMs - doneMs < DONE_VISIBLE_DAYS * 24 * 60 * 60 * 1000;
 }
 
-/** 마감일이 있는 안 끝낸 항목 먼저(빠른 순), 마감일 없는 것은 먼저 만든 순. */
+/** 마감기한이 있는 안 끝난 항목 먼저(빠른 순), 마감기한 없는 것은 먼저 만든 순. */
 function compareOpen(a: WorkItem, b: WorkItem): number {
-  if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate < b.dueDate ? -1 : 1;
-  if (a.dueDate && !b.dueDate) return -1;
-  if (!a.dueDate && b.dueDate) return 1;
+  if (a.deadline && b.deadline && a.deadline !== b.deadline) return a.deadline < b.deadline ? -1 : 1;
+  if (a.deadline && !b.deadline) return -1;
+  if (!a.deadline && b.deadline) return 1;
   return a.createdAt.localeCompare(b.createdAt);
 }
 
@@ -88,9 +93,19 @@ export function buildWorkBoard(items: WorkItem[], myId: string | null, nowMs: nu
   };
 }
 
-/** 마감일이 지났는데 안 끝났는가. */
-export function isOverdue(item: Pick<WorkItem, 'dueDate' | 'doneAt'>, today: string): boolean {
-  return !item.doneAt && !!item.dueDate && item.dueDate < today;
+/** 마감기한이 지났는데 안 끝났는가. */
+export function isOverdue(item: Pick<WorkItem, 'deadline' | 'doneAt'>, today: string): boolean {
+  return !item.doneAt && !!item.deadline && item.deadline < today;
+}
+
+/** "마감 10/8" · "오늘 마감" · "내일 마감" · "마감 지남 10/2". 마감기한이 없으면 null. urgent면 빨갛게 보인다. */
+export function deadlineLabel(deadline: string | null, today: string): { text: string; urgent: boolean } | null {
+  if (!deadline) return null;
+  const md = `${Number(deadline.slice(5, 7))}/${Number(deadline.slice(8, 10))}`;
+  if (deadline < today) return { text: `마감 지남 ${md}`, urgent: true };
+  if (deadline === today) return { text: '오늘 마감', urgent: true };
+  if (diffDaysKst(today, deadline) === 1) return { text: '내일 마감', urgent: false };
+  return { text: `마감 ${md}`, urgent: false };
 }
 
 /** "10/3 14:20" — 한국 시간. */
@@ -126,7 +141,8 @@ export function workItemsForDate(items: WorkItem[], date: string, today: string)
   return items.filter((item) => {
     const placed = calendarDateOf(item);
     if (date === today) return placed === today || (placed < today && !item.doneAt);
-    return placed === date;
+    // 마감기한 날짜 칸에도 안 끝난 것은 떠서, 달력만 봐도 그날 마감이 보인다.
+    return placed === date || (item.deadline === date && !item.doneAt);
   });
 }
 
@@ -136,6 +152,8 @@ export interface DayChip {
   role: 'mine' | 'received' | 'sent';
   label: string;
   done: boolean;
+  /** 그 날짜가 마감기한이라서(올린 날짜가 아니라) 뜬 것 */
+  deadlineDay: boolean;
 }
 
 /**
@@ -144,6 +162,12 @@ export interface DayChip {
  */
 export function dayChips(items: WorkItem[], myId: string | null, date: string, today: string, nowMs: number): DayChip[] {
   const board = buildWorkBoard(workItemsForDate(items, date, today), myId, nowMs);
-  const chip = (role: DayChip['role']) => (i: WorkItem): DayChip => ({ id: i.id, role, label: i.content, done: !!i.doneAt });
+  const chip = (role: DayChip['role']) => (i: WorkItem): DayChip => ({
+    id: i.id,
+    role,
+    label: i.content,
+    done: !!i.doneAt,
+    deadlineDay: i.deadline === date && calendarDateOf(i) !== date && date !== today,
+  });
   return [...board.received.map(chip('received')), ...board.mine.map(chip('mine')), ...board.sent.map(chip('sent'))];
 }

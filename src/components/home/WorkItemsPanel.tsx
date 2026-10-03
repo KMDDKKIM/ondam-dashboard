@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import type { Staff } from '@/lib/types';
-import { actionLabel, doneLabel, formatKstTime, isOverdue, kindLabel, type WorkBoard, type WorkItem, type WorkKind } from '@/lib/workItems';
+import { actionLabel, deadlineLabel, doneLabel, formatKstTime, kindLabel, type WorkBoard, type WorkItem, type WorkKind } from '@/lib/workItems';
 
 // 화면에서는 두 가지 — 할 일(나에게)과 요청·전달사항(다른 직원에게). 요청·전달사항은 DB의 order로 저장한다.
 const KIND_TABS: { value: WorkKind; label: string }[] = [
@@ -21,7 +21,7 @@ interface Props {
   board: WorkBoard;
   staffList: Staff[];
   myId: string | null;
-  onAdd: (input: { kind: WorkKind; content: string; assigneeIds: string[] }) => Promise<void>;
+  onAdd: (input: { kind: WorkKind; content: string; assigneeIds: string[]; deadline: string | null }) => Promise<void>;
   onToggleDone: (item: WorkItem) => void;
   onRemove: (item: WorkItem) => void;
 }
@@ -32,6 +32,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
   const [kind, setKind] = useState<WorkKind>('self');
   const [text, setText] = useState('');
   const [recipients, setRecipients] = useState<string[]>([]);
+  const [deadline, setDeadline] = useState('');
   const [adding, setAdding] = useState(false);
   const [showDoneReceived, setShowDoneReceived] = useState(false);
 
@@ -50,21 +51,29 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
     if (!canAdd) return;
     setAdding(true);
     try {
-      await onAdd({ kind, content: text.trim(), assigneeIds: kind === 'self' ? [] : recipients });
+      await onAdd({ kind, content: text.trim(), assigneeIds: kind === 'self' ? [] : recipients, deadline: deadline || null });
       setText('');
+      setDeadline('');
       setRecipients([]);
     } finally {
       setAdding(false);
     }
   }
 
-  // 올린 날짜가 이 날짜와 다르면(밀려서 따라온 것) 원래 날짜를 알려 준다.
-  const carriedBadge = (item: WorkItem) =>
-    item.dueDate && item.dueDate !== date ? (
-      <span style={{ fontSize: 11, fontWeight: isOverdue(item, today) ? 700 : 400, color: isOverdue(item, today) ? 'var(--color-error)' : 'var(--color-muted)' }}>
-        {item.dueDate.slice(5).replace('-', '/')} 예정
-      </span>
-    ) : null;
+  // 마감기한(있으면)과, 올린 날짜가 이 날짜와 다르면(밀려서 따라온 것) 원래 날짜를 알려 준다.
+  const metaBadges = (item: WorkItem) => {
+    const dl = item.doneAt ? null : deadlineLabel(item.deadline, today);
+    return (
+      <>
+        {dl && <span style={{ fontSize: 11, fontWeight: dl.urgent ? 700 : 500, color: dl.urgent ? 'var(--color-error)' : 'var(--color-ink)' }}>⏰ {dl.text}</span>}
+        {item.dueDate && item.dueDate !== date && !item.deadline && (
+          <span className="muted-text" style={{ fontSize: 11 }}>
+            {item.dueDate.slice(5).replace('-', '/')} 예정
+          </span>
+        )}
+      </>
+    );
+  };
 
   const sectionTitle = (title: string, count: number, color?: string) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '10px 0 2px', fontSize: 12, fontWeight: 700, color: color ?? 'var(--color-muted)' }}>
@@ -93,7 +102,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
                     <span>
                       {nameOf(item.createdBy)} · {kindLabel(item.kind)} · {formatKstTime(item.createdAt)}
                     </span>
-                    {carriedBadge(item)}
+                    {metaBadges(item)}
                   </div>
                 </div>
                 <button type="button" className="btn-primary" onClick={() => onToggleDone(item)} style={smallButton}>
@@ -149,7 +158,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
                 >
                   {item.content}
                 </span>
-                {carriedBadge(item)}
+                {metaBadges(item)}
                 <button type="button" onClick={() => onRemove(item)} aria-label="삭제" style={quietButton}>
                   ×
                 </button>
@@ -171,7 +180,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
                     <span>
                       → {nameOf(item.assigneeId)} · {kindLabel(item.kind)}
                     </span>
-                    {carriedBadge(item)}
+                    {metaBadges(item)}
                   </div>
                 </div>
                 {item.doneAt ? (
@@ -230,6 +239,25 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
           <button type="submit" className="btn-primary" disabled={!canAdd} style={smallButton}>
             {kind === 'self' ? '추가' : '보내기'}
           </button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <label htmlFor="work-deadline" className="muted-text" style={{ fontSize: 11 }}>
+            마감기한(선택)
+          </label>
+          <input
+            id="work-deadline"
+            type="date"
+            value={deadline}
+            min={date}
+            onChange={(e) => setDeadline(e.target.value)}
+            className="input-field"
+            style={{ padding: '3px 6px', fontSize: 12, width: 132 }}
+          />
+          {deadline && (
+            <button type="button" onClick={() => setDeadline('')} style={{ ...quietButton, fontSize: 11 }}>
+              지우기
+            </button>
+          )}
         </div>
         {kind !== 'self' && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
