@@ -66,9 +66,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// 표가 넓은 화면(예약관리, 초진환자 해피콜, 한약 복용법)은 본문을 화면 가득 쓰고,
-// 왼쪽 메뉴도 처음에는 아이콘만 남겨 접어 둔다.
-export const WIDE_PATHS = ['/reservations', '/happy-call-register', '/herb-print'];
+// 표가 넓은 화면(예약관리, 초진환자 해피콜, 한약 복용법, 비급여 현황)은 1100px 제한 없이
+// 본문을 화면 가득 쓴다(AppMain). 비급여 현황은 하위 화면(비교·월별)까지 포함된다.
+export const WIDE_PATHS = ['/reservations', '/happy-call-register', '/herb-print', '/non-covered-patients'];
 
 export function isWidePath(pathname: string): boolean {
   return WIDE_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

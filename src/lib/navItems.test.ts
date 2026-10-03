@@ -20,6 +20,12 @@ describe('isWidePath', () => {
     expect(isWidePath('/herb-print/records')).toBe(true);
     expect(isWidePath('/supply-requests')).toBe(false);
   });
+
+  it('비급여 현황과 그 하위 화면(비교·월별)도 넓게 쓴다', () => {
+    expect(isWidePath('/non-covered-patients')).toBe(true);
+    expect(isWidePath('/non-covered-patients/compare')).toBe(true);
+    expect(isWidePath('/non-covered-patients/monthly')).toBe(true);
+  });
 });
 
 describe('일일결산 메뉴', () => {
