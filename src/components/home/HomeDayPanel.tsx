@@ -56,7 +56,7 @@ export function HomeDayPanel(props: HomeDayPanelProps) {
   }
 
   return (
-    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--color-line)' }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
           <span style={{ color: 'var(--color-green)' }}>✅</span>

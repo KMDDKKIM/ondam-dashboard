@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { currentMonthKst, todayKst } from '@/lib/kst';
@@ -31,7 +31,7 @@ const LANE_HEIGHT = 14;
 
 // 홈 달력 — 한의원 이벤트(기간 막대)와 승인된 연차, 내 할 일·요청전달사항을 보여주고, 날짜를 누르면 그 아래에 그날
 // 할 일 목록이 뜬다(예전 "오늘 할 일" 카드를 여기로 묶음, 원장 요청 2026-10-02).
-export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
+export function HomeCalendar({ isOwner, stats, status, calls }: { isOwner: boolean; stats: ReactNode; status: ReactNode; calls: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
   const today = todayKst();
   const [month, setMonth] = useState(currentMonthKst());
@@ -214,7 +214,10 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   const selectedEvents = events.filter((e) => e.startDate <= selectedDate && e.endDate >= selectedDate);
 
   return (
-    <div className="card" style={{ padding: 16 }}>
+    <div className="home-board">
+    <div className="card home-hero">
+    <div className="home-hero-stats">{stats}</div>
+    <div className="home-hero-cal">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 10 }}>
         <button type="button" onClick={() => setMonth((m) => shiftMonth(m, -1))} style={{ border: 'none', background: 'transparent', fontSize: 14, cursor: 'pointer', padding: '2px 6px' }} aria-label="이전 달">
           ◀
@@ -391,22 +394,33 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
         </div>
       )}
 
-      <HomeDayPanel
-        key={selectedDate}
-        date={selectedDate}
-        today={today}
-        isOwner={isOwner}
-        events={selectedEvents}
-        leaves={selectedEntries?.leaves ?? []}
-        board={board}
-        staffList={staffList}
-        myId={myId}
-        onAddWork={addWork}
-        onToggleWork={toggleWork}
-        onRemoveWork={removeWork}
-        onAddEvent={addEvent}
-        onDeleteEvent={removeEvent}
-      />
+    </div>
+    </div>
+
+    <div className="home-triple">
+      <div>{status}</div>
+      <div>{calls}</div>
+      <div>
+        <div className="card" style={{ padding: 16 }}>
+          <HomeDayPanel
+            key={selectedDate}
+            date={selectedDate}
+            today={today}
+            isOwner={isOwner}
+            events={selectedEvents}
+            leaves={selectedEntries?.leaves ?? []}
+            board={board}
+            staffList={staffList}
+            myId={myId}
+            onAddWork={addWork}
+            onToggleWork={toggleWork}
+            onRemoveWork={removeWork}
+            onAddEvent={addEvent}
+            onDeleteEvent={removeEvent}
+          />
+        </div>
+      </div>
+    </div>
     </div>
   );
 }

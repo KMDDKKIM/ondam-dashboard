@@ -17,6 +17,8 @@ interface MonthlyStatsPanelProps {
   /** "📉 매출향상이 필요해요" 같은 매출 속도 문구. 예약관리 화면은 매출 얘기가 아니라서 뺀다
    * (원장 결정, 2026-09-24). 기본은 켜짐(홈 대시보드). */
   showPace?: boolean;
+  /** 홈처럼 다른 카드 안에 합쳐 넣을 때: 자기 카드 테두리·여백을 없애고, 도넛을 키워 남는 높이를 채운다. */
+  bare?: boolean;
 }
 
 const GOAL_FIELDS = [
@@ -46,7 +48,7 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = false, extraTiles, showPace = true }: MonthlyStatsPanelProps) {
+export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = false, extraTiles, showPace = true, bare = false }: MonthlyStatsPanelProps) {
   const row = compact || large; // 지표 카드와 도넛을 한 줄(가로)로 놓는 배치
   const [summary, setSummary] = useState(initial);
   const [month, setMonth] = useState(initial.month);
@@ -134,7 +136,10 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
   const isCurrentMonth = month >= currentMonth();
 
   return (
-    <div className="card" style={{ padding: compact ? 10 : 20, marginBottom: compact ? 0 : 20 }}>
+    <div
+      className={bare ? undefined : 'card'}
+      style={bare ? { display: 'flex', flexDirection: 'column', height: '100%' } : { padding: compact ? 10 : 20, marginBottom: compact ? 0 : 20 }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: compact ? 6 : 16, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
           <span style={{ marginRight: 4 }}>📊</span>
@@ -257,35 +262,47 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
       )}
 
       <div
-        style={row ? { display: 'flex', gap: large ? 24 : compact ? 10 : 16, flexWrap: 'wrap', alignItems: 'center' } : undefined}
+        style={
+          row
+            ? { display: 'flex', gap: large ? 24 : compact ? 10 : 16, flexWrap: 'wrap', alignItems: 'center' }
+            : bare
+              ? { display: 'flex', flexDirection: 'column', flex: 1 }
+              : undefined
+        }
       >
         <div
-          style={{
-            display: 'flex',
-            gap: large ? 12 : compact ? 6 : 16,
-            marginBottom: row ? 0 : 20,
-            flexWrap: 'wrap',
-            flex: large ? '1 1 460px' : row ? '1 1 300px' : undefined,
-          }}
+          className={bare ? 'home-stat-tiles' : undefined}
+          style={
+            bare
+              ? undefined
+              : {
+                  display: 'flex',
+                  gap: large ? 12 : compact ? 6 : 16,
+                  marginBottom: row ? 0 : 20,
+                  flexWrap: 'wrap',
+                  flex: large ? '1 1 460px' : row ? '1 1 300px' : undefined,
+                }
+          }
         >
           {extraTiles}
           <StatTile
             label="총매출"
+            wide={bare}
             compact={compact && !large}
-            big={large}
+            big={large || bare}
             achieved={summary.totalRevenue}
             goal={summary.totalRevenueGoal}
             unit="원"
             pace={showPace ? revenuePace(summary.totalRevenue, summary.totalRevenueGoal, summary.month, new Date()) : null}
             projectedPercent={summary.motivation.projectedPercent}
-            footer={<RevenueNotes summary={summary} compact={compact && !large} big={large} />}
+            footer={<RevenueNotes summary={summary} compact={compact && !large} big={large || bare} />}
           >
             {summary.totalRevenue != null ? `${summary.totalRevenue.toLocaleString()}원` : '데이터 없음'}
           </StatTile>
           <StatTile
             label="일평균 환자수"
             compact={compact && !large}
-            big={large}
+            big={large || bare}
             achieved={summary.avgDailyVisits}
             goal={summary.avgDailyVisitsGoal}
             unit="명"
@@ -294,7 +311,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
           </StatTile>
           {summary.averageTicket != null && (
             <StatTile label="객단가" compact={compact && !large}
-            big={large} title="총진료비 ÷ 총 내원 인원">
+            big={large || bare} title="총진료비 ÷ 총 내원 인원">
               {summary.averageTicket.toLocaleString()}원
             </StatTile>
           )}
@@ -304,7 +321,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
           style={
             row
               ? { display: 'flex', gap: large ? 16 : compact ? 8 : 14, justifyContent: 'center', flex: '0 0 auto' }
-              : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 12, justifyItems: 'center' }
+              : { display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${bare ? 100 : 84}px, 1fr))`, gap: 12, justifyItems: 'center', marginTop: bare ? 'auto' : undefined }
           }
         >
           {(
@@ -324,7 +341,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
                 achieved={achieved}
                 goal={goal}
                 color={color}
-                size={large ? 92 : compact ? 52 : 84}
+                size={large ? 92 : compact ? 52 : bare ? 100 : 84}
                 pace={pace?.status ?? null}
                 shortfall={pace ? shortfallCount(achieved, pace.expected) : 0}
               />
@@ -370,6 +387,7 @@ export function StatTile({
   label,
   compact,
   big,
+  wide,
   children,
   achieved = null,
   goal = null,
@@ -383,6 +401,8 @@ export function StatTile({
   compact?: boolean;
   /** 홈의 큰 현황: 숫자를 크게 */
   big?: boolean;
+  /** 격자 안에서 한 줄을 다 차지한다(홈 현황의 총매출). */
+  wide?: boolean;
   children: ReactNode;
   achieved?: number | null;
   goal?: number | null;
@@ -396,7 +416,7 @@ export function StatTile({
   const percent = achievementPercent(achieved, goal);
   return (
     <div
-      className="card"
+      className={wide ? 'card stat-wide' : 'card'}
       title={title}
       style={{
         flex: compact ? '1 1 84px' : big ? '1 1 140px' : '1 1 160px',
