@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FirstVisitCandidateDto, FirstVisitCandidatesResult, VisitClassification } from '@/lib/firstVisit';
 import { candidateSuggestion, reconcileFirstVisits, matchRegisteredCandidates } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
+import { confirmDialog } from '@/lib/confirmDialog';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
 type PatientType = HappyCallPatient['patientType'];
@@ -45,6 +46,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
   const [doctorPick, setDoctorPick] = useState<Record<string, string>>({});
   const [typePick, setTypePick] = useState<Record<string, PatientType>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const today = todayKst();
   const requestId = useRef(0);
 
@@ -118,6 +120,37 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
     }
   }
 
+  // 진료의가 정해진(예약·결산의 주치의로 자동 매칭되었거나 직접 고른) 후보만, 동명이인 가능은 빼고 한 번에 등록한다.
+  // 구분은 후보 하나씩 등록할 때와 똑같이 건보로 들어가고, 나중에 표에서 바꿀 수 있다.
+  const bulkTargets = pending
+    .filter((r) => !r.candidate.possibleHomonym)
+    .map((row) => ({
+      row,
+      doctorStaffId: doctorPick[row.key] ?? matchStaffId(row.candidate.doctorName, staffList),
+      visitKind: (row.suggestion === '재초진' ? '재초진' : '초진') as '초진' | '재초진',
+    }))
+    .filter((t) => t.doctorStaffId);
+
+  async function registerAll() {
+    if (bulkTargets.length === 0) return;
+    const ok = await confirmDialog(
+      `${bulkTargets.length}명을 한 번에 등록할까요?\n구분은 건보로 들어가고, 등록 뒤 표에서 바꿀 수 있어요. (동명이인 가능·진료의 미정인 후보는 빠져요)`
+    );
+    if (!ok) return;
+    setBulkBusy(true);
+    setError('');
+    let failed = 0;
+    for (const t of bulkTargets) {
+      try {
+        await onRegister({ candidate: t.row.candidate, visitKind: t.visitKind, doctorStaffId: t.doctorStaffId, patientType: typePick[t.row.key] ?? '건보' });
+      } catch {
+        failed++;
+      }
+    }
+    if (failed > 0) setError(`${failed}명은 등록에 실패했어요. 다시 시도해 주세요.`);
+    setBulkBusy(false);
+  }
+
   return (
     <div className="card" style={{ padding: 12, marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -180,6 +213,15 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
               아직 등록하지 않은 초진/재초진 후보가 없어요.
             </p>
           ) : (
+            <>
+            {bulkTargets.length > 1 && (
+              <div style={{ marginBottom: 8 }}>
+                <button type="button" onClick={registerAll} disabled={bulkBusy} className="btn-primary" style={{ fontSize: 13, padding: '5px 14px' }}>
+                  {bulkBusy ? '등록 중...' : `후보 ${bulkTargets.length}명 한 번에 등록`}
+                </button>
+                <span className="muted-text" style={{ fontSize: 12, marginLeft: 8 }}>진료의가 정해진 후보만 · 구분은 건보로</span>
+              </div>
+            )}
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr style={{ background: '#f0f0f0' }}>
@@ -273,6 +315,7 @@ export function FirstVisitCandidates({ date, onDateChange, staffList, registered
                 })}
               </tbody>
             </table>
+            </>
           )}
 
           {listRows.length > pending.length && (

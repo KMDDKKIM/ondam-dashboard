@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ReceptionPayment, ReceptionRecord, ReceptionVisitKind } from '@/lib/receptionLog';
+import type { ReceptionVisit } from '@/lib/happyCallRevisitFill';
+import { fetchAllPages } from '@/lib/fetchAllPages';
 
 interface Row {
   id: string;
@@ -115,3 +117,34 @@ export async function deleteReceptionRecord(supabase: SupabaseClient, id: string
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('지우지 못했어요.');
 }
+
+// 접수기록부가 처음 시작된 날(가장 이른 기록의 날짜). 비어 있으면 null. 재내원 날짜 자동 채우기가
+// "이 날 이후 초진인 환자"만 다루는 기준이다 — 그 전의 내원은 접수기록부에 없다.
+export async function getReceptionCoverageStart(supabase: SupabaseClient): Promise<string | null> {
+  const { data, error } = await supabase.from('reception_records').select('visit_date').order('visit_date', { ascending: true }).limit(1);
+  if (error) throw error;
+  return (data?.[0] as { visit_date: string } | undefined)?.visit_date ?? null;
+}
+
+interface VisitLiteRow {
+  visit_date: string;
+  patient_name: string;
+  birth_date: string | null;
+  excluded: boolean;
+}
+
+// from 날짜 이후의 내원 기록(날짜·이름·생년월일·제외 여부만) — 재내원 날짜 자동 채우기용.
+export async function listReceptionVisitsSince(supabase: SupabaseClient, from: string): Promise<ReceptionVisit[]> {
+  const rows = await fetchAllPages<VisitLiteRow>(async (a, b) => {
+    const { data, error, count } = await supabase
+      .from('reception_records')
+      .select('visit_date, patient_name, birth_date, excluded', { count: 'exact' })
+      .gte('visit_date', from)
+      .order('visit_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(a, b);
+    return { data: data as VisitLiteRow[] | null, error, count };
+  });
+  return rows.map((r) => ({ visitDate: r.visit_date, patientName: r.patient_name, birthDate: r.birth_date, excluded: r.excluded }));
+}
+

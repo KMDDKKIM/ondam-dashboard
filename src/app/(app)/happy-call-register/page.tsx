@@ -1,7 +1,7 @@
 'use client';
 
 import { confirmDialog } from '@/lib/confirmDialog';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   listHappyCallPatients,
@@ -15,13 +15,15 @@ import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
 import { VisitHistoryImport } from '@/components/happy-call/VisitHistoryImport';
-import { FillContactsFromHistory } from '@/components/happy-call/FillContactsFromHistory';
+import { FillContactsFromCandidates } from '@/components/happy-call/FillContactsFromCandidates';
 import { DateCell } from '@/components/happy-call/DateCell';
 import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
 import { countUnreconciledRevisits, isUnreconciledRevisit, maturedCohortRange } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 import { isPastHideWindow } from '@/lib/happyCallVisibility';
+import { planRevisitFill } from '@/lib/happyCallRevisitFill';
+import { getReceptionCoverageStart, listReceptionVisitsSince } from '@/lib/supabase/receptionRecords';
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const VISIT_KINDS = ['초진', '재초진'] as const;
@@ -58,6 +60,8 @@ export default function HappyCallRegisterPage() {
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
   // 초진 후 3주가 지난 환자는 기본으로 접어 두고, "펼쳐서 보기"로 다시 볼 수 있다.
   const [showOld, setShowOld] = useState(false);
+  const [autoFillNote, setAutoFillNote] = useState('');
+  const autoFilling = useRef(false);
 
   // 통계에서 고른 주를 기준으로 이탈·삼진이 집계된 초진 주(예: 9/21 → 8/24~8/30)를 노랗게 표시한다.
   const highlightRange = highlightDate ? maturedCohortRange(highlightDate) : null;
@@ -87,12 +91,48 @@ export default function HappyCallRegisterPage() {
         listHappyCallPatientsByFirstVisitDate(supabase, forDate),
       ]);
       setPatients(patientRows);
+      void autoFillRevisits(patientRows);
       setDoctors(doctorRows);
       setRegisteredOnDate(registered);
     } catch {
       setError('불러오기에 실패했습니다.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 접수기록부의 날짜별 내원 기록으로 2진·3진(재내원 날짜) 빈 칸을 자동으로 채운다. 이미 적힌 값은 건드리지 않고,
+  // 접수기록부가 시작되기 전에 초진인 환자나 동명이인이 섞인 환자는 건너뛴다(lib/happyCallRevisitFill.ts).
+  // 실패해도 화면은 그대로 쓸 수 있게 조용히 넘어간다.
+  async function autoFillRevisits(rows: HappyCallPatient[]) {
+    if (autoFilling.current) return;
+    autoFilling.current = true;
+    try {
+      const coverageStart = await getReceptionCoverageStart(supabase);
+      if (!coverageStart) return;
+      const eligible = rows.filter((p) => (!p.revisit1 || !p.revisit2) && p.firstVisitDate >= coverageStart);
+      if (eligible.length === 0) return;
+      const from = eligible.reduce((min, p) => (p.firstVisitDate < min ? p.firstVisitDate : min), eligible[0].firstVisitDate);
+      const visits = await listReceptionVisitsSince(supabase, from);
+      const plan = planRevisitFill(rows, visits, coverageStart, todayKst());
+      if (plan.fills.length === 0) return;
+      for (const fill of plan.fills) {
+        const patch: { revisit1?: string; revisit2?: string } = {};
+        if (fill.revisit1) patch.revisit1 = fill.revisit1;
+        if (fill.revisit2) patch.revisit2 = fill.revisit2;
+        await updateHappyCallPatient(supabase, fill.id, patch);
+      }
+      setPatients((prev) =>
+        prev.map((p) => {
+          const fill = plan.fills.find((f) => f.id === p.id);
+          return fill ? { ...p, revisit1: fill.revisit1 ?? p.revisit1, revisit2: fill.revisit2 ?? p.revisit2 } : p;
+        })
+      );
+      setAutoFillNote(`접수기록부에서 2진·3진 ${plan.fills.length}명분을 자동으로 채웠어요.`);
+    } catch {
+      // 자동 채우기가 안 돼도 직접 입력할 수 있다.
+    } finally {
+      autoFilling.current = false;
     }
   }
 
@@ -238,7 +278,7 @@ export default function HappyCallRegisterPage() {
 
         <VisitHistoryImport onDone={() => load(candidateDate)} />
 
-        <FillContactsFromHistory patients={patients} onDone={() => load(candidateDate)} />
+        <FillContactsFromCandidates patients={patients} onDone={() => load(candidateDate)} />
 
         <SheetPasteImport patients={patients} staffList={staffList} onDone={() => load(candidateDate)} />
 
@@ -276,6 +316,9 @@ export default function HappyCallRegisterPage() {
             노란 줄 = 위에서 고른 주 기준으로 이탈·삼진이 집계되는 초진 {highlightRange.start.slice(5).replace('-', '/')} ~ {highlightRange.end.slice(5).replace('-', '/')}
             {!showOld && !onlyUnreconciled && oldCount > 0 && ' (3주 지나 접힌 환자는 아래 "펼쳐서 보기"를 눌러야 보여요)'}
           </p>
+        )}
+        {autoFillNote && (
+          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: 'var(--color-teal-deep)' }}>{autoFillNote}</p>
         )}
         {oldCount > 0 && !onlyUnreconciled && (
           <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
