@@ -9,6 +9,8 @@ import {
   createHappyCallPatient,
   updateHappyCallPatient,
   deleteHappyCallPatient,
+  listAutoSkipKeys,
+  addAutoSkipKey,
 } from '@/lib/supabase/happyCallPatients';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel';
@@ -23,7 +25,9 @@ import { countUnreconciledRevisits, isUnreconciledRevisit, maturedCohortRange } 
 import { todayKst } from '@/lib/kst';
 import { isPastHideWindow } from '@/lib/happyCallVisibility';
 import { planRevisitFill } from '@/lib/happyCallRevisitFill';
-import { getReceptionCoverageStart, listReceptionVisitsSince } from '@/lib/supabase/receptionRecords';
+import { matchDoctorId, pickCandidateInfo, planBirthFill, planReceptionRegistrations, skipKey } from '@/lib/happyCallAutoRegister';
+import type { FirstVisitCandidatesResult } from '@/lib/firstVisit';
+import { getReceptionCoverageStart, listReceptionEntriesSince } from '@/lib/supabase/receptionRecords';
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const VISIT_KINDS = ['초진', '재초진'] as const;
@@ -61,7 +65,7 @@ export default function HappyCallRegisterPage() {
   // 초진 후 3주가 지난 환자는 기본으로 접어 두고, "펼쳐서 보기"로 다시 볼 수 있다.
   const [showOld, setShowOld] = useState(false);
   const [autoFillNote, setAutoFillNote] = useState('');
-  const autoFilling = useRef(false);
+  const automationStarted = useRef(false);
 
   // 통계에서 고른 주를 기준으로 이탈·삼진이 집계된 초진 주(예: 9/21 → 8/24~8/30)를 노랗게 표시한다.
   const highlightRange = highlightDate ? maturedCohortRange(highlightDate) : null;
@@ -91,8 +95,12 @@ export default function HappyCallRegisterPage() {
         listHappyCallPatientsByFirstVisitDate(supabase, forDate),
       ]);
       setPatients(patientRows);
-      void autoFillRevisits(patientRows);
       setDoctors(doctorRows);
+      // 접수기록부 자동 반영은 화면을 열 때 한 번만 돌린다(수정·삭제 뒤의 다시 불러오기에서는 돌리지 않는다).
+      if (!automationStarted.current) {
+        automationStarted.current = true;
+        void runAutomation(doctorsAsStaffList(doctorRows));
+      }
       setRegisteredOnDate(registered);
     } catch {
       setError('불러오기에 실패했습니다.');
@@ -101,38 +109,95 @@ export default function HappyCallRegisterPage() {
     }
   }
 
-  // 접수기록부의 날짜별 내원 기록으로 2진·3진(재내원 날짜) 빈 칸을 자동으로 채운다. 이미 적힌 값은 건드리지 않고,
-  // 접수기록부가 시작되기 전에 초진인 환자나 동명이인이 섞인 환자는 건너뛴다(lib/happyCallRevisitFill.ts).
-  // 실패해도 화면은 그대로 쓸 수 있게 조용히 넘어간다.
-  async function autoFillRevisits(rows: HappyCallPatient[]) {
-    if (autoFilling.current) return;
-    autoFilling.current = true;
+  // 접수기록부에서 해피콜 표를 자동으로 채운다(화면을 열 때 한 번). 원장 결정: 성함+생년월일이 같은 두 사람은 없다.
+  //  1) 초진/재초진으로 적힌 접수를 해피콜 표에 올린다(구분은 건보, 차트번호·연락처·진료의는 그날 일일결산·예약 명단에서
+  //     같은 이름이 한 사람일 때만 같이 가져온다). 직원이 표에서 지운 사람은 다시 올리지 않는다.
+  //  2) 비어 있는 생년월일을 초진일 접수 기록에서 채우고, 3) 성함+생년월일로 2진·3진 빈 칸을 채운다.
+  // 이미 적힌 값은 건드리지 않는다. DB 마이그레이션 전이거나 실패하면 조용히 넘어가고 직접 입력할 수 있다.
+  async function runAutomation(staff: Staff[]) {
     try {
       const coverageStart = await getReceptionCoverageStart(supabase);
       if (!coverageStart) return;
-      const eligible = rows.filter((p) => (!p.revisit1 || !p.revisit2) && p.firstVisitDate >= coverageStart);
-      if (eligible.length === 0) return;
-      const from = eligible.reduce((min, p) => (p.firstVisitDate < min ? p.firstVisitDate : min), eligible[0].firstVisitDate);
-      const visits = await listReceptionVisitsSince(supabase, from);
-      const plan = planRevisitFill(rows, visits, coverageStart, todayKst());
-      if (plan.fills.length === 0) return;
+      const entries = await listReceptionEntriesSince(supabase, coverageStart);
+      const skipKeys = await listAutoSkipKeys(supabase);
+      const todayStr = todayKst();
+
+      // 다른 사람이 방금 올린 것과 겹치지 않도록 올리기 직전에 표를 다시 읽는다.
+      const current = await listHappyCallPatients(supabase);
+      const newOnes = planReceptionRegistrations(entries, current, skipKeys, todayStr);
+      let created = 0;
+      if (newOnes.length > 0) {
+        const candidatesByDate = new Map<string, NonNullable<FirstVisitCandidatesResult['candidates']>>();
+        const dates = [...new Set(newOnes.map((n) => n.firstVisitDate))].sort();
+        for (let i = 0; i < dates.length; i += 4) {
+          await Promise.all(
+            dates.slice(i, i + 4).map(async (date) => {
+              try {
+                const response = await fetch(`/api/first-visit-candidates?date=${encodeURIComponent(date)}`);
+                if (response.ok) candidatesByDate.set(date, ((await response.json()) as FirstVisitCandidatesResult).candidates);
+              } catch {
+                // 후보 정보가 없으면 차트번호·연락처·진료의는 비워 두고 직접 입력한다.
+              }
+            })
+          );
+        }
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        for (const n of newOnes) {
+          const info = pickCandidateInfo(n.patientName, candidatesByDate.get(n.firstVisitDate) ?? []);
+          try {
+            await createHappyCallPatient(supabase, {
+              patientName: n.patientName,
+              doctorStaffId: info ? matchDoctorId(info.doctorName, staff) || null : null,
+              patientType: '건보',
+              firstVisitDate: n.firstVisitDate,
+              createdBy: user?.id ?? null,
+              visitKind: n.visitKind,
+              chartNo: info?.chartNo ?? null,
+              phone: info?.phone ?? null,
+              birthDate: n.birthDate,
+            });
+            created++;
+          } catch {
+            // 한 명이 실패해도 나머지는 계속 올린다. 다음에 화면을 열 때 다시 시도한다.
+          }
+        }
+      }
+
+      let rows = created > 0 ? await listHappyCallPatients(supabase) : current;
+      let birthFilled = 0;
+      const births = planBirthFill(rows, entries);
+      for (const b of births) {
+        await updateHappyCallPatient(supabase, b.id, { birthDate: b.birthDate });
+        birthFilled++;
+      }
+      if (births.length > 0) rows = rows.map((p) => ({ ...p, birthDate: births.find((b) => b.id === p.id)?.birthDate ?? p.birthDate }));
+
+      const plan = planRevisitFill(rows, entries, coverageStart, todayStr);
       for (const fill of plan.fills) {
         const patch: { revisit1?: string; revisit2?: string } = {};
         if (fill.revisit1) patch.revisit1 = fill.revisit1;
         if (fill.revisit2) patch.revisit2 = fill.revisit2;
         await updateHappyCallPatient(supabase, fill.id, patch);
       }
-      setPatients((prev) =>
-        prev.map((p) => {
+      if (plan.fills.length > 0) {
+        rows = rows.map((p) => {
           const fill = plan.fills.find((f) => f.id === p.id);
           return fill ? { ...p, revisit1: fill.revisit1 ?? p.revisit1, revisit2: fill.revisit2 ?? p.revisit2 } : p;
-        })
-      );
-      setAutoFillNote(`접수기록부에서 2진·3진 ${plan.fills.length}명분을 자동으로 채웠어요.`);
+        });
+      }
+
+      if (created > 0 || birthFilled > 0 || plan.fills.length > 0) {
+        setPatients(rows);
+        if (created > 0) setRegisteredOnDate(await listHappyCallPatientsByFirstVisitDate(supabase, candidateDate));
+      }
+      const parts: string[] = [];
+      if (created > 0) parts.push(`초진·재초진 ${created}명을 해피콜 표에 올렸어요(구분은 건보)`);
+      if (plan.fills.length > 0) parts.push(`2진·3진 ${plan.fills.length}명분을 채웠어요`);
+      if (parts.length > 0) setAutoFillNote(`접수기록부에서 ${parts.join(', ')}.`);
     } catch {
-      // 자동 채우기가 안 돼도 직접 입력할 수 있다.
-    } finally {
-      autoFilling.current = false;
+      // 자동 반영이 안 돼도(예: 마이그레이션 전) 직접 등록·입력할 수 있다.
     }
   }
 
@@ -249,6 +314,15 @@ export default function HappyCallRegisterPage() {
     if (!await confirmDialog(`${p.patientName} (${p.firstVisitDate}) 등록을 삭제할까요? 되돌릴 수 없어요.`)) return;
     try {
       await deleteHappyCallPatient(supabase, p.id);
+      // 지운 사람은 자동 등록이 다시 올리지 않게 기억해 둔다(실패해도 삭제는 그대로).
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        await addAutoSkipKey(supabase, skipKey(p.firstVisitDate, p.patientName), user?.id ?? null);
+      } catch {
+        // 마이그레이션 전이면 기억하지 못한다.
+      }
       setError('');
       await load(candidateDate);
     } catch {

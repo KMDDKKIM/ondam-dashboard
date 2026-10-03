@@ -28,6 +28,7 @@ interface HappyCallPatientRow {
   chart_no?: string | null;
   phone?: string | null;
   visit_kind?: '초진' | '재초진' | null;
+  birth_date?: string | null;
 }
 
 function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
@@ -58,6 +59,7 @@ function rowToPatient(row: HappyCallPatientRow): HappyCallPatient {
     chartNo: row.chart_no ?? null,
     phone: row.phone ?? null,
     visitKind: row.visit_kind === '재초진' ? '재초진' : '초진',
+    birthDate: row.birth_date ?? null,
   };
 }
 
@@ -117,6 +119,7 @@ export interface NewHappyCallPatient {
   visitKind?: '초진' | '재초진';
   chartNo?: string | null;
   phone?: string | null;
+  birthDate?: string | null;
 }
 
 export async function createHappyCallPatient(
@@ -134,6 +137,8 @@ export async function createHappyCallPatient(
       visit_kind: input.visitKind ?? '초진',
       chart_no: input.chartNo?.trim() || null,
       phone: input.phone?.trim() || null,
+      // 생년월일 칸이 아직 없는 DB(마이그레이션 전)에 보내지 않도록 값이 있을 때만 넣는다.
+      ...(input.birthDate?.trim() ? { birth_date: input.birthDate.trim() } : {}),
     })
     .select()
     .single();
@@ -149,6 +154,7 @@ export type HappyCallPatientPatch = Partial<{
   visitKind: '초진' | '재초진';
   chartNo: string | null;
   phone: string | null;
+  birthDate: string | null;
   revisit1: string | null;
   revisit2: string | null;
   jaboHerb1: string | null;
@@ -173,6 +179,7 @@ export async function updateHappyCallPatient(
   if ('visitKind' in patch) dbPatch.visit_kind = patch.visitKind;
   if ('chartNo' in patch) dbPatch.chart_no = patch.chartNo;
   if ('phone' in patch) dbPatch.phone = patch.phone;
+  if ('birthDate' in patch) dbPatch.birth_date = patch.birthDate;
   if ('revisit1' in patch) dbPatch.revisit_1 = patch.revisit1;
   if ('revisit2' in patch) dbPatch.revisit_2 = patch.revisit2;
   if ('jaboHerb1' in patch) dbPatch.jabo_herb_1 = patch.jaboHerb1;
@@ -193,3 +200,23 @@ export async function deleteHappyCallPatient(supabase: SupabaseClient, id: strin
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('삭제되지 않았습니다.');
 }
+
+// 자동 등록이 다시 올리지 않을 사람들 — 직원이 해피콜 표에서 지운 접수(초진일|이름, lib/happyCallAutoRegister.ts의 skipKey).
+export async function listAutoSkipKeys(supabase: SupabaseClient): Promise<Set<string>> {
+  const keys = new Set<string>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('happy_call_auto_skips').select('skip_key').order('skip_key').range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as { skip_key: string }[];
+    for (const r of page) keys.add(r.skip_key);
+    if (page.length < PAGE) break;
+  }
+  return keys;
+}
+
+export async function addAutoSkipKey(supabase: SupabaseClient, key: string, createdBy: string | null): Promise<void> {
+  const { error } = await supabase.from('happy_call_auto_skips').upsert({ skip_key: key, created_by: createdBy }, { onConflict: 'skip_key', ignoreDuplicates: true });
+  if (error) throw error;
+}
+

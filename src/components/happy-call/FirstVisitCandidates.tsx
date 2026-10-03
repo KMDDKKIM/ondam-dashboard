@@ -5,6 +5,7 @@ import type { FirstVisitCandidateDto, FirstVisitCandidatesResult, VisitClassific
 import { candidateSuggestion, reconcileFirstVisits, matchRegisteredCandidates } from '@/lib/firstVisitReconcile';
 import { todayKst } from '@/lib/kst';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { matchDoctorId as matchStaffId } from '@/lib/happyCallAutoRegister';
 import type { HappyCallPatient, Staff } from '@/lib/types';
 
 type PatientType = HappyCallPatient['patientType'];
@@ -24,16 +25,6 @@ interface Props {
   /** 그 날짜(초진일)에 이미 등록된 환자 */
   registered: HappyCallPatient[];
   onRegister: (registration: CandidateRegistration) => Promise<void>;
-}
-
-// 예약 명단의 주치의 이름(예: "김원장")과 직원 이름을 맞춰 본다. 못 찾으면 직원이 직접 고른다.
-function matchStaffId(doctorName: string, staffList: Staff[]): string {
-  const name = doctorName.trim();
-  if (!name) return '';
-  const exact = staffList.find((s) => s.name === name);
-  if (exact) return exact.id;
-  const partial = staffList.filter((s) => name.includes(s.name) || s.name.includes(name));
-  return partial.length === 1 ? partial[0].id : '';
 }
 
 const cell = { border: '1px solid #ddd', padding: '4px 6px', fontSize: 13 } as const;

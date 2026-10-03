@@ -33,6 +33,8 @@ export interface HappyCallPatient {
   chartNo?: string | null;
   phone?: string | null;
   visitKind?: '초진' | '재초진';
+  // 접수기록부에 적힌 생년월일 — 2진·3진을 성함+생년월일로 찾는 기준.
+  birthDate?: string | null;
 }
 
 export interface HerbMedicinePrescription {

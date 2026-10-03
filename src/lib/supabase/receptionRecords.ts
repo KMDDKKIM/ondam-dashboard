@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ReceptionPayment, ReceptionRecord, ReceptionVisitKind } from '@/lib/receptionLog';
-import type { ReceptionVisit } from '@/lib/happyCallRevisitFill';
+import type { ReceptionEntry } from '@/lib/happyCallAutoRegister';
 import { fetchAllPages } from '@/lib/fetchAllPages';
 
 interface Row {
@@ -130,21 +130,22 @@ interface VisitLiteRow {
   visit_date: string;
   patient_name: string;
   birth_date: string | null;
+  visit_kind: '초진' | '재초진' | '재진' | null;
   excluded: boolean;
 }
 
-// from 날짜 이후의 내원 기록(날짜·이름·생년월일·제외 여부만) — 재내원 날짜 자동 채우기용.
-export async function listReceptionVisitsSince(supabase: SupabaseClient, from: string): Promise<ReceptionVisit[]> {
+// from 날짜 이후의 접수 기록(날짜·이름·생년월일·초진/재진 구분·제외 여부만) — 해피콜 자동 등록과 재내원 날짜 자동 채우기용.
+export async function listReceptionEntriesSince(supabase: SupabaseClient, from: string): Promise<ReceptionEntry[]> {
   const rows = await fetchAllPages<VisitLiteRow>(async (a, b) => {
     const { data, error, count } = await supabase
       .from('reception_records')
-      .select('visit_date, patient_name, birth_date, excluded', { count: 'exact' })
+      .select('visit_date, patient_name, birth_date, visit_kind, excluded', { count: 'exact' })
       .gte('visit_date', from)
       .order('visit_date', { ascending: true })
       .order('id', { ascending: true })
       .range(a, b);
     return { data: data as VisitLiteRow[] | null, error, count };
   });
-  return rows.map((r) => ({ visitDate: r.visit_date, patientName: r.patient_name, birthDate: r.birth_date, excluded: r.excluded }));
+  return rows.map((r) => ({ visitDate: r.visit_date, patientName: r.patient_name, birthDate: r.birth_date, visitKind: r.visit_kind ?? '재진', excluded: r.excluded }));
 }
 
