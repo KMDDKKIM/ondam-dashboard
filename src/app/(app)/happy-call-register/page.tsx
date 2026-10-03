@@ -15,11 +15,13 @@ import { HappyCallStatsPanel } from '@/components/happy-call/HappyCallStatsPanel
 import { FirstVisitCandidates, type CandidateRegistration } from '@/components/happy-call/FirstVisitCandidates';
 import { SheetPasteImport } from '@/components/happy-call/SheetPasteImport';
 import { VisitHistoryImport } from '@/components/happy-call/VisitHistoryImport';
+import { FillContactsFromHistory } from '@/components/happy-call/FillContactsFromHistory';
 import { DateCell } from '@/components/happy-call/DateCell';
 import { compareByFirstVisitAsc } from '@/lib/dateDisplay';
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
 import { countUnreconciledRevisits, isUnreconciledRevisit, maturedCohortRange } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
+import { isPastHideWindow } from '@/lib/happyCallVisibility';
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const VISIT_KINDS = ['초진', '재초진'] as const;
@@ -54,16 +56,24 @@ export default function HappyCallRegisterPage() {
   const [candidateDate, setCandidateDate] = useState(todayKst());
   const [registeredOnDate, setRegisteredOnDate] = useState<HappyCallPatient[]>([]);
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
+  // 초진 후 3주가 지난 환자는 기본으로 접어 두고, "펼쳐서 보기"로 다시 볼 수 있다.
+  const [showOld, setShowOld] = useState(false);
 
   // 통계에서 고른 주를 기준으로 이탈·삼진이 집계된 초진 주(예: 9/21 → 8/24~8/30)를 노랗게 표시한다.
   const highlightRange = highlightDate ? maturedCohortRange(highlightDate) : null;
   const today = todayKst();
   const unreconciledCount = useMemo(() => countUnreconciledRevisits(patients, today), [patients, today]);
   // 초진일 오래된 순(오름차순) — 새로 등록한 환자는 맨 아래 등록 줄 바로 위에 붙는다.
-  const visiblePatients = useMemo(
-    () => (onlyUnreconciled ? patients.filter((p) => isUnreconciledRevisit(p, today)) : [...patients]).sort(compareByFirstVisitAsc),
-    [patients, onlyUnreconciled, today]
-  );
+  const oldCount = useMemo(() => patients.filter((p) => isPastHideWindow(p.firstVisitDate, today)).length, [patients, today]);
+  const visiblePatients = useMemo(() => {
+    // 통계에서 고른 주(노란 줄)에 걸린 환자는 3주가 지났어도 접지 않는다 — 노란 줄을 찾아볼 수 있어야 해서.
+    const inHighlight = (p: HappyCallPatient) =>
+      !!highlightRange && p.firstVisitDate >= highlightRange.start && p.firstVisitDate <= highlightRange.end;
+    const base = onlyUnreconciled
+      ? patients.filter((p) => isUnreconciledRevisit(p, today))
+      : patients.filter((p) => showOld || !isPastHideWindow(p.firstVisitDate, today) || inHighlight(p));
+    return [...base].sort(compareByFirstVisitAsc);
+  }, [patients, onlyUnreconciled, showOld, highlightRange, today]);
   const todayYear = Number(today.slice(0, 4));
 
   // 진료의 선택 칸·통계 필터·시트 붙여넣기는 (id, name) 목록을 받는다 — 활성 진료의를 그 모양으로 넘긴다.
@@ -117,6 +127,7 @@ export default function HappyCallRegisterPage() {
       chartNo: reg.candidate.chartNo || null,
       phone: reg.candidate.phone || null,
     });
+    if (isPastHideWindow(candidateDate, today)) setShowOld(true);
     await load(candidateDate);
   }
 
@@ -143,6 +154,7 @@ export default function HappyCallRegisterPage() {
         phone: draft.phone,
         chartNo: draft.chartNo,
       });
+      if (isPastHideWindow(draft.firstVisitDate, today)) setShowOld(true);
       setDraft(emptyDraft());
       setError('');
       await load(candidateDate);
@@ -228,6 +240,8 @@ export default function HappyCallRegisterPage() {
 
         <VisitHistoryImport onDone={() => load(candidateDate)} />
 
+        <FillContactsFromHistory patients={patients} onDone={() => load(candidateDate)} />
+
         <SheetPasteImport patients={patients} staffList={staffList} onDone={() => load(candidateDate)} />
 
         <HappyCallStatsPanel patients={patients} staffList={staffList} onDateClick={setHighlightDate} />
@@ -262,6 +276,16 @@ export default function HappyCallRegisterPage() {
           <p style={{ marginTop: 16, fontSize: 12, color: '#7a5b00' }}>
             <span style={{ display: 'inline-block', width: 12, height: 12, background: '#fff3cd', border: '1px solid #e6d28a', verticalAlign: '-2px', marginRight: 6 }} />
             노란 줄 = 위에서 고른 주 기준으로 이탈·삼진이 집계되는 초진 {highlightRange.start.slice(5).replace('-', '/')} ~ {highlightRange.end.slice(5).replace('-', '/')}
+          </p>
+        )}
+        {oldCount > 0 && !onlyUnreconciled && (
+          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className="muted-text">
+              {showOld ? `초진 후 3주가 지난 환자 ${oldCount}명도 함께 보고 있어요.` : `초진 후 3주가 지난 환자 ${oldCount}명은 접어 두었어요.`}
+            </span>
+            <button type="button" onClick={() => setShowOld((v) => !v)} style={{ fontSize: 12, padding: '2px 10px' }}>
+              {showOld ? '다시 접기' : '펼쳐서 보기'}
+            </button>
           </p>
         )}
         <div style={{ overflowX: 'auto', marginTop: 20 }}>
