@@ -1,6 +1,5 @@
 import { AnnouncementBanner } from '@/components/home/AnnouncementBanner';
 import { HomeCalendar } from '@/components/home/HomeCalendar';
-import { HomeWorkBoard } from '@/components/home/HomeWorkBoard';
 import { TodayHappyCalls } from '@/components/TodayHappyCalls';
 import { TodayStatus } from '@/components/TodayStatus';
 import { MonthlyStatsPanel } from '@/components/MonthlyStatsPanel';
@@ -125,7 +124,6 @@ export default async function HomePage() {
         </div>
         <div className="home-right">
           <HomeCalendar isOwner={isOwner} />
-          <HomeWorkBoard />
         </div>
       </div>
     </div>

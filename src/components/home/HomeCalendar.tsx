@@ -7,30 +7,12 @@ import { currentMonthKst, todayKst } from '@/lib/kst';
 import { monthGridWeeks } from '@/lib/leave';
 import { holidayName } from '@/lib/publicHolidays';
 import { assignEventLanes, buildDayEntries, eventSegment } from '@/lib/homeCalendar';
-import { todosForDate } from '@/lib/todoVisibility';
+import { buildWorkBoard, dayMarker, workItemsForDate, type WorkItem, type WorkKind } from '@/lib/workItems';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
 import { createClinicEvent, deleteClinicEvent, listClinicEvents, type ClinicEvent } from '@/lib/supabase/clinicEvents';
-import { createTodo, deleteTodo, listTodos, setTodoDone } from '@/lib/supabase/todos';
-import type { Staff, Todo } from '@/lib/types';
-import { HomeDayPanel, MINE } from './HomeDayPanel';
-
-const FILTER_KEY = 'todoChecklist.assigneeFilter';
-
-function readSavedFilter(): string | null {
-  try {
-    return window.localStorage.getItem(FILTER_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function saveFilter(value: string) {
-  try {
-    window.localStorage.setItem(FILTER_KEY, value);
-  } catch {
-    // 저장이 막힌 브라우저에서는 기억만 못 할 뿐 화면은 그대로 동작한다.
-  }
-}
+import { createWorkItems, deleteWorkItem, listWorkItems, setWorkItemDone } from '@/lib/supabase/workItems';
+import type { Staff } from '@/lib/types';
+import { HomeDayPanel } from './HomeDayPanel';
 
 function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
@@ -50,10 +32,10 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   const [selectedDate, setSelectedDate] = useState(today);
   const [events, setEvents] = useState<ClinicEvent[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-  const [todos, setTodos] = useState<Todo[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItem[]>([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [myId, setMyId] = useState<string | null>(null);
-  const [assigneeFilter, setAssigneeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -76,9 +58,10 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     }
   }, [supabase, from, to]);
 
-  const refreshTodos = useCallback(async () => {
+  const refreshWork = useCallback(async () => {
     try {
-      setTodos(await listTodos(supabase));
+      setWorkItems(await listWorkItems(supabase));
+      setNowMs(Date.now());
     } catch {
       setError('할 일을 불러오지 못했습니다.');
     }
@@ -89,16 +72,27 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   }, [refreshCalendar]);
 
   useEffect(() => {
-    const saved = readSavedFilter();
-    if (saved !== null) setAssigneeFilter(saved);
-    refreshTodos();
     supabase
       .from('staff')
       .select('id, name, role')
       .eq('status', 'approved')
       .then(({ data }) => setStaffList((data ?? []) as Staff[]));
     supabase.auth.getUser().then(({ data }) => setMyId(data.user?.id ?? null));
-  }, [supabase, refreshTodos]);
+  }, [supabase]);
+
+  // 다른 직원이 보낸 오더·완료 표시가 늦지 않게 1분마다, 그리고 이 탭으로 돌아올 때 다시 읽는다.
+  useEffect(() => {
+    refreshWork();
+    const timer = window.setInterval(refreshWork, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshWork();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshWork]);
 
   const lanes = useMemo(() => assignEventLanes(events), [events]);
   const dayEntries = useMemo(
@@ -132,57 +126,59 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     [weeks, events, lanes]
   );
 
-  const filterId = assigneeFilter === MINE ? myId : staffList.some((s) => s.id === assigneeFilter) ? assigneeFilter : null;
+  // 달력 칸의 "✓N" — 그 날짜에 내가 처리할 안 끝난 것(내 할 일 + 받은 오더·전달), 받은 게 있으면 빨갛게.
+  const markers = useMemo(() => {
+    const map = new Map<string, { open: number; received: number }>();
+    for (const week of weeks) for (const date of week) map.set(date, dayMarker(workItems, myId, date, today, nowMs));
+    return map;
+  }, [weeks, workItems, myId, today, nowMs]);
 
-  function openTodoCount(date: string): number {
-    return todosForDate(todos, date, today, filterId).filter((t) => !t.done).length;
-  }
+  const board = useMemo(() => buildWorkBoard(workItemsForDate(workItems, selectedDate, today), myId, nowMs), [workItems, selectedDate, today, myId, nowMs]);
 
-  function changeFilter(value: string) {
-    setAssigneeFilter(value);
-    saveFilter(value);
-  }
+  const busy = useRef(new Set<string>());
 
-  async function toggleTodo(todo: Todo) {
-    const done = !todo.done;
-    setTodos((prev) => prev.map((t) => (t.id === todo.id ? { ...t, done, doneAt: done ? today : null } : t)));
+  async function toggleWork(item: WorkItem) {
+    if (busy.current.has(item.id)) return;
+    busy.current.add(item.id);
+    const done = !item.doneAt;
+    setWorkItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, doneAt: done ? new Date().toISOString() : null } : i)));
     try {
-      await setTodoDone(supabase, todo.id, done);
+      await setWorkItemDone(supabase, item.id, done);
     } catch {
       setError('저장에 실패했습니다.');
-      await refreshTodos();
+      await refreshWork();
+    } finally {
+      busy.current.delete(item.id);
     }
   }
 
-  // × 를 빠르게 두 번 눌러도 확인창이 두 개 뜨지 않게, 확인창이 열려 있는 항목은 무시한다.
-  const confirming = useRef(new Set<string>());
-
-  async function removeTodo(todo: Todo) {
-    if (confirming.current.has(todo.id)) return;
-    confirming.current.add(todo.id);
-    let ok = false;
+  async function removeWork(item: WorkItem) {
+    const label = item.kind === 'self' || item.doneAt ? '삭제' : '취소';
+    if (!(await confirmDialog(`"${item.content}" 을(를) ${label}할까요?`, { confirmLabel: label }))) return;
+    setWorkItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
-      ok = await confirmDialog(`"${todo.text}" 을(를) 삭제할까요?`, { confirmLabel: '삭제' });
-    } finally {
-      confirming.current.delete(todo.id);
-    }
-    if (!ok) return;
-    setTodos((prev) => prev.filter((t) => t.id !== todo.id));
-    try {
-      await deleteTodo(supabase, todo.id);
+      await deleteWorkItem(supabase, item.id);
     } catch {
       setError('삭제에 실패했습니다.');
-      await refreshTodos();
+      await refreshWork();
     }
   }
 
-  async function addTodo(text: string, assigneeStaffId: string | null) {
+  async function addWork(input: { kind: WorkKind; content: string; assigneeIds: string[] }) {
+    if (!myId) return;
     setError('');
     try {
-      await createTodo(supabase, { text, dueDate: selectedDate, assigneeStaffId, createdBy: myId });
-      await refreshTodos();
+      await createWorkItems(supabase, {
+        kind: input.kind,
+        content: input.content,
+        createdBy: myId,
+        assigneeIds: input.kind === 'self' ? [myId] : input.assigneeIds,
+        dueDate: selectedDate,
+      });
+      await refreshWork();
     } catch {
       setError('추가에 실패했습니다.');
+      throw new Error('add failed');
     }
   }
 
@@ -241,7 +237,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
               const day = dayEntries.get(date);
               const pubHoliday = holidayName(date);
               const leaveChips = day?.leaves ?? [];
-              const openTodos = openTodoCount(date);
+              const marker = markers.get(date);
               return (
                 <div
                   key={date}
@@ -286,9 +282,12 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                         {pubHoliday}
                       </span>
                     )}
-                    {openTodos > 0 && (
-                      <span title={`남은 할 일 ${openTodos}건`} style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-green)' }}>
-                        ✓{openTodos}
+                    {marker && marker.open > 0 && (
+                      <span
+                        title={marker.received > 0 ? `처리할 것 ${marker.open}건 (받은 오더·전달 ${marker.received}건 포함)` : `처리할 것 ${marker.open}건`}
+                        style={{ fontSize: 9, fontWeight: 700, color: marker.received > 0 ? 'var(--color-error)' : 'var(--color-green)' }}
+                      >
+                        ✓{marker.open}
                       </span>
                     )}
                   </div>
@@ -371,13 +370,12 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
         isOwner={isOwner}
         events={selectedEvents}
         leaves={selectedEntries?.leaves ?? []}
-        todos={todosForDate(todos, selectedDate, today, filterId)}
+        board={board}
         staffList={staffList}
-        assigneeFilter={assigneeFilter}
-        onChangeFilter={changeFilter}
-        onToggleTodo={toggleTodo}
-        onDeleteTodo={removeTodo}
-        onAddTodo={addTodo}
+        myId={myId}
+        onAddWork={addWork}
+        onToggleWork={toggleWork}
+        onRemoveWork={removeWork}
         onAddEvent={addEvent}
         onDeleteEvent={removeEvent}
       />

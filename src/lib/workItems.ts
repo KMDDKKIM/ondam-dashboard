@@ -106,3 +106,33 @@ export function formatKstTime(iso: string): string {
   const hour = get('hour') === '24' ? '00' : get('hour');
   return `${get('month')}/${get('day')} ${hour}:${get('minute')}`;
 }
+
+/** ISO 시각의 한국 날짜(YYYY-MM-DD). */
+export function kstDateOf(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
+/** 달력에서 이 항목이 놓이는 날짜 — 마감일(날짜를 골라 올린 날), 없으면 올린 날. */
+export function calendarDateOf(item: Pick<WorkItem, 'dueDate' | 'createdAt'>): string {
+  return item.dueDate ?? kstDateOf(item.createdAt);
+}
+
+/**
+ * 달력에서 어떤 날짜를 골랐을 때 보여줄 항목. 오늘은 밀린 것(그 전 날짜인데 아직 안 끝난 것)이 자동으로 따라오고,
+ * 다른 날짜는 그 날짜에 놓인 것만 — 미리 잡아 둔 것도 그날 미리 볼 수 있다.
+ */
+export function workItemsForDate(items: WorkItem[], date: string, today: string): WorkItem[] {
+  return items.filter((item) => {
+    const placed = calendarDateOf(item);
+    if (date === today) return placed === today || (placed < today && !item.doneAt);
+    return placed === date;
+  });
+}
+
+/** 달력 칸에 찍는 표시 — 내가 처리해야 하는 안 끝난 것(내 할 일 + 받은 것)의 수와, 그중 받은 것의 수. */
+export function dayMarker(items: WorkItem[], myId: string | null, date: string, today: string, nowMs: number): { open: number; received: number } {
+  const board = buildWorkBoard(workItemsForDate(items, date, today), myId, nowMs);
+  const mine = board.mine.filter((i) => !i.doneAt).length;
+  return { open: mine + board.received.length, received: board.received.length };
+}
+

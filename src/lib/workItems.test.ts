@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionLabel, buildWorkBoard, doneLabel, formatKstTime, isOverdue, type WorkItem } from './workItems';
+import { actionLabel, buildWorkBoard, calendarDateOf, dayMarker, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
 
 // 사람·내용은 모두 시험용 가짜 값이다.
 const ME = 'me';
@@ -107,3 +107,45 @@ describe('formatKstTime', () => {
     expect(formatKstTime('2026-10-03T15:05:00Z')).toBe('10/4 00:05');
   });
 });
+
+describe('달력 날짜', () => {
+  const TODAY = '2026-10-05';
+
+  it('한국 날짜로 바꾼다', () => {
+    expect(kstDateOf('2026-10-04T16:00:00Z')).toBe('2026-10-05');
+    expect(kstDateOf('2026-10-05T14:59:00Z')).toBe('2026-10-05');
+  });
+
+  it('마감일이 있으면 그 날짜, 없으면 올린 날', () => {
+    expect(calendarDateOf({ dueDate: '2026-10-08', createdAt: '2026-10-05T00:00:00Z' })).toBe('2026-10-08');
+    expect(calendarDateOf({ dueDate: null, createdAt: '2026-10-05T00:00:00Z' })).toBe('2026-10-05');
+  });
+
+  it('오늘을 고르면 밀린 안 끝난 것이 따라오고, 끝난 밀린 것은 안 따라온다', () => {
+    const items = [
+      item({ id: 'today', dueDate: '2026-10-05' }),
+      item({ id: 'late-open', dueDate: '2026-10-02' }),
+      item({ id: 'late-done', dueDate: '2026-10-02', doneAt: '2026-10-03T00:00:00Z' }),
+      item({ id: 'future', dueDate: '2026-10-09' }),
+    ];
+    expect(workItemsForDate(items, TODAY, TODAY).map((i) => i.id)).toEqual(['today', 'late-open']);
+  });
+
+  it('다른 날짜를 고르면 그 날짜에 놓인 것만(끝난 것도) 보인다', () => {
+    const items = [item({ id: 'late-open', dueDate: '2026-10-02' }), item({ id: 'late-done', dueDate: '2026-10-02', doneAt: '2026-10-03T00:00:00Z' }), item({ id: 'future', dueDate: '2026-10-09' })];
+    expect(workItemsForDate(items, '2026-10-02', TODAY).map((i) => i.id)).toEqual(['late-open', 'late-done']);
+    expect(workItemsForDate(items, '2026-10-09', TODAY).map((i) => i.id)).toEqual(['future']);
+  });
+
+  it('달력 표시는 내가 처리할 안 끝난 것(내 할 일 + 받은 것)만 센다', () => {
+    const items = [
+      item({ id: 'recv', dueDate: '2026-10-09' }),
+      item({ id: 'mine', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09' }),
+      item({ id: 'mine-done', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09', doneAt: '2026-10-05T01:00:00Z' }),
+      item({ id: 'sent', createdBy: ME, assigneeId: OTHER, dueDate: '2026-10-09' }),
+    ];
+    expect(dayMarker(items, ME, '2026-10-09', TODAY, NOW)).toEqual({ open: 2, received: 1 });
+    expect(dayMarker(items, ME, '2026-10-10', TODAY, NOW)).toEqual({ open: 0, received: 0 });
+  });
+});
+
