@@ -425,8 +425,17 @@ a.card:hover {
   margin-bottom: 0 !important;
 }
 
+.leave-top-right {
+  position: sticky;
+  top: 16px;
+}
+
 @media (max-width: 960px) {
   .leave-top {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .leave-top-right {
+    position: static;
+    order: -1;
   }
 }

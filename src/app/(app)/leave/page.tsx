@@ -414,69 +414,68 @@ export default function LeavePage() {
       </p>
       {error && <p className="error-text" style={{ marginBottom: 16 }}>{error}</p>}
 
-      {me.isOwner && (
-        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 12 }}>승인 대기 중 — 전체 ({ownerPendingRequests.length}건)</h2>
-          {ownerPendingRequests.length === 0 ? (
-            <p className="muted-text">대기 중인 신청이 없어요.</p>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {ownerPendingRequests.map((r) => (
-                <li key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600 }}>{r.staffName}</span>
-                    <span style={{ fontSize: 13 }}>
-                      {r.startDate}
-                      {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
-                      {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
-                    </span>
-                    <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
-                    {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                      <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
-                        승인
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRejectingId(rejectingId === r.id ? null : r.id);
-                          setRejectReason('');
-                        }}
-                        style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
-                      >
-                        반려
-                      </button>
-                    </div>
-                  </div>
-                  {rejectingId === r.id && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <input
-                        className="input-field"
-                        autoFocus
-                        value={rejectReason}
-                        onChange={(e) => setRejectReason(e.target.value)}
-                        placeholder="반려 사유 (필수) — 신청한 직원에게 보여요"
-                        style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: 13 }}
-                      />
-                      <button
-                        type="button"
-                        disabled={!rejectReason.trim()}
-                        onClick={() => handleDecide(r.id, 'rejected', rejectReason)}
-                        style={{ padding: '6px 14px', fontSize: 13, borderRadius: 8, border: 'none', background: 'var(--color-error)', color: '#fff', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed', opacity: rejectReason.trim() ? 1 : 0.5 }}
-                      >
-                        반려하기
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       <div className="leave-top">
         <div className="leave-top-left">
+          {me.isOwner && (
+            <div className="card" style={{ padding: 14 }}>
+              <h2 style={{ fontSize: 14, marginBottom: 8 }}>승인 대기 중 — 전체 ({ownerPendingRequests.length}건)</h2>
+              {ownerPendingRequests.length === 0 ? (
+                <p className="muted-text">대기 중인 신청이 없어요.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {ownerPendingRequests.map((r) => (
+                    <li key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-line)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600 }}>{r.staffName}</span>
+                        <span style={{ fontSize: 13 }}>
+                          {r.startDate}
+                          {r.endDate !== r.startDate ? ` ~ ${r.endDate}` : ''}
+                          {r.halfDay ? (r.halfDay === 'am' ? ' 오전반차' : ' 오후반차') : ''}
+                        </span>
+                        <span className="muted-text" style={{ fontSize: 13 }}>{kindLabel[r.kind]}</span>
+                        {r.memo && <span className="muted-text" style={{ fontSize: 13 }}>{r.memo}</span>}
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                          <button type="button" onClick={() => handleDecide(r.id, 'approved')} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13 }}>
+                            승인
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRejectingId(rejectingId === r.id ? null : r.id);
+                              setRejectReason('');
+                            }}
+                            style={{ padding: '4px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--color-error)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}
+                          >
+                            반려
+                          </button>
+                        </div>
+                      </div>
+                      {rejectingId === r.id && (
+                        <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <input
+                            className="input-field"
+                            autoFocus
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="반려 사유 (필수) — 신청한 직원에게 보여요"
+                            style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: 13 }}
+                          />
+                          <button
+                            type="button"
+                            disabled={!rejectReason.trim()}
+                            onClick={() => handleDecide(r.id, 'rejected', rejectReason)}
+                            style={{ padding: '6px 14px', fontSize: 13, borderRadius: 8, border: 'none', background: 'var(--color-error)', color: '#fff', cursor: rejectReason.trim() ? 'pointer' : 'not-allowed', opacity: rejectReason.trim() ? 1 : 0.5 }}
+                          >
+                            반려하기
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {allowedKinds.length > 0 && balances ? (
             <div className="card" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: 16 }}>
               {allowedKinds.map((k) => (
@@ -544,6 +543,34 @@ export default function LeavePage() {
               </p>
             </form>
           )}
+          <div className="card" style={{ padding: 14 }}>
+            <h2 style={{ fontSize: 14, marginBottom: 4 }}>내 신청 ({myActiveRequests.length}건)</h2>
+            <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
+              확정된 연차도 바꾸거나 취소할 수 있어요.{me.isOwner ? '' : ' 바꾸면 다시 승인을 받아요.'}
+            </p>
+            <LeaveRequestList
+              requests={myActiveRequests}
+              emptyText="앞으로 예정된 신청이 없어요."
+              onSave={handleSaveRequest}
+              onCancel={handleCancelRequest}
+              editNeedsReapproval={!me.isOwner}
+              allowedKinds={allowedKinds}
+            />
+          </div>
+          {me.isOwner && (
+            <div className="card" style={{ padding: 14 }}>
+              <h2 style={{ fontSize: 14, marginBottom: 4 }}>확정된 일정 — 전체 ({upcomingApproved.length}건)</h2>
+              <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>앞으로 예정된 확정 연차예요. 바꾸면 바로 확정되고 직원에게 알림이 가요.</p>
+              <LeaveRequestList
+                requests={upcomingApproved}
+                showStaffName
+                emptyText="앞으로 예정된 확정 일정이 없어요."
+                onSave={handleSaveRequest}
+                onCancel={handleCancelRequest}
+                editNeedsReapproval={false}
+              />
+            </div>
+          )}
         </div>
 
         <div className="leave-top-right">
@@ -558,36 +585,6 @@ export default function LeavePage() {
           />
         </div>
       </div>
-
-      <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 15, marginBottom: 4 }}>내 신청 ({myActiveRequests.length}건)</h2>
-        <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
-          확정된 연차도 날짜·반차를 바꾸거나 취소할 수 있어요. {me.isOwner ? '' : '내용을 바꾸면 원장님 승인을 다시 받아요.'}
-        </p>
-        <LeaveRequestList
-          requests={myActiveRequests}
-          emptyText="앞으로 예정된 신청이 없어요."
-          onSave={handleSaveRequest}
-          onCancel={handleCancelRequest}
-          editNeedsReapproval={!me.isOwner}
-          allowedKinds={allowedKinds}
-        />
-      </div>
-
-      {me.isOwner && (
-        <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-          <h2 style={{ fontSize: 15, marginBottom: 4 }}>확정된 일정 — 전체 ({upcomingApproved.length}건)</h2>
-          <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>앞으로 예정된 확정 연차예요. 바꾸면 그 내용으로 바로 확정되고, 직원에게 알림이 가요.</p>
-          <LeaveRequestList
-            requests={upcomingApproved}
-            showStaffName
-            emptyText="앞으로 예정된 확정 일정이 없어요."
-            onSave={handleSaveRequest}
-            onCancel={handleCancelRequest}
-            editNeedsReapproval={false}
-          />
-        </div>
-      )}
 
       {me.isOwner && (
         <div className="card" style={{ padding: 20 }}>
