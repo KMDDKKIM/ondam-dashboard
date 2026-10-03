@@ -67,7 +67,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
           </div>
         ))}
         {weeks.flatMap((week) =>
-          week.map((date) => {
+          week.map((date, col) => {
             const inMonth = date.slice(0, 7) === month;
             const isToday = date === today;
             const dayNum = Number(date.slice(8, 10));
@@ -81,12 +81,12 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                   minHeight: compact ? 38 : 52,
                   borderRadius: 8,
                   border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
-                  background: !inMonth ? 'var(--color-surface-2)' : pubHoliday ? 'rgba(209, 69, 59, 0.07)' : 'var(--color-surface)',
+                  background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
                   padding: 3,
                   opacity: inMonth ? 1 : 0.5,
                 }}
               >
-                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2, color: pubHoliday ? 'var(--color-error)' : undefined }}>
+                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2, color: pubHoliday || col === 0 ? 'var(--color-error)' : undefined }}>
                   {dayNum}
                   {pubHoliday && <span style={{ marginLeft: 3, fontSize: compact ? 8 : 9, fontWeight: 600 }}>{pubHoliday}</span>}
                   {!pubHoliday && clinicClosed && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}

@@ -259,7 +259,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     borderRadius: 6,
                     border: isSelected ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                     margin: isSelected ? -1 : 0,
-                    background: isSelected ? 'rgba(44, 143, 214, 0.10)' : !inMonth ? 'var(--color-surface-2)' : pubHoliday ? 'rgba(209, 69, 59, 0.07)' : 'var(--color-surface)',
+                    background: isSelected ? 'rgba(44, 143, 214, 0.10)' : inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
                     opacity: inMonth ? 1 : 0.55,
                     cursor: 'pointer',
                     position: 'relative',
@@ -270,7 +270,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                       style={{
                         fontSize: 10,
                         fontWeight: isToday ? 700 : 500,
-                        color: isToday ? '#fff' : pubHoliday ? 'var(--color-error)' : 'var(--color-ink)',
+                        color: isToday ? '#fff' : pubHoliday || col === 0 ? 'var(--color-error)' : 'var(--color-ink)',
                         background: isToday ? 'var(--color-brand-b)' : 'transparent',
                         borderRadius: 999,
                         padding: isToday ? '0 5px' : 0,
