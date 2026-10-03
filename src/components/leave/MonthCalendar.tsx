@@ -78,7 +78,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
               <div
                 key={date}
                 style={{
-                  minHeight: compact ? 38 : 52,
+                  minHeight: compact ? 62 : 76,
                   borderRadius: 8,
                   border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                   background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
@@ -86,9 +86,9 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                   opacity: inMonth ? 1 : 0.5,
                 }}
               >
-                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2, color: pubHoliday || col === 0 ? 'var(--color-error)' : undefined }}>
+                <div style={{ fontSize: compact ? 12 : 13, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 2 : 3, color: pubHoliday || col === 0 ? 'var(--color-error)' : undefined }}>
                   {dayNum}
-                  {pubHoliday && <span style={{ marginLeft: 3, fontSize: compact ? 8 : 9, fontWeight: 600 }}>{pubHoliday}</span>}
+                  {pubHoliday && <span style={{ marginLeft: 3, fontSize: compact ? 9 : 10, fontWeight: 600 }}>{pubHoliday}</span>}
                   {!pubHoliday && clinicClosed && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -96,7 +96,7 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                     <span
                       key={entry.id}
                       style={{
-                        fontSize: compact ? 8 : 9,
+                        fontSize: compact ? 10 : 11,
                         fontWeight: 600,
                         padding: '1px 4px',
                         borderRadius: 999,

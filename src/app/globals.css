@@ -408,7 +408,7 @@ a.card:hover {
 /* 연차 관리 상단: 왼쪽에 부여·사용·남음 카드와 신청란, 오른쪽 위에 작은 달력. 좁은 화면에서는 달력이 아래로 내려간다. */
 .leave-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 20px;
   align-items: start;
   margin-bottom: 20px;
@@ -430,7 +430,7 @@ a.card:hover {
   top: 16px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .leave-top {
     grid-template-columns: minmax(0, 1fr);
   }
