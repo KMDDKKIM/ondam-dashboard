@@ -92,40 +92,29 @@ export default async function HomePage() {
 
       <AnnouncementBanner />
 
-      {/* 왼쪽(넓게): 이번 달 현황 + 그 아래 같은 폭의 카드 2장(확인할 것 · 해피콜).
-          오른쪽(좁게): 달력과 날짜별 할 일을 세로로 길게. */}
-      <div className="home-top-row">
-        <div className="home-left">
-          {summary ? (
-            <MonthlyStatsPanel initial={summary} isOwner={isOwner} />
-          ) : (
-            <p className="error-text">{summaryError}</p>
-          )}
-          <div className="home-bottom">
-            <div>
-              <TodayStatus
-                missingClosing={missingClosing}
-                zeroStockCount={zeroStock}
-                supply={supplyResult.error ? null : supplyResult}
-                remoteNew={remoteNew}
-                herbWaiting={herbWaiting}
-                herbWaitingIsMine={herbDoctorFilter !== null}
-                herbTotal={herbTotal}
-                todayReservations={todayReservations}
-                firstVisitMissing={firstVisitMissing}
-                calls={calls}
-                leavePending={leavePending}
-              />
-            </div>
-            <div>
-              <TodayHappyCalls />
-            </div>
-          </div>
-        </div>
-        <div className="home-right">
-          <HomeCalendar isOwner={isOwner} />
-        </div>
-      </div>
+      {/* 위: 이번 달 현황(왼쪽)과 달력(오른쪽)을 큰 카드 하나로 합치고, 아래: 같은 폭 3칸
+          (오늘 확인할 것 · 오늘의 해피콜 · 고른 날짜 할 일·요청). 배치는 HomeCalendar가 맡는다. */}
+      {summary ? null : <p className="error-text">{summaryError}</p>}
+      <HomeCalendar
+        isOwner={isOwner}
+        stats={summary ? <MonthlyStatsPanel initial={summary} isOwner={isOwner} bare /> : null}
+        status={
+          <TodayStatus
+            missingClosing={missingClosing}
+            zeroStockCount={zeroStock}
+            supply={supplyResult.error ? null : supplyResult}
+            remoteNew={remoteNew}
+            herbWaiting={herbWaiting}
+            herbWaitingIsMine={herbDoctorFilter !== null}
+            herbTotal={herbTotal}
+            todayReservations={todayReservations}
+            firstVisitMissing={firstVisitMissing}
+            calls={calls}
+            leavePending={leavePending}
+          />
+        }
+        calls={<TodayHappyCalls />}
+      />
     </div>
   );
 }
