@@ -1,8 +1,8 @@
-// 홈 화면 "할 일·전달사항"의 순수 로직. 화면/DB 코드는 따로 있다.
-//  - self   : 내가 해야 할 일 (본인만 보고 완료만 누른다)
-//  - order  : 다른 직원에게 하는 오더 (받은 사람이 "완료")
-//  - notice : 전달사항 (받은 사람이 "숙지")
-// 직원 한 명당 한 줄이다 — 여러 명에게 보내면 사람 수만큼 줄이 생겨서 각자 따로 완료한다.
+// 홈 화면 "할 일·요청전달사항"의 순수 로직. 화면/DB 코드는 따로 있다.
+//  - self   : 할 일 — 내가 해야 할 일 (본인만 보고 완료만 누른다)
+//  - order  : 요청·전달사항 — 다른 직원에게 보내고, 받은 사람이 "확인"하면 보낸 사람도 본다
+//  - notice : 예전에 따로 있던 "전달사항" — 화면에서는 order와 똑같이 다룬다(새로 만들 때는 order를 쓴다).
+// 직원 한 명당 한 줄이다 — 여러 명에게 보내면 사람 수만큼 줄이 생겨서 각자 따로 확인한다.
 
 export type WorkKind = 'self' | 'order' | 'notice';
 
@@ -31,16 +31,17 @@ export interface WorkBoard {
   sent: WorkItem[];
 }
 
+/** 받은 사람이 누르는 버튼 — 완료했거나 숙지했으면 "확인". */
 export function actionLabel(kind: WorkKind): string {
-  return kind === 'notice' ? '숙지' : '완료';
+  return kind === 'self' ? '완료' : '확인';
 }
 
 export function doneLabel(kind: WorkKind): string {
-  return kind === 'notice' ? '숙지함' : '완료함';
+  return kind === 'self' ? '완료함' : '확인함';
 }
 
 export function kindLabel(kind: WorkKind): string {
-  return kind === 'self' ? '내 할 일' : kind === 'order' ? '오더' : '전달사항';
+  return kind === 'self' ? '할 일' : '요청·전달';
 }
 
 function isRecentlyDone(item: WorkItem, nowMs: number): boolean {
@@ -129,10 +130,20 @@ export function workItemsForDate(items: WorkItem[], date: string, today: string)
   });
 }
 
-/** 달력 칸에 찍는 표시 — 내가 처리해야 하는 안 끝난 것(내 할 일 + 받은 것)의 수와, 그중 받은 것의 수. */
-export function dayMarker(items: WorkItem[], myId: string | null, date: string, today: string, nowMs: number): { open: number; received: number } {
-  const board = buildWorkBoard(workItemsForDate(items, date, today), myId, nowMs);
-  const mine = board.mine.filter((i) => !i.doneAt).length;
-  return { open: mine + board.received.length, received: board.received.length };
+export interface DayChip {
+  id: string;
+  /** mine: 내 할 일, received: 받은 요청·전달, sent: 내가 보낸 요청·전달 */
+  role: 'mine' | 'received' | 'sent';
+  label: string;
+  done: boolean;
 }
 
+/**
+ * 달력 칸에 띄울 항목들 — 받은 것(안 끝난 것) → 내 할 일 → 내가 보낸 것 순서, 안 끝난 것이 앞이다.
+ * 받아서 끝낸 것은 칸에 띄우지 않는다(날짜를 눌러 보면 나온다).
+ */
+export function dayChips(items: WorkItem[], myId: string | null, date: string, today: string, nowMs: number): DayChip[] {
+  const board = buildWorkBoard(workItemsForDate(items, date, today), myId, nowMs);
+  const chip = (role: DayChip['role']) => (i: WorkItem): DayChip => ({ id: i.id, role, label: i.content, done: !!i.doneAt });
+  return [...board.received.map(chip('received')), ...board.mine.map(chip('mine')), ...board.sent.map(chip('sent'))];
+}

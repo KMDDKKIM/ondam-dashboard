@@ -7,7 +7,7 @@ import { currentMonthKst, todayKst } from '@/lib/kst';
 import { monthGridWeeks } from '@/lib/leave';
 import { holidayName } from '@/lib/publicHolidays';
 import { assignEventLanes, buildDayEntries, eventSegment } from '@/lib/homeCalendar';
-import { buildWorkBoard, dayMarker, workItemsForDate, type WorkItem, type WorkKind } from '@/lib/workItems';
+import { buildWorkBoard, dayChips, workItemsForDate, type DayChip, type WorkItem, type WorkKind } from '@/lib/workItems';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
 import { createClinicEvent, deleteClinicEvent, listClinicEvents, type ClinicEvent } from '@/lib/supabase/clinicEvents';
 import { createWorkItems, deleteWorkItem, listWorkItems, setWorkItemDone } from '@/lib/supabase/workItems';
@@ -20,10 +20,16 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// 달력 칸에 직접 보이는 할 일·요청전달 수(넘치면 "+N건", 날짜를 누르면 전부 보인다).
+const MAX_WORK_CHIPS = 3;
+const WORK_ROLE_COLOR = { received: 'var(--color-error)', mine: 'var(--color-green)', sent: 'var(--color-blue)' } as const;
+const WORK_ROLE_BG = { received: 'rgba(220, 53, 69, 0.10)', mine: 'rgba(46, 160, 67, 0.12)', sent: 'rgba(44, 143, 214, 0.10)' } as const;
+const WORK_ROLE_LABEL = { received: '받은 요청·전달', mine: '할 일', sent: '보낸 요청·전달' } as const;
+
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const LANE_HEIGHT = 14;
 
-// 홈 달력 — 한의원 이벤트(기간 막대)와 승인된 연차를 보여주고, 날짜를 누르면 그 아래에 그날
+// 홈 달력 — 한의원 이벤트(기간 막대)와 승인된 연차, 내 할 일·요청전달사항을 보여주고, 날짜를 누르면 그 아래에 그날
 // 할 일 목록이 뜬다(예전 "오늘 할 일" 카드를 여기로 묶음, 원장 요청 2026-10-02).
 export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
   const supabase = useMemo(() => createClient(), []);
@@ -126,10 +132,10 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
     [weeks, events, lanes]
   );
 
-  // 달력 칸의 "✓N" — 그 날짜에 내가 처리할 안 끝난 것(내 할 일 + 받은 오더·전달), 받은 게 있으면 빨갛게.
-  const markers = useMemo(() => {
-    const map = new Map<string, { open: number; received: number }>();
-    for (const week of weeks) for (const date of week) map.set(date, dayMarker(workItems, myId, date, today, nowMs));
+  // 달력 칸에 띄울 할 일·요청전달사항(받은 것은 빨강, 내 할 일은 초록, 내가 보낸 것은 파랑 계열).
+  const chipsByDate = useMemo(() => {
+    const map = new Map<string, DayChip[]>();
+    for (const week of weeks) for (const date of week) map.set(date, dayChips(workItems, myId, date, today, nowMs));
     return map;
   }, [weeks, workItems, myId, today, nowMs]);
 
@@ -237,7 +243,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
               const day = dayEntries.get(date);
               const pubHoliday = holidayName(date);
               const leaveChips = day?.leaves ?? [];
-              const marker = markers.get(date);
+              const workChips = chipsByDate.get(date) ?? [];
               return (
                 <div
                   key={date}
@@ -251,7 +257,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     }
                   }}
                   style={{
-                    minHeight: 58,
+                    minHeight: 96,
                     borderRadius: 6,
                     border: isSelected ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                     margin: isSelected ? -1 : 0,
@@ -280,14 +286,6 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                         style={{ flex: 1, minWidth: 0, margin: '0 2px', fontSize: 8, fontWeight: 600, color: 'var(--color-error)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
                         {pubHoliday}
-                      </span>
-                    )}
-                    {marker && marker.open > 0 && (
-                      <span
-                        title={marker.received > 0 ? `처리할 것 ${marker.open}건 (받은 오더·전달 ${marker.received}건 포함)` : `처리할 것 ${marker.open}건`}
-                        style={{ fontSize: 9, fontWeight: 700, color: marker.received > 0 ? 'var(--color-error)' : 'var(--color-green)' }}
-                      >
-                        ✓{marker.open}
                       </span>
                     )}
                   </div>
@@ -355,6 +353,34 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                         {l.halfDay ? (l.halfDay === 'am' ? '(오전)' : '(오후)') : ''}
                       </span>
                     ))}
+                    {workChips.slice(0, MAX_WORK_CHIPS).map((c) => (
+                      <span
+                        key={c.id}
+                        title={`${WORK_ROLE_LABEL[c.role]}: ${c.label}${c.done ? ' (끝남)' : ''}`}
+                        style={{
+                          fontSize: 9,
+                          lineHeight: 1.25,
+                          padding: '1px 3px',
+                          borderRadius: 4,
+                          wordBreak: 'break-all',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          background: WORK_ROLE_BG[c.role],
+                          color: c.done ? 'var(--color-muted)' : 'var(--color-ink)',
+                          textDecoration: c.done ? 'line-through' : 'none',
+                          borderLeft: `3px solid ${WORK_ROLE_COLOR[c.role]}`,
+                        }}
+                      >
+                        {c.label}
+                      </span>
+                    ))}
+                    {workChips.length > MAX_WORK_CHIPS && (
+                      <span className="muted-text" style={{ fontSize: 9, paddingLeft: 3 }}>
+                        +{workChips.length - MAX_WORK_CHIPS}건
+                      </span>
+                    )}
                   </div>
                 </div>
               );

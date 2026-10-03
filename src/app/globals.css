@@ -238,7 +238,7 @@ a.card:hover {
    할 일을 세로로 길게. 좁은 화면에서는 한 줄씩 쌓인다. */
 .home-top-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: 20px;
   align-items: stretch;
 }

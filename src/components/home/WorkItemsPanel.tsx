@@ -4,10 +4,10 @@ import { useState, type FormEvent } from 'react';
 import type { Staff } from '@/lib/types';
 import { actionLabel, doneLabel, formatKstTime, isOverdue, kindLabel, type WorkBoard, type WorkItem, type WorkKind } from '@/lib/workItems';
 
+// 화면에서는 두 가지 — 할 일(나에게)과 요청·전달사항(다른 직원에게). 요청·전달사항은 DB의 order로 저장한다.
 const KIND_TABS: { value: WorkKind; label: string }[] = [
-  { value: 'self', label: '내 할 일' },
-  { value: 'order', label: '오더' },
-  { value: 'notice', label: '전달사항' },
+  { value: 'self', label: '할 일' },
+  { value: 'order', label: '요청·전달사항' },
 ];
 
 const smallButton = { fontSize: 12, padding: '3px 10px', fontWeight: 700 } as const;
@@ -26,8 +26,8 @@ interface Props {
   onRemove: (item: WorkItem) => void;
 }
 
-// 달력에서 고른 날짜의 할 일·오더·전달사항. 내 할 일은 올려 두고 체크만 하고, 다른 직원에게 보낸 오더·전달사항은
-// 받은 사람이 "완료"·"숙지"를 누르면 보낸 사람 화면에 시각과 함께 뜬다(원장 요청, 2026-10-03).
+// 달력에서 고른 날짜의 할 일·요청전달사항. 할 일은 올려 두고 체크만 하고, 다른 직원에게 보낸 요청·전달사항은
+// 받은 사람이 "확인"을 누르면 보낸 사람 화면에 시각과 함께 뜬다(원장 요청, 2026-10-03).
 export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onToggleDone, onRemove }: Props) {
   const [kind, setKind] = useState<WorkKind>('self');
   const [text, setText] = useState('');
@@ -77,13 +77,13 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
     <div>
       {isEmpty && (
         <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 13 }}>
-          이 날 할 일이나 전달사항이 없어요.
+          이 날 할 일이나 요청·전달사항이 없어요.
         </p>
       )}
 
       {board.received.length > 0 && (
         <>
-          {sectionTitle('📥 받은 오더·전달', board.received.length, 'var(--color-error)')}
+          {sectionTitle('📥 받은 요청·전달', board.received.length, 'var(--color-error)')}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {board.received.map((item) => (
               <li key={item.id} style={rowStyle}>
@@ -132,7 +132,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
 
       {board.mine.length > 0 && (
         <>
-          {sectionTitle('✅ 내 할 일', board.mine.filter((i) => !i.doneAt).length)}
+          {sectionTitle('✅ 할 일', board.mine.filter((i) => !i.doneAt).length)}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {board.mine.map((item) => (
               <li key={item.id} style={rowStyle}>
@@ -161,7 +161,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
 
       {board.sent.length > 0 && (
         <>
-          {sectionTitle('📤 내가 보낸 것', board.sent.filter((i) => !i.doneAt).length)}
+          {sectionTitle('📤 보낸 요청·전달', board.sent.filter((i) => !i.doneAt).length)}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {board.sent.map((item) => (
               <li key={item.id} style={rowStyle}>
@@ -180,7 +180,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
                   </span>
                 ) : (
                   <span className="muted-text" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                    {item.kind === 'notice' ? '숙지 대기' : '완료 대기'}
+                    확인 대기
                   </span>
                 )}
                 <button type="button" onClick={() => onRemove(item)} aria-label={item.doneAt ? '삭제' : '취소'} style={quietButton}>
@@ -223,7 +223,7 @@ export function WorkItemsPanel({ date, today, board, staffList, myId, onAdd, onT
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={kind === 'self' ? '내가 해야 할 일' : kind === 'order' ? '부탁할 일(오더) 내용' : '전달할 내용'}
+            placeholder={kind === 'self' ? '내가 해야 할 일' : '요청하거나 전달할 내용'}
             className="input-field"
             style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 13 }}
           />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionLabel, buildWorkBoard, calendarDateOf, dayMarker, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
+import { actionLabel, buildWorkBoard, calendarDateOf, dayChips, doneLabel, formatKstTime, isOverdue, kstDateOf, workItemsForDate, type WorkItem } from './workItems';
 
 // 사람·내용은 모두 시험용 가짜 값이다.
 const ME = 'me';
@@ -81,11 +81,13 @@ describe('buildWorkBoard', () => {
 });
 
 describe('labels', () => {
-  it('전달사항은 숙지, 오더는 완료', () => {
-    expect(actionLabel('notice')).toBe('숙지');
-    expect(actionLabel('order')).toBe('완료');
-    expect(doneLabel('notice')).toBe('숙지함');
-    expect(doneLabel('order')).toBe('완료함');
+  it('할 일은 완료, 요청·전달사항은 확인(예전 전달사항도 같다)', () => {
+    expect(actionLabel('self')).toBe('완료');
+    expect(actionLabel('order')).toBe('확인');
+    expect(actionLabel('notice')).toBe('확인');
+    expect(doneLabel('self')).toBe('완료함');
+    expect(doneLabel('order')).toBe('확인함');
+    expect(doneLabel('notice')).toBe('확인함');
   });
 });
 
@@ -137,15 +139,21 @@ describe('달력 날짜', () => {
     expect(workItemsForDate(items, '2026-10-09', TODAY).map((i) => i.id)).toEqual(['future']);
   });
 
-  it('달력 표시는 내가 처리할 안 끝난 것(내 할 일 + 받은 것)만 센다', () => {
+  it('달력 칸에는 받은 것 → 내 할 일 → 보낸 것 순으로, 안 끝난 것이 앞에 뜬다', () => {
     const items = [
-      item({ id: 'recv', dueDate: '2026-10-09' }),
-      item({ id: 'mine', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09' }),
-      item({ id: 'mine-done', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09', doneAt: '2026-10-05T01:00:00Z' }),
       item({ id: 'sent', createdBy: ME, assigneeId: OTHER, dueDate: '2026-10-09' }),
+      item({ id: 'mine-done', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09', doneAt: '2026-10-05T01:00:00Z' }),
+      item({ id: 'mine', kind: 'self', createdBy: ME, assigneeId: ME, dueDate: '2026-10-09' }),
+      item({ id: 'recv', dueDate: '2026-10-09' }),
+      item({ id: 'recv-done', dueDate: '2026-10-09', doneAt: '2026-10-05T01:00:00Z' }),
     ];
-    expect(dayMarker(items, ME, '2026-10-09', TODAY, NOW)).toEqual({ open: 2, received: 1 });
-    expect(dayMarker(items, ME, '2026-10-10', TODAY, NOW)).toEqual({ open: 0, received: 0 });
+    expect(dayChips(items, ME, '2026-10-09', TODAY, NOW).map((c) => `${c.role}:${c.id}${c.done ? ':done' : ''}`)).toEqual([
+      'received:recv',
+      'mine:mine',
+      'mine:mine-done:done',
+      'sent:sent',
+    ]);
+    expect(dayChips(items, ME, '2026-10-10', TODAY, NOW)).toEqual([]);
   });
 });
 
