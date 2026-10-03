@@ -62,6 +62,8 @@ export default function HappyCallRegisterPage() {
   const [onlyUnreconciled, setOnlyUnreconciled] = useState(false);
   // 초진 후 3주가 지난 환자는 기본으로 접어 두고, "펼쳐서 보기"로 다시 볼 수 있다.
   const [showOld, setShowOld] = useState(false);
+  // 해피콜 표는 접수기록부의 초진·재초진으로 자동 등록되므로 수동 등록 도구(예약 후보 목록·직접 등록 줄)는 접어 둔다.
+  const [showManual, setShowManual] = useState(false);
   const [autoFillNote, setAutoFillNote] = useState('');
   const automationStarted = useRef(false);
 
@@ -259,13 +261,29 @@ export default function HappyCallRegisterPage() {
       {/* 이 페이지는 AppMain의 WIDE_PATHS에 들어 있어 1100px 폭 제한 없이 화면 가로
           전체를 쓴다 — 표 칸이 많아서(성함~메모) 최대한 스크롤 없이 보이게 하려는 것. */}
       <div>
-        <FirstVisitCandidates
-          date={candidateDate}
-          onDateChange={handleCandidateDateChange}
-          staffList={staffList}
-          registered={registeredOnDate}
-          onRegister={handleRegisterCandidate}
-        />
+        <div style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setShowManual((v) => !v)}
+            aria-expanded={showManual}
+            style={{ fontSize: 13, padding: '5px 12px', fontWeight: 600 }}
+          >
+            ✍️ 수동 등록 (예약 명단 후보 · 직접 등록 줄) {showManual ? '▲' : '▼'}
+          </button>
+          <span className="muted-text" style={{ fontSize: 12, marginLeft: 8 }}>
+            접수기록부에 초진·재초진으로 적으면 이 표에 자동으로 올라와요. 자동으로 안 올라온 분만 여기서 직접 올려 주세요.
+          </span>
+        </div>
+
+        {showManual && (
+          <FirstVisitCandidates
+            date={candidateDate}
+            onDateChange={handleCandidateDateChange}
+            staffList={staffList}
+            registered={registeredOnDate}
+            onRegister={handleRegisterCandidate}
+          />
+        )}
 
         <VisitHistoryImport onDone={() => load(candidateDate)} />
 
@@ -438,6 +456,7 @@ export default function HappyCallRegisterPage() {
           ))}
 
           {/* 등록 줄 — 이름 + 진료의 + 구분을 모두 고르고 Enter 또는 "등록"을 눌러야 저장된다(칸을 옮기는 것만으로는 저장되지 않음). */}
+          {showManual && (
           <tr style={{ background: '#fafdf9' }}>
             <td style={cellStyle}>
               <input
@@ -529,6 +548,7 @@ export default function HappyCallRegisterPage() {
             </td>
             <td style={cellStyle} colSpan={7}></td>
           </tr>
+          )}
         </tbody>
       </table>
         </div>
