@@ -10,6 +10,7 @@ import {
   recordCallResult,
   undoCallResult,
 } from '@/lib/supabase/happyCallWorklist';
+import { syncHappyCallFromReception } from '@/lib/supabase/happyCallAutoSync';
 import { todayKst } from '@/lib/kst';
 import type { CallAction, Worklist, WorklistItem } from '@/lib/happyCallQueue';
 
@@ -27,6 +28,11 @@ export function useHappyCallWorklist() {
   const requestId = useRef(0);
 
   const reload = useCallback(async () => {
+    // 접수기록부의 초진·재초진이 해피콜 표에 올라가 있어야 콜 목록에 잡힌다 — 등록 화면을 안 열어도 되게 여기서도 맞춘다.
+    // 목록 표시를 막지 않도록 따로 돌리고, 새로 올라온 게 있을 때만 한 번 더 읽는다(3분 안에 다시 부르면 건너뛴다).
+    void syncHappyCallFromReception(supabase).then((r) => {
+      if (r.created > 0) void reload();
+    });
     const id = ++requestId.current;
     const nextToday = todayKst();
     setLoading(true);

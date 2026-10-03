@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { updateHappyCallPatient } from '@/lib/supabase/happyCallPatients';
 import { listVisitHistoryContacts } from '@/lib/supabase/patientVisitHistory';
-import { planContactFill, type ContactFillPlan, type HistoryContact } from '@/lib/happyCallContactFill';
+import { mergeCandidateContacts, planContactFill, type ContactFillPlan, type HistoryContact } from '@/lib/happyCallContactFill';
 import type { FirstVisitCandidatesResult } from '@/lib/firstVisit';
 import type { HappyCallPatient } from '@/lib/types';
 
@@ -44,19 +44,7 @@ export function FillContactsFromCandidates({ patients, onDone }: { patients: Hap
             const response = await fetch(`/api/first-visit-candidates?date=${encodeURIComponent(date)}`);
             if (response.ok) {
               const json = (await response.json()) as FirstVisitCandidatesResult;
-              for (const c of json.candidates) {
-                // 차트번호가 있는 후보만 쓴다(접수기록부에서 온 이름뿐인 후보는 채울 값이 없다).
-                if (!c.chartNo) continue;
-                const key = c.chartNo.trim();
-                const known = byChart.get(key);
-                if (known) {
-                  // 같은 차트는 한 줄로 합친다(두 줄이면 한 환자를 두 번 가리키는 것으로 보여 건너뛰게 된다).
-                  known.visitDates = [...(known.visitDates ?? []), date];
-                  if (!known.phone && c.phone) known.phone = c.phone;
-                } else {
-                  byChart.set(key, { chartNo: c.chartNo, patientName: c.patientName, phone: c.phone || null, registeredDate: date, firstVisit: date, visitDates: [date] });
-                }
-              }
+              mergeCandidateContacts(byChart, date, json.candidates);
             }
             done++;
             setProgress(`${done}/${dates.length}일 확인 중...`);

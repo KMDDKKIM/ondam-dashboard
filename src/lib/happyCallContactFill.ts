@@ -105,3 +105,27 @@ export function planContactFill(patients: FillTarget[], history: HistoryContact[
   }
   return { fills, ambiguous, notFound };
 }
+
+/**
+ * 그날 일일결산·예약 명단 후보(차트번호가 있는 것만)를 차트번호별로 한 줄로 합쳐 넣는다 — 이미 저장된 내원 이력과
+ * 같은 차트면 그 줄에 내원일을 더하고, 아니면 새 줄을 만든다. 같은 차트가 두 줄이면 한 환자를 둘로 보아 건너뛰게 되기 때문이다.
+ */
+export function mergeCandidateContacts(
+  byChart: Map<string, HistoryContact>,
+  date: string,
+  candidates: { patientName: string; chartNo: string; phone: string }[]
+): void {
+  for (const c of candidates) {
+    // 차트번호가 없는 후보(접수기록부에서 온 이름뿐인 후보)는 채울 값이 없다.
+    if (!c.chartNo) continue;
+    const key = c.chartNo.trim();
+    const known = byChart.get(key);
+    if (known) {
+      known.visitDates = [...(known.visitDates ?? []), date];
+      if (!known.phone && c.phone) known.phone = c.phone;
+    } else {
+      byChart.set(key, { chartNo: c.chartNo, patientName: c.patientName, phone: c.phone || null, registeredDate: date, firstVisit: date, visitDates: [date] });
+    }
+  }
+}
+
