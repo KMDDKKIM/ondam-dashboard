@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { LeaveKind } from '@/lib/leave';
 import type { LeaveRequest, LeaveRequestEdit } from '@/lib/supabase/leave';
+import { isPublicHoliday } from '@/lib/publicHolidays';
 
 const kindLabel: Record<LeaveKind, string> = { monthly: '월차', annual: '연차' };
 
@@ -41,8 +42,8 @@ export function LeaveRequestList({ requests, showStaffName = false, emptyText, o
     setDraft((d) => {
       if (!d) return d;
       const next = { ...d, ...p };
-      // 반차는 하루짜리일 때만 — 기간이 하루가 아니게 되면 종일로 되돌린다.
-      if (next.startDate !== next.endDate) next.halfDay = null;
+      // 반차는 하루짜리이면서 공휴일이 아닐 때만 — 아니게 되면 종일로 되돌린다.
+      if (next.startDate !== next.endDate || isPublicHoliday(next.startDate)) next.halfDay = null;
       return next;
     });
   }
@@ -125,7 +126,7 @@ export function LeaveRequestList({ requests, showStaffName = false, emptyText, o
                       ))}
                   </select>
                 </div>
-                {draft.startDate === draft.endDate && (
+                {draft.startDate === draft.endDate && !isPublicHoliday(draft.startDate) && (
                   <div>
                     <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>반차</label>
                     <select

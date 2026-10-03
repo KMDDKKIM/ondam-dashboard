@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import type { Staff, Todo } from '@/lib/types';
 import type { ClinicEvent } from '@/lib/supabase/clinicEvents';
 import type { CalendarLeave } from '@/lib/homeCalendar';
+import { holidayName } from '@/lib/publicHolidays';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -82,6 +83,7 @@ export function HomeDayPanel(props: HomeDayPanelProps) {
           <span style={{ color: 'var(--color-green)' }}>✅</span>
           <span>{dateLabel(date)}</span>
           {date === today && <span className="muted-text" style={{ fontSize: 11, fontWeight: 600 }}>오늘</span>}
+          {holidayName(date) && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-error)' }}>{holidayName(date)}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <select

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LeaveKind } from '@/lib/leave';
+import { isPublicHoliday } from '@/lib/publicHolidays';
 
 // 이 파일의 함수는 RLS가 적용되는 일반 로그인 클라이언트로 호출한다(인센티브와 다르게
 // admin 클라이언트가 필요 없다) — 휴가 달력은 승인된 직원 전체가 서로 볼 수 있어야 하고,
@@ -156,7 +157,8 @@ export function buildLeaveEditPatch(
   const patch: Record<string, unknown> = {
     start_date: edit.startDate,
     end_date: edit.endDate,
-    half_day: edit.startDate === edit.endDate ? edit.halfDay : null,
+    // 반차는 하루짜리이면서 공휴일이 아닐 때만(공휴일은 반차 없이 하루 단위로만).
+    half_day: edit.startDate === edit.endDate && !isPublicHoliday(edit.startDate) ? edit.halfDay : null,
     kind: edit.kind,
     memo: edit.memo || null,
   };

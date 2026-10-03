@@ -20,6 +20,7 @@ import {
 } from '@/lib/supabase/leave';
 import { MonthCalendar, type CalendarEntry } from '@/components/leave/MonthCalendar';
 import { LeaveRequestList } from '@/components/leave/LeaveRequestList';
+import { holidayName } from '@/lib/publicHolidays';
 
 interface Me {
   id: string;
@@ -257,7 +258,7 @@ export default function LeavePage() {
   }, [balances, allowedKinds, kind]);
 
   useEffect(() => {
-    if (startDate !== endDate && halfDay) setHalfDay(null);
+    if ((startDate !== endDate || holidayName(startDate)) && halfDay) setHalfDay(null);
   }, [startDate, endDate, halfDay]);
 
   const staffBalances = useMemo(() => {
@@ -301,7 +302,7 @@ export default function LeavePage() {
         staffId: me.id,
         startDate,
         endDate,
-        halfDay: startDate === endDate ? halfDay : null,
+        halfDay: startDate === endDate && !holidayName(startDate) ? halfDay : null,
         kind,
         memo,
         requestedBy: me.id,
@@ -404,7 +405,12 @@ export default function LeavePage() {
   if (loading) return <p className="muted-text">불러오는 중...</p>;
   if (!me) return <p className="muted-text">직원 정보를 찾을 수 없어요.</p>;
 
-  const previewDays = startDate <= endDate ? leaveDaysUsed(startDate, endDate, startDate === endDate ? halfDay : null) : 0;
+  const sameDayHoliday = startDate === endDate ? holidayName(startDate) : null;
+  const previewDays = startDate <= endDate ? leaveDaysUsed(startDate, endDate, startDate === endDate && !sameDayHoliday ? halfDay : null) : 0;
+  const grantedStaff = staffList.filter((s) => {
+    const b = staffBalances.get(s.id);
+    return b && (b.monthly.entitled > 0 || b.annual.entitled > 0);
+  });
 
   return (
     <div>
@@ -516,7 +522,7 @@ export default function LeavePage() {
                   </select>
                 )}
               </div>
-              {startDate === endDate && (
+              {startDate === endDate && !sameDayHoliday && (
                 <div>
                   <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>반차</label>
                   <select
@@ -540,6 +546,7 @@ export default function LeavePage() {
               </button>
               <p className="muted-text" style={{ width: '100%', fontSize: 12, margin: 0 }}>
                 {previewDays}일 차감돼요(원장 승인 전까지는 잔여일수에서 빠지지 않아요).
+                {sameDayHoliday && ` ${sameDayHoliday}은(는) 공휴일이라 반차 없이 하루 단위로만 신청돼요.`}
               </p>
             </form>
           )}
@@ -599,35 +606,43 @@ export default function LeavePage() {
           <p className="muted-text" style={{ fontSize: 12, marginBottom: 12 }}>
             입사일 자동 계산 없이, 아래 폼으로 직접 부여해요 — 월차는 보통 매달 1일씩 누적되고, 연차는 해마다 정해진 일수를 부여하면 그 해가 지날 때 미사용분이 소멸돼요(이월 없음).
           </p>
-          <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                  {['이름', '월차(부여/사용/남음, 누적)', `연차(${viewYear}년 부여/사용/남음)`].map((h) => (
-                    <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {staffList.map((s) => {
-                  const b = staffBalances.get(s.id);
-                  return (
-                    <tr key={s.id}>
-                      <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', fontWeight: 600 }}>{s.name}</td>
-                      <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>
-                        {b ? `${b.monthly.entitled} / ${b.monthly.used} / ${b.monthly.available}` : '-'}
-                      </td>
-                      <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>
-                        {b ? `${b.annual.entitled} / ${b.annual.used} / ${b.annual.available}` : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {grantedStaff.length === 0 ? (
+            <p className="muted-text" style={{ fontSize: 13, marginBottom: 16 }}>
+              아직 부여한 직원이 없어요. 아래에서 월차·연차를 부여하면 여기에 나타나요.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
+                    {['이름', '월차 (누적)', `연차 (${viewYear}년)`].map((h) => (
+                      <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {grantedStaff.map((s) => {
+                    const b = staffBalances.get(s.id);
+                    const cell = (balance: LeaveBalance | undefined) =>
+                      balance && balance.entitled > 0 ? (
+                        <>
+                          부여 {balance.entitled} · 사용 {balance.used} · <strong style={{ color: balance.available < 0 ? 'var(--color-error)' : undefined }}>남음 {balance.available}</strong>
+                        </>
+                      ) : null;
+                    return (
+                      <tr key={s.id}>
+                        <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', fontWeight: 600 }}>{s.name}</td>
+                        <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>{cell(b?.monthly)}</td>
+                        <td style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)' }}>{cell(b?.annual)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <form onSubmit={handleAddAdjustment} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
             <div>

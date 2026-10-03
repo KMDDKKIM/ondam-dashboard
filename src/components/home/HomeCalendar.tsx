@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { currentMonthKst, todayKst } from '@/lib/kst';
 import { monthGridWeeks } from '@/lib/leave';
+import { holidayName } from '@/lib/publicHolidays';
 import { assignEventLanes, buildDayEntries, eventSegment } from '@/lib/homeCalendar';
 import { todosForDate } from '@/lib/todoVisibility';
 import { listLeaveRequests, type LeaveRequest } from '@/lib/supabase/leave';
@@ -238,6 +239,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
               const isToday = date === today;
               const isSelected = date === selectedDate;
               const day = dayEntries.get(date);
+              const pubHoliday = holidayName(date);
               const leaveChips = day?.leaves ?? [];
               const openTodos = openTodoCount(date);
               return (
@@ -257,7 +259,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     borderRadius: 6,
                     border: isSelected ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
                     margin: isSelected ? -1 : 0,
-                    background: isSelected ? 'rgba(44, 143, 214, 0.10)' : inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
+                    background: isSelected ? 'rgba(44, 143, 214, 0.10)' : !inMonth ? 'var(--color-surface-2)' : pubHoliday ? 'rgba(209, 69, 59, 0.07)' : 'var(--color-surface)',
                     opacity: inMonth ? 1 : 0.55,
                     cursor: 'pointer',
                     position: 'relative',
@@ -268,7 +270,7 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                       style={{
                         fontSize: 10,
                         fontWeight: isToday ? 700 : 500,
-                        color: isToday ? '#fff' : 'var(--color-ink)',
+                        color: isToday ? '#fff' : pubHoliday ? 'var(--color-error)' : 'var(--color-ink)',
                         background: isToday ? 'var(--color-brand-b)' : 'transparent',
                         borderRadius: 999,
                         padding: isToday ? '0 5px' : 0,
@@ -276,6 +278,14 @@ export function HomeCalendar({ isOwner }: { isOwner: boolean }) {
                     >
                       {Number(date.slice(8, 10))}
                     </span>
+                    {pubHoliday && (
+                      <span
+                        title={pubHoliday}
+                        style={{ flex: 1, minWidth: 0, margin: '0 2px', fontSize: 8, fontWeight: 600, color: 'var(--color-error)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {pubHoliday}
+                      </span>
+                    )}
                     {openTodos > 0 && (
                       <span title={`남은 할 일 ${openTodos}건`} style={{ fontSize: 9, fontWeight: 700, color: 'var(--color-green)' }}>
                         ✓{openTodos}

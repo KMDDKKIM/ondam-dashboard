@@ -1,6 +1,7 @@
 'use client';
 
 import { isClinicHoliday } from '@/lib/clinicHolidays';
+import { holidayName } from '@/lib/publicHolidays';
 import type { LeaveKind } from '@/lib/leave';
 
 export interface CalendarEntry {
@@ -71,7 +72,8 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
             const isToday = date === today;
             const dayNum = Number(date.slice(8, 10));
             const entries = entriesByDate.get(date) ?? [];
-            const holiday = isClinicHoliday(date);
+            const clinicClosed = isClinicHoliday(date);
+            const pubHoliday = holidayName(date);
             return (
               <div
                 key={date}
@@ -79,14 +81,15 @@ export function MonthCalendar({ month, weeks, today, entriesByDate, onPrevMonth,
                   minHeight: compact ? 38 : 52,
                   borderRadius: 8,
                   border: isToday ? '2px solid var(--color-brand-b)' : '1px solid var(--color-line)',
-                  background: inMonth ? 'var(--color-surface)' : 'var(--color-surface-2)',
+                  background: !inMonth ? 'var(--color-surface-2)' : pubHoliday ? 'rgba(209, 69, 59, 0.07)' : 'var(--color-surface)',
                   padding: 3,
                   opacity: inMonth ? 1 : 0.5,
                 }}
               >
-                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2 }}>
+                <div style={{ fontSize: compact ? 10 : 11, fontWeight: isToday ? 700 : 500, marginBottom: compact ? 1 : 2, color: pubHoliday ? 'var(--color-error)' : undefined }}>
                   {dayNum}
-                  {holiday && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}
+                  {pubHoliday && <span style={{ marginLeft: 3, fontSize: compact ? 8 : 9, fontWeight: 600 }}>{pubHoliday}</span>}
+                  {!pubHoliday && clinicClosed && <span style={{ color: 'var(--color-error)', marginLeft: 4, fontSize: 10 }}>휴진</span>}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {entries.map((entry) => (

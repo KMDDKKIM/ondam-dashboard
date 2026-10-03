@@ -32,4 +32,9 @@ describe('buildLeaveEditPatch', () => {
     const patch = buildLeaveEditPatch({ ...edit, memo: '' }, { id: 'me', isOwner: false, currentStatus: 'pending' }, NOW);
     expect(patch.memo).toBeNull();
   });
+
+  it('공휴일에는 반차를 비운다', () => {
+    const patch = buildLeaveEditPatch({ ...edit, startDate: '2026-10-09', endDate: '2026-10-09', halfDay: 'am' }, { id: 'me', isOwner: false, currentStatus: 'pending' }, NOW);
+    expect(patch.half_day).toBeNull();
+  });
 });
