@@ -234,71 +234,101 @@ a.card:hover {
   outline: none;
 }
 
-/* 홈("오늘") 배치: 왼쪽(넓게)에 현황과 그 아래 같은 폭의 카드 2장, 오른쪽(좁게)에 달력+날짜별
-   할 일을 세로로 길게. 좁은 화면에서는 한 줄씩 쌓인다. */
-.home-top-row {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 20px;
-  align-items: stretch;
-}
-
-.home-left {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-
-.home-left > .card {
-  margin-bottom: 0 !important;
-}
-
-.home-right {
-  min-width: 0;
+/* 홈("오늘") 배치: 위쪽에 이번 달 현황(왼쪽)과 달력(오른쪽)을 큰 카드 하나로 합치고, 그 아래에 같은 폭 3칸
+   (오늘 확인할 것 · 오늘의 해피콜 · 고른 날짜 할 일·요청). 좁은 화면에서는 한 줄씩 쌓인다. */
+.home-board {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.home-right > .card {
-  flex: 0 0 auto;
+/* 위 큰 카드와 아래 3칸(.home-triple)은 같은 3열 격자(열 간격 20px)를 쓴다 — 현황이 2열, 달력이 3열을
+   차지해서, 달력이 그 아래 세 번째 카드(할 일·요청)와 폭과 양쪽 끝이 똑같이 맞는다. 카드 바깥 여백은
+   없애고 안쪽 여백을 각 칸이 갖는다(세 번째 카드의 안쪽 여백 16px와 달력 열의 16px가 같다). */
+.home-hero {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 20px;
+  padding: 0;
   margin-bottom: 0 !important;
 }
 
-/* 맨 아래 카드(할 일·전달사항)가 남는 높이를 채워 왼쪽 열과 끝을 맞춘다. */
-.home-right > .card:last-child {
-  flex: 1 1 auto;
+.home-hero-stats {
+  grid-column: span 2;
+  padding: 20px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
 }
 
-.home-bottom {
+/* 현황이 넓으면 총매출·일평균·객단가를 한 줄 3칸으로, 좁으면 총매출을 한 줄 다 쓰고 나머지 두 칸. */
+.home-stat-tiles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@container (max-width: 620px) {
+  .home-stat-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat-wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.home-hero-stats > div {
+  flex: 1;
+}
+
+.home-hero-cal {
+  min-width: 0;
+  padding: 20px 16px;
+  border-left: 1px solid var(--color-line);
+}
+
+.home-triple {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
   align-items: stretch;
 }
 
-.home-bottom > div {
+.home-triple > div {
   min-width: 0;
   display: flex;
 }
 
-.home-bottom > div > .card {
+.home-triple > div > .card {
   flex: 1;
   margin-bottom: 0 !important;
-  max-height: 380px;
+  max-height: 420px;
   overflow-y: auto;
 }
 
-@media (max-width: 1200px) {
-  .home-top-row {
+/* 현황(왼쪽 2열)과 달력(오른쪽 1열)은 나란히 둔다 — 화면이 좁아질 때(1000px 이하)만 쌓는다. */
+/* 아래 3칸(확인할 것 · 해피콜 · 할 일·요청)은 가로로 나란히 — 아주 좁은 화면(760px 이하)에서만 쌓는다. */
+@media (max-width: 760px) {
+  .home-triple {
     grid-template-columns: minmax(0, 1fr);
   }
-  .home-bottom {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .home-bottom > div > .card {
+  .home-triple > div > .card {
     max-height: none;
+  }
+}
+
+@media (max-width: 1000px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .home-hero-stats {
+    grid-column: 1 / -1;
+  }
+  .home-hero-cal {
+    border-left: none;
+    border-top: 1px solid var(--color-line);
   }
 }
 
