@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
@@ -82,6 +83,14 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
 
   function removeHerbRow(index: number) {
     onChange({ ...value, herbs: value.herbs.filter((_, i) => i !== index) });
+  }
+
+  // 넣어 둔 약재를 한 번에 지우고 빈 줄 하나로 되돌린다(약재 외 환자명·첩수 등은 그대로). 실수로 누르지 않게 확인을 받는다.
+  async function clearAllHerbs() {
+    const filled = value.herbs.filter((h) => h.herbName.trim() !== '' || h.prepMethod.trim() !== '' || h.gramsPerPacket > 0).length;
+    if (filled === 0) return;
+    if (!(await confirmDialog(`약재 ${filled}개를 모두 지울까요?`, { confirmLabel: '모두 삭제' }))) return;
+    onChange({ ...value, herbs: [{ herbName: '', prepMethod: '', gramsPerPacket: 0 }] });
   }
 
   function sortByGrams(direction: 'asc' | 'desc') {
@@ -331,9 +340,14 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
       {incompleteLines.length > 0 && (
         <p className="error-text">약재명과 그램을 둘 다 채워주세요: {incompleteLines.join(', ')}번 줄</p>
       )}
-      <button type="button" onClick={addHerbRow} style={{ marginBottom: 14 }}>
-        약재 추가
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button type="button" onClick={addHerbRow}>
+          약재 추가
+        </button>
+        <button type="button" onClick={clearAllHerbs} style={{ color: 'var(--color-error)' }}>
+          약재 전체 삭제
+        </button>
+      </div>
 
       <p style={{ fontWeight: 700, marginBottom: 14 }}>약재 총량: {total.toLocaleString('ko-KR')}g</p>
 
