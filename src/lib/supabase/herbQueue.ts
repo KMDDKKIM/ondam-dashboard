@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { HerbQueueDraft, HerbQueueItem, HerbQueueStatus } from '@/lib/herbQueue';
+import { pickQueueItemsToComplete, type HerbQueueDraft, type HerbQueueItem, type HerbQueueStatus } from '@/lib/herbQueue';
 
 interface Row {
   id: string;
@@ -130,5 +130,33 @@ export async function countWaitingHerbQueue(supabase: SupabaseClient, doctorName
     return error ? null : (count ?? 0);
   } catch {
     return null;
+  }
+}
+
+/**
+ * 한약 처방전을 인쇄한 뒤 대기방의 해당 신청을 "완료"로 바꾼다(원장 요청, 2026-10-06 — 대기 알림 숫자가 남아 있지 않게).
+ * 고를 신청이 없거나(같은 이름이 여럿 등) 실패하면 아무것도 하지 않고 빈 목록을 돌려준다. 바꾼 신청을 돌려줘서 되돌릴 수 있다.
+ */
+export async function completeQueueForPrescription(
+  supabase: SupabaseClient,
+  prescription: { queueId?: string | null; patientName: string; chartNo: string },
+  by: { id: string | null; name: string }
+): Promise<HerbQueueItem[]> {
+  try {
+    const { data, error } = await supabase.from('herb_queue').select('*').eq('status', 'waiting').order('created_at', { ascending: true });
+    if (error) return [];
+    const targets = pickQueueItemsToComplete(((data ?? []) as Row[]).map(rowToItem), prescription);
+    const completed: HerbQueueItem[] = [];
+    for (const item of targets) {
+      try {
+        await markHerbQueueDone(supabase, item.id, by);
+        completed.push(item);
+      } catch {
+        // 그 사이 다른 사람이 먼저 완료했으면 넘어간다.
+      }
+    }
+    return completed;
+  } catch {
+    return [];
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQueueTime, missingFields, resolveHerbQueueDoctorFilter, sortDone, sortWaiting, type HerbQueueItem } from './herbQueue';
+import { formatQueueTime, missingFields, pickQueueItemsToComplete, resolveHerbQueueDoctorFilter, sortDone, sortWaiting, type HerbQueueItem } from './herbQueue';
 
 function item(o: Partial<HerbQueueItem>): HerbQueueItem {
   return { id: 'a', patientName: '가상환자', chartNo: '', doctorName: '김동규', herbDesc: '일반한약 15일', note: '', status: 'waiting', requestedByName: '', createdAt: '2026-09-21T01:00:00Z', doneByName: '', doneAt: null, ...o };
@@ -40,3 +40,42 @@ describe('resolveHerbQueueDoctorFilter', () => {
     expect(resolveHerbQueueDoctorFilter(null, ['김동규', '박소은'])).toBeNull();
   });
 });
+
+describe('pickQueueItemsToComplete', () => {
+  it('대기방에서 넘어온 신청 번호가 있으면 그 신청', () => {
+    const waiting = [item({ id: 'a', patientName: '가상환자' }), item({ id: 'b', patientName: '가상환자' })];
+    expect(pickQueueItemsToComplete(waiting, { queueId: 'b', patientName: '가상환자', chartNo: '' }).map((i) => i.id)).toEqual(['b']);
+  });
+
+  it('신청 번호가 있어도 처방전의 환자 이름이 다르면 그 신청이 아니다', () => {
+    const waiting = [item({ id: 'a', patientName: '가상환자' })];
+    expect(pickQueueItemsToComplete(waiting, { queueId: 'a', patientName: '다른환자', chartNo: '' })).toEqual([]);
+  });
+
+  it('번호가 없으면 같은 이름의 대기 신청이 하나일 때만', () => {
+    const waiting = [item({ id: 'a', patientName: '가상환자' }), item({ id: 'b', patientName: '다른환자' })];
+    expect(pickQueueItemsToComplete(waiting, { patientName: ' 가상환자 ', chartNo: '' }).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('같은 이름의 대기 신청이 여럿이면 누구 것인지 몰라 아무것도 고르지 않는다', () => {
+    const waiting = [item({ id: 'a' }), item({ id: 'b' })];
+    expect(pickQueueItemsToComplete(waiting, { patientName: '가상환자', chartNo: '' })).toEqual([]);
+  });
+
+  it('차트번호가 둘 다 있는데 다르면 다른 사람이다', () => {
+    const waiting = [item({ id: 'a', chartNo: '1001' })];
+    expect(pickQueueItemsToComplete(waiting, { patientName: '가상환자', chartNo: '2002' })).toEqual([]);
+    expect(pickQueueItemsToComplete(waiting, { patientName: '가상환자', chartNo: '1001' }).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('신청에 차트번호가 없으면 이름만으로, 처방전에 차트번호가 없어도 이름만으로 맞춘다', () => {
+    expect(pickQueueItemsToComplete([item({ id: 'a', chartNo: '' })], { patientName: '가상환자', chartNo: '1001' }).map((i) => i.id)).toEqual(['a']);
+    expect(pickQueueItemsToComplete([item({ id: 'a', chartNo: '1001' })], { patientName: '가상환자', chartNo: '' }).map((i) => i.id)).toEqual(['a']);
+  });
+
+  it('이미 완료된 신청이나 이름이 없는 처방전은 고르지 않는다', () => {
+    expect(pickQueueItemsToComplete([item({ id: 'a', status: 'done' })], { queueId: 'a', patientName: '가상환자', chartNo: '' })).toEqual([]);
+    expect(pickQueueItemsToComplete([item({ id: 'a' })], { patientName: ' ', chartNo: '' })).toEqual([]);
+  });
+});
+

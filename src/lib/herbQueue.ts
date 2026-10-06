@@ -63,3 +63,26 @@ export function resolveHerbQueueDoctorFilter(staffName: string | null, doctorNam
   if (!staffName) return null;
   return doctorNames.includes(staffName) ? staffName : null;
 }
+
+/**
+ * 한약 처방전을 인쇄했을 때 같이 "완료"로 바꿀 대기 신청을 고른다.
+ *  - 대기방의 "처방전 쓰기"로 들어왔으면(queueId) 그 신청(환자 이름이 같을 때).
+ *  - 아니면 같은 환자 성함의 대기 신청이 딱 하나일 때만 — 차트번호가 둘 다 있는데 다르면 다른 사람으로 본다.
+ *  같은 이름의 대기 신청이 여럿이면 누구 것인지 알 수 없어 자동으로 처리하지 않는다(대기방에서 직접 완료).
+ */
+export function pickQueueItemsToComplete(
+  waiting: HerbQueueItem[],
+  prescription: { queueId?: string | null; patientName: string; chartNo: string }
+): HerbQueueItem[] {
+  const pending = waiting.filter((w) => w.status === 'waiting');
+  const name = prescription.patientName.trim();
+  if (!name) return [];
+  if (prescription.queueId) {
+    // 대기방에서 넘어온 뒤 환자를 바꿔 쓴 경우(이름이 다름)에는 그 신청이 아니다.
+    const linked = pending.find((w) => w.id === prescription.queueId && w.patientName.trim() === name);
+    if (linked) return [linked];
+  }
+  const chart = prescription.chartNo.trim();
+  const matches = pending.filter((w) => w.patientName.trim() === name && (!chart || !w.chartNo.trim() || w.chartNo.trim() === chart));
+  return matches.length === 1 ? matches : [];
+}

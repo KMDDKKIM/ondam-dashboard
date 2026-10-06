@@ -231,8 +231,8 @@ export default function HerbQueuePage() {
                     완료
                   </button>{' '}
                   <Link
-                    href={`/herb-compounding?patientName=${encodeURIComponent(w.patientName)}&chartNo=${encodeURIComponent(w.chartNo)}`}
-                    title="환자명·차트번호를 채운 채로 한약 처방전 화면을 열어요"
+                    href={`/herb-compounding?patientName=${encodeURIComponent(w.patientName)}&chartNo=${encodeURIComponent(w.chartNo)}&queueId=${encodeURIComponent(w.id)}`}
+                    title="환자명·차트번호를 채운 채로 한약 처방전 화면을 열어요. 처방전을 인쇄하면 이 신청이 완료로 바뀌어요"
                     style={{ fontSize: 12, padding: '2px 6px', color: 'var(--color-brand-b)', whiteSpace: 'nowrap' }}
                   >
                     처방전 쓰기

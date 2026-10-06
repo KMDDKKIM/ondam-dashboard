@@ -15,6 +15,7 @@ import {
   type KnownHerbPatient,
 } from '@/lib/supabase/herbCompounding';
 import { listHerbInventory } from '@/lib/supabase/herbInventory';
+import { completeQueueForPrescription, currentStaff, undoHerbQueueDone } from '@/lib/supabase/herbQueue';
 
 function makeEmptyOrder(): HerbCompoundingOrder {
   return {
@@ -47,6 +48,11 @@ export default function HerbCompoundingPage() {
   const [pendingPrint, setPendingPrint] = useState(false);
   const printedByButton = useRef(false);
   const [printedNotice, setPrintedNotice] = useState(false);
+  // 대기방의 "처방전 쓰기"로 들어온 경우 그 신청 번호 — 인쇄하면 그 신청을 완료로 바꾼다.
+  const queueIdRef = useRef<string | null>(null);
+  const printSnapshot = useRef<{ patientName: string; chartNo: string } | null>(null);
+  const [completedQueue, setCompletedQueue] = useState<{ id: string; name: string }[]>([]);
+  const [queueUndone, setQueueUndone] = useState(false);
 
   // 환자명 검색 후보 — 전에 저장한 처방전들에서 이름+차트번호 조합을 뽑는다.
   function refreshKnownPatients() {
@@ -68,6 +74,7 @@ export default function HerbCompoundingPage() {
     const params = new URLSearchParams(window.location.search);
     const loadId = params.get('load');
     const patientName = params.get('patientName');
+    queueIdRef.current = params.get('queueId');
     if (!loadId && !patientName) return;
     window.history.replaceState(null, '', '/herb-compounding');
     if (loadId) {
@@ -149,17 +156,48 @@ export default function HerbCompoundingPage() {
     if (!pendingPrint) return;
     setPendingPrint(false);
     printedByButton.current = true;
+    printSnapshot.current = { patientName: order.patientName, chartNo: order.chartNo };
     window.print();
   }, [pendingPrint]);
+
+  // 인쇄한 처방전의 한약 대기방 신청을 완료로 바꾼다 — 대기 알림 숫자가 남지 않게. 인쇄 창을 취소해도 브라우저는
+  // 인쇄한 것과 똑같이 알리므로, 바꾼 신청은 아래 안내의 "되돌리기"로 대기로 돌릴 수 있다.
+  function completeQueueAfterPrint() {
+    const snapshot = printSnapshot.current;
+    const queueId = queueIdRef.current;
+    printSnapshot.current = null;
+    queueIdRef.current = null;
+    setCompletedQueue([]);
+    if (!snapshot) return;
+    const supabase = createClient();
+    currentStaff(supabase)
+      .then((me) => completeQueueForPrescription(supabase, { queueId, ...snapshot }, me))
+      .then((items) => setCompletedQueue(items.map((i) => ({ id: i.id, name: i.patientName }))))
+      .catch(() => {
+        // 대기방 정리가 안 돼도 인쇄 자체에는 영향이 없다 — 대기방에서 직접 완료하면 된다.
+      });
+  }
+
+  async function undoQueueCompletion() {
+    const supabase = createClient();
+    try {
+      for (const item of completedQueue) await undoHerbQueueDone(supabase, item.id);
+      setQueueUndone(true);
+    } catch {
+      setErrorMessage('대기방 신청을 되돌리지 못했어요. 한약 대기방에서 직접 되돌려 주세요.');
+    }
+  }
 
   useEffect(() => {
     const onAfterPrint = () => {
       if (!printedByButton.current) return; // 버튼이 아니라 브라우저 메뉴·단축키로 인쇄한 경우는 그대로 둔다
       printedByButton.current = false;
+      completeQueueAfterPrint();
       setOrder(makeEmptyOrder());
       setSavedMessage('');
       setErrorMessage('');
       setPrintedNotice(true);
+      setQueueUndone(false);
       window.scrollTo({ top: 0 });
     };
     window.addEventListener('afterprint', onAfterPrint);
@@ -171,6 +209,7 @@ export default function HerbCompoundingPage() {
     setSavedMessage('');
     setErrorMessage('');
     setPrintedNotice(false);
+    queueIdRef.current = null;
   }
 
   return (
@@ -212,6 +251,16 @@ export default function HerbCompoundingPage() {
         {printedNotice && (
           <p style={{ color: 'var(--color-green)', fontSize: 13, marginTop: 8, fontWeight: 600 }}>
             ✔ 인쇄했어요. 처음 화면으로 돌아왔고, 방금 처방전은 &quot;과거 기록 보기&quot;에 있어요.
+          </p>
+        )}
+        {printedNotice && completedQueue.length > 0 && (
+          <p style={{ fontSize: 13, marginTop: 4, color: queueUndone ? 'var(--color-muted)' : 'var(--color-green)' }}>
+            {queueUndone ? '한약 대기방 신청을 대기로 되돌렸어요.' : `🫖 한약 대기방의 ${completedQueue.map((c) => c.name).join(', ')}님 신청을 완료로 바꿨어요.`}{' '}
+            {!queueUndone && (
+              <button type="button" onClick={undoQueueCompletion} style={{ border: 'none', background: 'none', textDecoration: 'underline', color: 'var(--color-muted)', fontSize: 12, padding: 0 }}>
+                되돌리기
+              </button>
+            )}
           </p>
         )}
         {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 &quot;인쇄하기&quot;를 눌러도 먼저 저장된 뒤 인쇄돼요. 인쇄 후에는 처음 화면으로 돌아와요.</p>}
