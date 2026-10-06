@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
-import { computePackCount, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
+import { computePackCount, duplicateHerbNames, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
 import { PatientSearch } from './PatientSearch';
 
@@ -114,6 +114,8 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
   }
 
   const total = totalHerbWeight(value.herbs, value.packetCount);
+  const duplicates = duplicateHerbNames(value.herbs);
+  const isDuplicate = (name: string) => duplicates.includes(name.trim());
 
   return (
     <div>
@@ -292,7 +294,10 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
         </thead>
         <tbody>
           {value.herbs.map((herb, i) => (
-            <tr key={i} style={incompleteLines.includes(i + 1) ? { background: 'rgba(209, 69, 59, 0.08)' } : undefined}>
+            <tr
+              key={i}
+              style={isDuplicate(herb.herbName) ? { background: 'rgba(209, 69, 59, 0.16)' } : incompleteLines.includes(i + 1) ? { background: 'rgba(209, 69, 59, 0.08)' } : undefined}
+            >
               <td style={{ padding: '2px 4px', color: 'var(--color-muted)' }}>{i + 1}</td>
               <td style={{ padding: '2px 4px' }}>
                 <input
@@ -303,6 +308,8 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
                   onChange={(e) => updateHerb(i, { herbName: e.target.value })}
                   onKeyDown={(e) => handleHerbCellTab(e, i, 0)}
                   placeholder="당귀"
+                  style={isDuplicate(herb.herbName) ? { color: 'var(--color-error)', fontWeight: 700, borderColor: 'var(--color-error)' } : undefined}
+                  aria-invalid={isDuplicate(herb.herbName) || undefined}
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>
@@ -337,6 +344,11 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
           ))}
         </tbody>
       </table>
+      {duplicates.length > 0 && (
+        <p className="error-text" role="alert" style={{ fontWeight: 700 }}>
+          ⚠ 겹치는 약재: {duplicates.join(', ')} — 용량은 합치지 않았어요. 줄을 확인해 하나로 정리해 주세요.
+        </p>
+      )}
       {incompleteLines.length > 0 && (
         <p className="error-text">약재명과 그램을 둘 다 채워주세요: {incompleteLines.join(', ')}번 줄</p>
       )}

@@ -4,6 +4,7 @@ import {
   computePackCount,
   herbLineTotal,
   incompleteHerbLines,
+  duplicateHerbNames,
   mergeHerbLines,
   parseHerbGramsEntry,
   sortHerbLinesByGrams,
@@ -102,8 +103,11 @@ describe('parseHerbGramsEntry', () => {
     expect(parseHerbGramsEntry('당귀 7.5').herbs).toEqual([{ herbName: '당귀', prepMethod: '', gramsPerPacket: 7.5 }]);
   });
 
-  it('같은 이름이 여러 번 나오면 그램을 더한다', () => {
-    expect(parseHerbGramsEntry('당귀 4 당귀 2').herbs).toEqual([{ herbName: '당귀', prepMethod: '', gramsPerPacket: 6 }]);
+  it('같은 이름이 여러 번 나와도 그램을 더하지 않고 줄을 따로 둔다', () => {
+    expect(parseHerbGramsEntry('당귀 4 당귀 2').herbs).toEqual([
+      { herbName: '당귀', prepMethod: '', gramsPerPacket: 4 },
+      { herbName: '당귀', prepMethod: '', gramsPerPacket: 2 },
+    ]);
   });
 
   it('끝까지 숫자가 안 붙은 이름은 반영하지 않고 danglingNames로 돌려준다', () => {
@@ -181,9 +185,26 @@ describe('mergeHerbLines', () => {
     expect(mergeHerbLines(existing, parsed)).toEqual([{ herbName: '당귀', prepMethod: '', gramsPerPacket: 6 }]);
   });
 
-  it('이름이 같으면 그램을 더하고, 이미 손으로 채운 값(수치 포함)을 지우지 않는다', () => {
+  it('이름이 같아도 그램을 합치지 않고 줄을 따로 둔다(이미 손으로 채운 값은 그대로)', () => {
     const existing = [{ herbName: '당귀', prepMethod: '주초', gramsPerPacket: 6 }];
     const parsed = [{ herbName: '당귀', prepMethod: '', gramsPerPacket: 4 }];
-    expect(mergeHerbLines(existing, parsed)).toEqual([{ herbName: '당귀', prepMethod: '주초', gramsPerPacket: 10 }]);
+    expect(mergeHerbLines(existing, parsed)).toEqual([
+      { herbName: '당귀', prepMethod: '주초', gramsPerPacket: 6 },
+      { herbName: '당귀', prepMethod: '', gramsPerPacket: 4 },
+    ]);
+  });
+});
+
+describe('duplicateHerbNames', () => {
+  it('두 줄 이상 겹치는 이름만 돌려준다', () => {
+    expect(duplicateHerbNames([{ herbName: '당귀' }, { herbName: '천궁' }, { herbName: '당귀' }, { herbName: '백출' }, { herbName: '백출' }, { herbName: '백출' }])).toEqual(['당귀', '백출']);
+  });
+
+  it('앞뒤 공백은 무시하고, 빈 이름은 세지 않는다', () => {
+    expect(duplicateHerbNames([{ herbName: '당귀' }, { herbName: ' 당귀 ' }, { herbName: '' }, { herbName: '  ' }])).toEqual(['당귀']);
+  });
+
+  it('겹치는 게 없으면 빈 배열', () => {
+    expect(duplicateHerbNames([{ herbName: '당귀' }, { herbName: '천궁' }])).toEqual([]);
   });
 });

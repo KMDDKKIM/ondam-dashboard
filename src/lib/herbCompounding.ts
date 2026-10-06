@@ -80,23 +80,17 @@ export interface ParsedHerbEntry {
 // "당귀 천궁 백출 4 산사 신곡 맥아 2" 처럼, 숫자 하나가 나오면 그 앞에 나온(아직 숫자가
 // 안 붙은) 약재 이름들 전부에 그 숫자를 1첩당 그램으로 적용한다(한약재 재고 일괄
 // 입고/사용 입력과 같은 표기). 줄바꿈·쉼표도 공백처럼 다뤄 붙여넣기도 그대로 받는다.
-// 같은 이름이 여러 번 나오면 그램을 더한다. 맨 앞에 숫자만 있고 이름이 없으면 버린다.
+// 같은 이름이 여러 번 나와도 그램을 더하지 않고 줄을 따로 둔다(겹치는 약재는 화면에서 빨갛게 경고한다 —
+// duplicateHerbNames). 맨 앞에 숫자만 있고 이름이 없으면 버린다.
 export function parseHerbGramsEntry(text: string): ParsedHerbEntry {
   const tokens = text.split(/[\s,]+/).filter(Boolean);
   const herbs: HerbLine[] = [];
-  const indexByName = new Map<string, number>();
   let pending: string[] = [];
 
   function flush(grams: number) {
     for (const name of pending) {
-      const existingIndex = indexByName.get(name);
-      if (existingIndex != null) {
-        herbs[existingIndex] = { ...herbs[existingIndex], gramsPerPacket: round1(herbs[existingIndex].gramsPerPacket + grams) };
-      } else {
-        indexByName.set(name, herbs.length);
-        // 일괄 입력 표기에는 수치(포제)가 없다 — 필요하면 약재 목록에서 따로 채운다.
-        herbs.push({ herbName: name, prepMethod: '', gramsPerPacket: grams });
-      }
+      // 일괄 입력 표기에는 수치(포제)가 없다 — 필요하면 약재 목록에서 따로 채운다.
+      herbs.push({ herbName: name, prepMethod: '', gramsPerPacket: grams });
     }
     pending = [];
   }
@@ -126,20 +120,19 @@ export function sortHerbLinesByGrams<T extends Pick<HerbLine, 'gramsPerPacket'>>
 }
 
 // 일괄 입력으로 새로 읽은 약재를, 이미 입력칸에 있던 약재 줄 뒤에 더한다. 완전히 빈 줄(이름도
-// 그램도 없는, 새 처방전 시작 시의 기본 빈 줄)은 버리고, 이름이 같으면(공백 다듬은 뒤) 그램을
-// 더한다 — 이미 손으로 채워 둔 줄을 일괄 입력이 지우지 않는다.
+// 그램도 없는, 새 처방전 시작 시의 기본 빈 줄)은 버린다. 이름이 같은 약재가 있어도 그램을 합치지
+// 않고 줄을 따로 둔다 — 겹친 것은 duplicateHerbNames 로 찾아 화면에서 경고한다(원장 요청, 2026-10-06).
 export function mergeHerbLines(existing: HerbLine[], parsed: HerbLine[]): HerbLine[] {
-  const merged: HerbLine[] = existing.filter((h) => h.herbName.trim() !== '' || h.gramsPerPacket > 0).map((h) => ({ ...h }));
-  const indexByName = new Map(merged.map((h, i) => [h.herbName.trim(), i]));
-  for (const h of parsed) {
-    const key = h.herbName.trim();
-    const existingIndex = indexByName.get(key);
-    if (existingIndex != null) {
-      merged[existingIndex] = { ...merged[existingIndex], gramsPerPacket: round1(merged[existingIndex].gramsPerPacket + h.gramsPerPacket) };
-    } else {
-      indexByName.set(key, merged.length);
-      merged.push({ ...h });
-    }
+  const kept = existing.filter((h) => h.herbName.trim() !== '' || h.gramsPerPacket > 0).map((h) => ({ ...h }));
+  return [...kept, ...parsed.map((h) => ({ ...h }))];
+}
+
+/** 이름이 겹치는 약재(공백을 다듬은 뒤 같은 이름이 두 줄 이상). 빈 이름은 세지 않는다. */
+export function duplicateHerbNames(herbs: Pick<HerbLine, 'herbName'>[]): string[] {
+  const count = new Map<string, number>();
+  for (const h of herbs) {
+    const name = h.herbName.trim();
+    if (name !== '') count.set(name, (count.get(name) ?? 0) + 1);
   }
-  return merged;
+  return [...count].filter(([, n]) => n > 1).map(([name]) => name);
 }
