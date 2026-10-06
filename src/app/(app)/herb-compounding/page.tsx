@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './herb-compounding.css';
 import { OrderForm } from '@/components/herbCompounding/OrderForm';
 import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
@@ -43,6 +43,10 @@ export default function HerbCompoundingPage() {
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  // "인쇄하기"를 누른 뒤 인쇄 창이 닫히면(afterprint) 처음 화면으로 돌아간다 — 인쇄했는지 헷갈리지 않게(원장 요청, 2026-10-06).
+  const [pendingPrint, setPendingPrint] = useState(false);
+  const printedByButton = useRef(false);
+  const [printedNotice, setPrintedNotice] = useState(false);
 
   // 환자명 검색 후보 — 전에 저장한 처방전들에서 이름+차트번호 조합을 뽑는다.
   function refreshKnownPatients() {
@@ -91,10 +95,10 @@ export default function HerbCompoundingPage() {
   const incompleteLines = incompleteHerbLines(order.herbs);
   const canSave = canSaveOrder(order) && incompleteLines.length === 0;
 
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     if (!canSave) {
       setErrorMessage('환자명·첩수·약재(약재명과 그램)를 채워주세요.');
-      return;
+      return false;
     }
     setSaving(true);
     setErrorMessage('');
@@ -122,21 +126,51 @@ export default function HerbCompoundingPage() {
       setSavedMessage('저장되었습니다.');
       setTimeout(() => setSavedMessage(''), 2000);
       refreshKnownPatients();
+      return true;
     } catch {
       setErrorMessage('저장에 실패했습니다. 다시 시도해 주세요.');
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  function handlePrint() {
-    window.print();
+  // 저장하지 않은 처방전은 먼저 저장하고 인쇄한다 — 인쇄 뒤 화면이 비워지므로 내용이 사라지지 않게, 그리고
+  // 인쇄한 처방전이 과거 기록에 남게. 저장에 실패하면 인쇄하지 않는다.
+  async function handlePrint() {
+    if (!canSave || saving) return;
+    setPrintedNotice(false);
+    if (!order.id && !(await handleSave())) return;
+    // 저장 결과가 화면(인쇄용 시트)에 반영된 다음에 인쇄 창을 연다.
+    setPendingPrint(true);
   }
+
+  useEffect(() => {
+    if (!pendingPrint) return;
+    setPendingPrint(false);
+    printedByButton.current = true;
+    window.print();
+  }, [pendingPrint]);
+
+  useEffect(() => {
+    const onAfterPrint = () => {
+      if (!printedByButton.current) return; // 버튼이 아니라 브라우저 메뉴·단축키로 인쇄한 경우는 그대로 둔다
+      printedByButton.current = false;
+      setOrder(makeEmptyOrder());
+      setSavedMessage('');
+      setErrorMessage('');
+      setPrintedNotice(true);
+      window.scrollTo({ top: 0 });
+    };
+    window.addEventListener('afterprint', onAfterPrint);
+    return () => window.removeEventListener('afterprint', onAfterPrint);
+  }, []);
 
   function handleNew() {
     setOrder(makeEmptyOrder());
     setSavedMessage('');
     setErrorMessage('');
+    setPrintedNotice(false);
   }
 
   return (
@@ -169,13 +203,18 @@ export default function HerbCompoundingPage() {
           <button type="button" onClick={handleSave} disabled={saving} className="btn-primary">
             {saving ? '저장 중...' : '저장하기'}
           </button>
-          <button type="button" onClick={handlePrint} disabled={!canSave}>
+          <button type="button" onClick={handlePrint} disabled={!canSave || saving}>
             인쇄하기
           </button>
           {savedMessage && <span style={{ color: 'var(--color-green)', fontSize: 13 }}>{savedMessage}</span>}
           {errorMessage && <span className="error-text">{errorMessage}</span>}
         </div>
-        {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 인쇄하면 과거 기록에는 안 남아요.</p>}
+        {printedNotice && (
+          <p style={{ color: 'var(--color-green)', fontSize: 13, marginTop: 8, fontWeight: 600 }}>
+            ✔ 인쇄했어요. 처음 화면으로 돌아왔고, 방금 처방전은 &quot;과거 기록 보기&quot;에 있어요.
+          </p>
+        )}
+        {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 &quot;인쇄하기&quot;를 눌러도 먼저 저장된 뒤 인쇄돼요. 인쇄 후에는 처음 화면으로 돌아와요.</p>}
       </div>
 
       <div className="print-only">
