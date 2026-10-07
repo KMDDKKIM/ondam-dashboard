@@ -232,7 +232,8 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
             min={0}
             value={value.totalLiquidMl || ''}
             onChange={(e) => set('totalLiquidMl', Number(e.target.value) || 0)}
-            style={{ width: 56, padding: '4px 6px', fontSize: 13 }}
+            // 총물량은 보통 10000~11000(mL)이라 다섯 자리가 잘리지 않게 넓힌다(원장 요청, 2026-10-07).
+            style={{ width: 104, padding: '4px 6px', fontSize: 13 }}
           />
           mL
         </label>
