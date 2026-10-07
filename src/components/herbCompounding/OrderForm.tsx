@@ -5,6 +5,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, duplicateHerbNames, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
+import { FormulaPicker } from './FormulaPicker';
 import { PatientSearch } from './PatientSearch';
 
 interface OrderFormProps {
@@ -238,6 +239,8 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
           mL
         </label>
       </div>
+
+      <FormulaPicker value={value} onChange={onChange} />
 
       <div style={fieldStyle}>
         <label style={labelStyle}>약재 일괄 입력 — "당귀 천궁 백출 4 산사 신곡 맥아 2"처럼 이름 뒤에 그램을 적으면, 그 앞의 이름들에 한꺼번에 적용돼요</label>
