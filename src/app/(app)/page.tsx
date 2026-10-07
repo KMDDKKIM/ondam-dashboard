@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getMonthlySummary } from '@/lib/monthlySummary';
 import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countOpenSupplyRequests } from '@/lib/supabase/supplyCounts';
+import { supplyAlertFor } from '@/lib/supplyHelpers';
 import { countPendingLeaveRequests } from '@/lib/supabase/leave';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
@@ -102,7 +103,7 @@ export default async function HomePage() {
           <TodayStatus
             missingClosing={missingClosing}
             zeroStockCount={zeroStock}
-            supply={supplyResult.error ? null : supplyResult}
+            supply={supplyResult.error ? null : supplyAlertFor(supplyResult, isOwner)}
             remoteNew={remoteNew}
             herbWaiting={herbWaiting}
             herbWaitingIsMine={herbDoctorFilter !== null}

@@ -118,6 +118,16 @@ export interface OpenSupplyCounts {
   waitingArrival: number;
 }
 
+/**
+ * 홈 "오늘 확인할 것"에 띄울 물품신청 건수를 역할별로 고른다(원장 요청, 2026-10-07). 왼쪽 메뉴 배지와 같은 규칙이다:
+ *  - 신청됨(주문 대기)은 원장님에게만 — 주문해야 하는 사람이다.
+ *  - 주문완료(도착 대기)는 데스크 직원에게만 — 도착 체크를 해야 하는 사람이라, 주문한 원장님에게는 띄우지 않는다.
+ *  - 도착 체크까지 끝나면 아무에게도 띄우지 않는다.
+ */
+export function supplyAlertFor(counts: OpenSupplyCounts, isOwner: boolean): OpenSupplyCounts {
+  return isOwner ? { waitingOrder: counts.waitingOrder, waitingArrival: 0 } : { waitingOrder: 0, waitingArrival: counts.waitingArrival };
+}
+
 // 주문 대기(신청됨) / 도착 대기(주문완료) 건수.
 export function countOpen(requests: Pick<SupplyRequest, 'orderedAt' | 'receivedAt'>[]): OpenSupplyCounts {
   let waitingOrder = 0;

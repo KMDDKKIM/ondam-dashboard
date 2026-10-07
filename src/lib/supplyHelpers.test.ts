@@ -7,6 +7,7 @@ import {
   normalizeItemName,
   safeUrl,
   sortOpenOldestFirst,
+  supplyAlertFor,
   supplyStatus,
 } from './supplyHelpers';
 
@@ -116,3 +117,21 @@ describe('진행 중 정렬과 건수', () => {
     expect(countOpen([])).toEqual({ waitingOrder: 0, waitingArrival: 0 });
   });
 });
+
+describe('supplyAlertFor — 홈 알람 역할 분리', () => {
+  const counts = { waitingOrder: 2, waitingArrival: 4 };
+
+  it('원장님에게는 주문 대기만(주문완료한 도착 대기 4건은 띄우지 않는다)', () => {
+    expect(supplyAlertFor(counts, true)).toEqual({ waitingOrder: 2, waitingArrival: 0 });
+  });
+
+  it('데스크 직원에게는 도착 대기만(주문 대기는 원장님 몫)', () => {
+    expect(supplyAlertFor(counts, false)).toEqual({ waitingOrder: 0, waitingArrival: 4 });
+  });
+
+  it('도착 체크까지 끝나 0건이면 둘 다 0', () => {
+    expect(supplyAlertFor({ waitingOrder: 0, waitingArrival: 0 }, true)).toEqual({ waitingOrder: 0, waitingArrival: 0 });
+    expect(supplyAlertFor({ waitingOrder: 0, waitingArrival: 0 }, false)).toEqual({ waitingOrder: 0, waitingArrival: 0 });
+  });
+});
+
