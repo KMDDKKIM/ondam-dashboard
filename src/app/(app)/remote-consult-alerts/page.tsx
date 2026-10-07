@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase/remoteConsult';
 import { STATUS_LABEL, maskRrn, sourceLabel, type RemoteStatus } from '@/lib/remoteConsult';
 import { REMOTE_NEW_EVENT } from '@/lib/remoteAlert';
+import { summarizeAnswers, type ChipTone } from '@/lib/remoteSummary';
 import { RemoteNotifyButton } from '@/components/RemoteNotifyButton';
 import { formatSavedAt } from '@/lib/savedAt';
 import type { Staff } from '@/lib/types';
@@ -29,6 +30,13 @@ const STATUS_STYLE: Record<RemoteStatus, { bg: string; fg: string }> = {
   success: { bg: 'rgba(79, 174, 106, 0.16)', fg: 'var(--color-green)' },
   fail: { bg: 'rgba(209, 69, 59, 0.14)', fg: 'var(--color-error)' },
   absent: { bg: 'var(--color-surface-2)', fg: 'var(--color-muted)' },
+};
+
+// 한 줄 요약 칩 색: 통화 시간은 파랑(전화할 때 제일 먼저 보는 것), 주의할 것은 빨강.
+const CHIP_STYLE: Record<ChipTone, { bg: string; fg: string }> = {
+  call: { bg: 'rgba(62, 130, 196, 0.14)', fg: 'var(--color-blue)' },
+  main: { bg: 'var(--color-surface-2)', fg: 'var(--color-ink)' },
+  warn: { bg: 'rgba(209, 69, 59, 0.12)', fg: 'var(--color-error)' },
 };
 
 const ACTIONS: { status: RemoteStatus; label: string }[] = [
@@ -169,6 +177,18 @@ export default function RemoteConsultAlertsPage() {
         <div style={{ display: 'grid', gap: 12 }}>
           {visible.map((r) => {
             const style = STATUS_STYLE[r.status];
+            const summary = summarizeAnswers(r.answers);
+            const answerList = (
+              <>
+                {r.service && <div style={{ fontWeight: 600, marginBottom: r.answers.length > 0 ? 4 : 0 }}>{r.service}</div>}
+                {r.answers.map((a) => (
+                  <div key={a.question} style={{ color: 'var(--color-ink)' }}>
+                    <span className="muted-text">{a.question}: </span>
+                    {a.answer}
+                  </div>
+                ))}
+              </>
+            );
             return (
               <div key={r.id} className="card" style={{ padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -195,6 +215,29 @@ export default function RemoteConsultAlertsPage() {
                   </span>
                 </div>
 
+                {summary.chips.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {r.service && <strong style={{ fontSize: 14, marginRight: 2 }}>{r.service}</strong>}
+                      {summary.chips.map((c) => (
+                        <span
+                          key={c.label}
+                          style={{ fontSize: 13, padding: '3px 10px', borderRadius: 8, background: CHIP_STYLE[c.tone].bg, color: CHIP_STYLE[c.tone].fg }}
+                        >
+                          <span style={{ opacity: 0.7, marginRight: 4 }}>{c.tone === 'call' ? '📞' : c.label}</span>
+                          <b>{c.value}</b>
+                        </span>
+                      ))}
+                    </div>
+                    {summary.note && (
+                      <div style={{ fontSize: 13, marginTop: 6 }}>
+                        <span className="muted-text">💬 </span>
+                        {summary.note}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '4px 16px', fontSize: 13, marginBottom: 8 }}>
                   <div>
                     <span className="muted-text">연락처 </span>
@@ -219,16 +262,18 @@ export default function RemoteConsultAlertsPage() {
                   </div>
                 </div>
 
-                {(r.service || r.answers.length > 0) && (
-                  <div style={{ background: 'var(--color-surface-2)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>
-                    {r.service && <div style={{ fontWeight: 600, marginBottom: r.answers.length > 0 ? 4 : 0 }}>{r.service}</div>}
-                    {r.answers.map((a) => (
-                      <div key={a.question} style={{ color: 'var(--color-ink)' }}>
-                        <span className="muted-text">{a.question}: </span>
-                        {a.answer}
-                      </div>
-                    ))}
-                  </div>
+                {summary.chips.length > 0 ? (
+                  // 요약이 있으면 전체 문진은 접어 둔다(진료 전화할 때 펼쳐 본다).
+                  <details style={{ fontSize: 13, marginBottom: 10 }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--color-muted)', fontWeight: 600 }}>문진 전체 보기</summary>
+                    <div style={{ background: 'var(--color-surface-2)', borderRadius: 8, padding: '8px 12px', marginTop: 6 }}>{answerList}</div>
+                  </details>
+                ) : (
+                  (r.service || r.answers.length > 0) && (
+                    <div style={{ background: 'var(--color-surface-2)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>
+                      {answerList}
+                    </div>
+                  )
                 )}
 
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
