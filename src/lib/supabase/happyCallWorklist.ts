@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listFirstVisitCallCandidates } from './happyCallPatients';
+import type { HappyCallPatient } from '@/lib/types';
 import { baseChartNo } from '@/lib/firstVisit';
 import { fetchAllPages } from '@/lib/fetchAllPages';
 import { chartKey, matchPhone, usablePhone, type HistoryPhoneRow } from '@/lib/phoneLookup';
@@ -7,6 +8,7 @@ import {
   applyCallAction,
   buildWorklist,
   CALL_RESULT_LABEL,
+  classifyCallLog,
   firstVisitProgress,
   isClosedResult,
   postponeCall,
@@ -504,13 +506,57 @@ export async function undoCallResult(supabase: SupabaseClient, item: WorklistIte
   // 종료하면서 우리가 남긴 통화내역 한 줄만 지운다(다시 열린 콜이 "통화 완료"로 남지 않도록).
   // 문구가 다르면 직원이 직접 적은 것이므로 그대로 둔다. 결과 기록 갱신보다 먼저 지워서, 갱신이
   // 실패해도 "종료됐는데 통화내역만 사라진" 쪽으로만 어긋나게 한다.
+  // 표의 통화내역 칸에 직원이 적은 글로 기록된 콜(recordFirstVisitCallFromLog)은 그 글이 메모에도 들어 있어서,
+  // 메모와 같을 때도 지운다(안 지우면 글이 남아 다시 "통화 완료"로 닫힌다). 글은 메모에 그대로 남는다.
   if (item.kind === 'firstVisit' && item.closed && item.result) {
-    const { error } = await supabase
-      .from('happy_call_patients')
-      .update({ call_log: null })
-      .eq('id', item.id)
-      .eq('call_log', firstVisitCallLog(item.result, item.memo ?? ''));
+    const written = [firstVisitCallLog(item.result, item.memo ?? ''), (item.memo ?? '').trim()].filter((t) => t !== '');
+    const { error } = await supabase.from('happy_call_patients').update({ call_log: null }).eq('id', item.id).in('call_log', written);
     if (error) throw error;
   }
   await updateCall(supabase, item, cols, patch);
+}
+
+/**
+ * 초진환자 해피콜 표의 "통화내역" 칸에 처음 글을 적었을 때, 그 글로 해피콜 목록의 통화 결과를 같이 기록한다 — 목록에서
+ * 사라지지 않고 "오늘 완료한 콜"(되돌리기 가능)로 넘어가고, 부재면 내일 다시 걸 콜로 남는다(원장 요청, 2026-10-07).
+ * 이미 목록에서 결과가 기록돼 닫힌 콜이거나, 글에서 결과를 짐작할 수 없으면(빈 글) 아무것도 하지 않고 false.
+ * 다른 직원이 먼저 처리해 상태가 바뀌었으면(CallConflictError) 조용히 false.
+ */
+export async function recordFirstVisitCallFromLog(
+  supabase: SupabaseClient,
+  patient: HappyCallPatient,
+  logText: string,
+  staffId: string | null,
+  today: string
+): Promise<boolean> {
+  const action = classifyCallLog(logText);
+  if (!action) return false;
+  // 지금 적은 글 때문에 "옛 행 = 통화 완료"로 닫히지 않게 글을 뺀 상태로 진행 상황을 본다.
+  const progress = firstVisitProgress({ ...patient, callLog: null });
+  if (progress.closed) return false;
+  const item: WorklistItem = {
+    key: `firstVisit-${patient.id}`,
+    kind: 'firstVisit',
+    id: patient.id,
+    patientName: patient.patientName,
+    phone: null,
+    doctorStaffId: patient.doctorStaffId,
+    dueDate: progress.dueDate,
+    originalDue: progress.originalDue,
+    attempts: progress.attempts,
+    result: progress.result,
+    closed: false,
+    memo: null,
+    note: null,
+    callType: null,
+    completedBy: null,
+    completedAt: null,
+  };
+  try {
+    await recordCallResult(supabase, item, action, { memo: logText.trim(), staffId, today });
+    return true;
+  } catch (e) {
+    if (e instanceof CallConflictError) return false;
+    throw e;
+  }
 }

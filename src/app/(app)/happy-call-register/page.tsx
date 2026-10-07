@@ -26,6 +26,7 @@ import { todayKst } from '@/lib/kst';
 import { isPastHideWindow } from '@/lib/happyCallVisibility';
 import { skipKey } from '@/lib/happyCallAutoRegister';
 import { syncHappyCallFromReception } from '@/lib/supabase/happyCallAutoSync';
+import { recordFirstVisitCallFromLog } from '@/lib/supabase/happyCallWorklist';
 
 const PATIENT_TYPES: HappyCallPatient['patientType'][] = ['건보', '자보', '비급여'];
 const VISIT_KINDS = ['초진', '재초진'] as const;
@@ -191,8 +192,21 @@ export default function HappyCallRegisterPage() {
 
   async function handleFieldUpdate(id: string, field: TextField, value: string) {
     const next = value.trim() || null;
+    const before = patients.find((p) => p.id === id);
     await updateHappyCallPatient(supabase, id, { [field]: next });
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: next } : p)));
+    // 통화내역 칸에 처음 글을 적으면 해피콜 목록에도 통화 결과를 기록한다 — 목록에서 사라지지 않고 "오늘 완료한 콜"로
+    // 넘어가고, "부재" 같은 글이면 내일 다시 걸 콜로 남는다(lib/happyCallQueue.ts classifyCallLog).
+    if (field === 'callLog' && next && before && !(before.callLog ?? '').trim()) {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (await recordFirstVisitCallFromLog(supabase, before, next, user?.id ?? null, todayKst())) await load(candidateDate);
+      } catch {
+        // 해피콜 목록 기록이 안 돼도 표에 적은 글은 저장돼 있다 — 해피콜 목록에서 직접 기록하면 된다.
+      }
+    }
   }
 
   async function handleNameUpdate(id: string, value: string) {

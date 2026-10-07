@@ -128,6 +128,20 @@ export function undoCallAction(
   };
 }
 
+/**
+ * 초진환자 해피콜 표의 "통화내역" 칸에 적은 글로 통화 결과를 짐작한다(원장 요청, 2026-10-07 — 표에 적으면 해피콜
+ * 목록에서 사라지지 않고 "오늘 완료한 콜"로 넘어가게). 거부·연락불가 > "통화완료/통화함" 같은 명시 > 부재 > 그 밖의 글(통화한 것).
+ * 글이 비어 있으면 null.
+ */
+export function classifyCallLog(text: string | null | undefined): CallAction | null {
+  const t = (text ?? '').replace(/\s+/g, '');
+  if (t === '') return null;
+  if (/거부|거절|연락불가|결번|번호오류|번호없|수신거부/.test(t)) return 'refused';
+  if (/통화완료|통화함|통화했|통화됨|통화성공|연락됨/.test(t)) return 'answered';
+  if (/부재|안받|무응답|통화중|연결안|연결불가/.test(t)) return 'no_answer';
+  return 'answered';
+}
+
 /** 지금 걸 콜이 몇 차인지(1차, 2차 = 재시도). */
 export function callOrdinal(attempts: number): number {
   return attempts + 1;

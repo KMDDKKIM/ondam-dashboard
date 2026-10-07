@@ -215,8 +215,8 @@ export function DoneTodaySection({
 }) {
   if (items.length === 0) return null;
   return (
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>오늘 완료한 콜 ({items.length})</summary>
+    <details open style={{ marginTop: 12 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>✅ 오늘 완료한 콜 ({items.length})</summary>
       <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
         {items.map((item) => (
           <li

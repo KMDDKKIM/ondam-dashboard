@@ -7,6 +7,7 @@ import {
   callOrdinal,
   firstVisitProgress,
   buildWorklist,
+  classifyCallLog,
   isOpenAndDue,
   type WorklistItem,
   type CallProgress,
@@ -359,5 +360,34 @@ describe('full timelines (rule walk-through)', () => {
     const p = firstVisitProgress(makePatient({ firstVisitDate: '2026-09-17' }));
     expect(listedOn(p, '2026-09-22')).toBe(true);
     expect(overdueDays(p.dueDate, '2026-09-22')).toBe(4);
+  });
+});
+
+describe('classifyCallLog', () => {
+  it('비어 있으면 null', () => {
+    expect(classifyCallLog('')).toBeNull();
+    expect(classifyCallLog('   ')).toBeNull();
+    expect(classifyCallLog(null)).toBeNull();
+  });
+
+  it('부재·안 받음·무응답은 부재중', () => {
+    expect(classifyCallLog('10/7 부재')).toBe('no_answer');
+    expect(classifyCallLog('전화 안 받음')).toBe('no_answer');
+    expect(classifyCallLog('무응답')).toBe('no_answer');
+    expect(classifyCallLog('통화중')).toBe('no_answer');
+  });
+
+  it('거부·연락불가는 거부/연락불가', () => {
+    expect(classifyCallLog('통화 거부')).toBe('refused');
+    expect(classifyCallLog('번호 오류')).toBe('refused');
+  });
+
+  it('통화완료를 명시했으면 부재 글이 같이 있어도 통화완료(재통화한 경우)', () => {
+    expect(classifyCallLog('10/7 부재 → 10/8 통화완료')).toBe('answered');
+  });
+
+  it('그 밖의 글은 통화한 것으로 본다', () => {
+    expect(classifyCallLog('10/7 통화 예약 안내함')).toBe('answered');
+    expect(classifyCallLog('잘 지내심')).toBe('answered');
   });
 });
