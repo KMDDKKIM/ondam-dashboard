@@ -57,6 +57,12 @@ TopBar의 💬 아이콘(안읽음 배지 포함) → `/chat`. 토픽방(업무 
 - **상담 기록은 10년 보관**합니다. 저장된 원문·요약은 화면에서 읽기만 할 수 있고, 삭제 기능도 자동 삭제도 없습니다. 직원을 삭제해도 기록은 남습니다.
 - 서버 전용 `ANTHROPIC_API_KEY`가 필요합니다.
 
+## 비대면진료 신청
+
+- 구글폼(구글 시트 Apps Script, `docs/remote-consult-apps-script.js`)과 보폐고 엔오 랜딩 페이지(웹페이지)가 같은 주소 `POST /api/remote-consult/ingest`로 신청을 보냅니다(공유 비밀값 `x-ingest-secret`). 본문의 `source`가 `"landing"`이면 「웹페이지」, 없거나 다른 값이면 「구글폼」으로 저장·표시합니다.
+- **새 신청 알림**: 로그인한 직원 화면이면 어느 메뉴에 있든 오른쪽 아래에 팝업이 뜨고(닫거나 누를 때까지 남고, 여러 건이면 쌓임) "딩-동" 알림음이 납니다. 브라우저 정책상 화면을 한 번이라도 클릭한 뒤부터 소리가 나요. 「🔔 바탕화면 알림 켜기」를 눌러 허용하면 다른 탭을 보고 있을 때 윈도우 알림도 뜹니다(환자 이름은 넣지 않음). 문자·카톡 알림은 없습니다. Supabase Realtime을 쓰므로 `migration_remote_consult_realtime.sql`이 필요하고, 실시간 연결이 끊기면 1분마다, 연결된 동안에도 안전을 위해 3분마다 대기 건수를 확인해 알립니다(같은 신청이 두 번 뜨지는 않음).
+- **보관 기한**: 실패·부재로 처리한 신청은 처리한 지 30일이 지나면 매일 새벽 3시에 자동으로 지워집니다(주민번호 암호문·열람 기록도 함께). 대기·성공은 지우지 않습니다. `migration_remote_consult_retention.sql`(pg_cron) 적용 필요 — 보관 일수는 그 파일의 함수 기본값 한 곳에서 정합니다.
+
 ## 백업
 
 무료 요금제라 Supabase 자동 백업이 없습니다. 대표원장은 왼쪽 메뉴 「백업 내려받기」(`/backup`)에서 **주 1회 이상** CSV를 내려받아 안전한 곳(암호를 건 저장소 등)에 보관하세요.
@@ -94,6 +100,8 @@ TopBar의 💬 아이콘(안읽음 배지 포함) → `/chat`. 토픽방(업무 
 23. `migration_herb_queue.sql`
 24. `migration_consult_summary_doctors_only.sql`
 25. `migration_monthly_baseline_owner_only.sql`
+26. `migration_remote_consult_realtime.sql`
+27. `migration_remote_consult_retention.sql` (먼저 Supabase Dashboard → Database → Extensions 에서 **pg_cron** 을 켜 두세요)
 
 새 마이그레이션 파일을 만들면 이 목록 맨 아래에 추가하세요.
 

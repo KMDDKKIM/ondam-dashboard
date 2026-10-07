@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { dedupeMaterial, parseFormSubmission } from '@/lib/remoteConsult';
+import { dedupeMaterial, normalizeSource, parseFormSubmission } from '@/lib/remoteConsult';
 import { encryptRrn, parseKey } from '@/lib/rrnCrypto';
 
 const MAX_BODY_CHARS = 200_000;
@@ -13,8 +13,9 @@ function secretMatches(given: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-// 구글 시트(Apps Script onFormSubmit)가 비대면진료 폼 응답을 보내 오는 곳. 로그인 세션이 없으므로
-// middleware 에서 이 주소만 열어 두고, 대신 공유 비밀값(x-ingest-secret)으로 막는다.
+// 구글 시트(Apps Script onFormSubmit)와 보폐고 엔오 랜딩 페이지(서버 → 서버)가 비대면진료 신청을 보내 오는 곳.
+// 로그인 세션이 없으므로 middleware 에서 이 주소만 열어 두고, 대신 공유 비밀값(x-ingest-secret)으로 막는다.
+// 본문의 source 는 'landing'(웹페이지)만 따로 구분하고, 없거나 모르는 값이면 예전처럼 'google_form'으로 저장한다.
 // 응답에는 개인정보를 돌려주지 않는다.
 export async function POST(request: Request) {
   const expected = process.env.REMOTE_CONSULT_INGEST_SECRET;
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'JSON 형식이 아니에요.' }, { status: 400 });
   }
   const namedValues = (body as { namedValues?: unknown } | null)?.namedValues;
+  const source = normalizeSource((body as { source?: unknown } | null)?.source);
   if (!namedValues || typeof namedValues !== 'object' || Array.isArray(namedValues)) {
     return NextResponse.json({ error: 'namedValues 가 없어요.' }, { status: 400 });
   }
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
   const { data: inserted, error } = await admin
     .from('remote_consult_requests')
     .insert({
-      source: 'google_form',
+      source,
       dedupe_key: dedupeKey,
       submitted_at: parsed.submittedAt,
       patient_name: parsed.patientName,

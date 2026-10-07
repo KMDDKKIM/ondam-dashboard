@@ -1,4 +1,4 @@
-// 구글폼(비대면진료 신청) 응답 한 건을 대시보드 항목으로 바꾸는 순수 함수들.
+// 구글폼·웹페이지(비대면진료 신청) 응답 한 건을 대시보드 항목으로 바꾸는 순수 함수들.
 // 구글 시트의 Apps Script(onFormSubmit)가 e.namedValues — { "질문 제목": ["답"] } — 를 그대로 보내 오므로,
 // 질문 제목의 키워드로 성함·주민번호·연락처·주소를 찾고, 나머지 답은 질문/답 목록으로 그대로 보여 준다.
 // 폼 질문이 바뀌거나 늘어나도(예: 12월 상품 추가) 코드를 고치지 않아도 되게 하려는 것이다.
@@ -11,6 +11,30 @@ export const STATUS_LABEL: Record<RemoteStatus, string> = {
   fail: '실패',
   absent: '부재',
 };
+
+/** 신청이 어디서 들어왔는지. 구글폼(Apps Script)과 보폐고 엔오 랜딩 페이지(웹페이지)만 받는다. */
+export const REMOTE_SOURCES = ['google_form', 'landing'] as const;
+export type RemoteSource = (typeof REMOTE_SOURCES)[number];
+
+export const SOURCE_LABEL: Record<RemoteSource, string> = {
+  google_form: '구글폼',
+  landing: '웹페이지',
+};
+
+/**
+ * 수신 요청 본문의 source 값을 정리한다. 목록에 없는 값·빈 값·문자열이 아닌 값은 모두 'google_form'
+ * (예전부터 source 없이 보내 오던 구글 시트와 같은 취급) — 밖에서 아무 글자나 DB에 넣지 못하게 한다.
+ */
+export function normalizeSource(value: unknown): RemoteSource {
+  if (typeof value !== 'string') return 'google_form';
+  const v = value.trim().toLowerCase();
+  return (REMOTE_SOURCES as readonly string[]).includes(v) ? (v as RemoteSource) : 'google_form';
+}
+
+/** DB에서 읽은 source 를 화면 표시용 이름으로. 모르는 값은 구글폼으로 본다. */
+export function sourceLabel(value: unknown): string {
+  return SOURCE_LABEL[normalizeSource(value)];
+}
 
 export interface AnswerItem {
   question: string;

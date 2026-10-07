@@ -195,9 +195,10 @@ export default function HappyCallRegisterPage() {
     const before = patients.find((p) => p.id === id);
     await updateHappyCallPatient(supabase, id, { [field]: next });
     setPatients((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: next } : p)));
-    // 통화내역 칸에 처음 글을 적으면 해피콜 목록에도 통화 결과를 기록한다 — 목록에서 사라지지 않고 "오늘 완료한 콜"로
-    // 넘어가고, "부재" 같은 글이면 내일 다시 걸 콜로 남는다(lib/happyCallQueue.ts classifyCallLog).
-    if (field === 'callLog' && next && before && !(before.callLog ?? '').trim()) {
+    // 통화내역 칸에 글을 적으면 해피콜 목록에도 통화 결과를 기록한다 — 목록에서 사라지지 않고 "오늘 완료한 콜"로
+    // 넘어가고, "부재" 같은 글이면 내일 다시 걸 콜로 남는다. 부재 뒤에 덧붙여 적으면 다음 결과가 기록된다
+    // (lib/happyCallQueue.ts classifyCallLog, supabase/happyCallWorklist.ts recordFirstVisitCallFromLog).
+    if (field === 'callLog' && next && before) {
       try {
         const {
           data: { user },

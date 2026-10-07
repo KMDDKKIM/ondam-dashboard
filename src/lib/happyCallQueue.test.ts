@@ -386,6 +386,12 @@ describe('classifyCallLog', () => {
     expect(classifyCallLog('10/7 부재 → 10/8 통화완료')).toBe('answered');
   });
 
+  it('이미 쓴 글에 덧붙인 짧은 글은 단서가 없으면 통화로 보지 않는다', () => {
+    expect(classifyCallLog('함', 6)).toBeNull();
+    expect(classifyCallLog(' 10/8 부재', 6)).toBe('no_answer');
+    expect(classifyCallLog(' 10/8 잘 지내신대요 괜찮다고', 6)).toBe('answered');
+  });
+
   it('그 밖의 글은 통화한 것으로 본다', () => {
     expect(classifyCallLog('10/7 통화 예약 안내함')).toBe('answered');
     expect(classifyCallLog('잘 지내심')).toBe('answered');

@@ -509,7 +509,7 @@ export async function undoCallResult(supabase: SupabaseClient, item: WorklistIte
   // 표의 통화내역 칸에 직원이 적은 글로 기록된 콜(recordFirstVisitCallFromLog)은 그 글이 메모에도 들어 있어서,
   // 메모와 같을 때도 지운다(안 지우면 글이 남아 다시 "통화 완료"로 닫힌다). 글은 메모에 그대로 남는다.
   if (item.kind === 'firstVisit' && item.closed && item.result) {
-    const written = [firstVisitCallLog(item.result, item.memo ?? ''), (item.memo ?? '').trim()].filter((t) => t !== '');
+    const written = [firstVisitCallLog(item.result, item.memo ?? ''), next.result === null ? (item.memo ?? '').trim() : ''].filter((t) => t !== '');
     const { error } = await supabase.from('happy_call_patients').update({ call_log: null }).eq('id', item.id).in('call_log', written);
     if (error) throw error;
   }
@@ -517,9 +517,12 @@ export async function undoCallResult(supabase: SupabaseClient, item: WorklistIte
 }
 
 /**
- * 초진환자 해피콜 표의 "통화내역" 칸에 처음 글을 적었을 때, 그 글로 해피콜 목록의 통화 결과를 같이 기록한다 — 목록에서
+ * 초진환자 해피콜 표의 "통화내역" 칸에 글을 적었을 때, 그 글로 해피콜 목록의 통화 결과를 같이 기록한다 — 목록에서
  * 사라지지 않고 "오늘 완료한 콜"(되돌리기 가능)로 넘어가고, 부재면 내일 다시 걸 콜로 남는다(원장 요청, 2026-10-07).
- * 이미 목록에서 결과가 기록돼 닫힌 콜이거나, 글에서 결과를 짐작할 수 없으면(빈 글) 아무것도 하지 않고 false.
+ *  - 칸이 비어 있었으면 새로 적은 글 전체로 결과를 짐작한다.
+ *  - 이미 글이 있고 이 기능으로 부재중이 기록된 콜(결과가 있음)이면, 끝에 덧붙인 글(예: "10/7 부재 10/8 통화완료")로 다음 결과를
+ *    기록한다. 덧붙인 게 아니라 앞부분을 고친 경우(오타 수정 등)는 아무것도 하지 않는다.
+ *  - 이 기능이 생기기 전에 글만 적어 둔 옛 행(글은 있는데 결과가 없음)이나 이미 닫힌 콜은 건드리지 않는다(false).
  * 다른 직원이 먼저 처리해 상태가 바뀌었으면(CallConflictError) 조용히 false.
  */
 export async function recordFirstVisitCallFromLog(
@@ -529,7 +532,13 @@ export async function recordFirstVisitCallFromLog(
   staffId: string | null,
   today: string
 ): Promise<boolean> {
-  const action = classifyCallLog(logText);
+  const previous = (patient.callLog ?? '').trim();
+  const written = logText.trim();
+  if (previous && patient.callResult == null) return false; // 옛 행: 글만 적혀 있고 결과가 없다
+  const tail = previous ? (written.startsWith(previous) ? written.slice(previous.length) : null) : written;
+  if (tail === null) return false;
+  // 이미 글이 있는 칸에 덧붙인 경우, 단서(부재·통화완료 등) 없는 짧은 글("함" 같은 오타 수정)은 새 통화로 보지 않는다.
+  const action = classifyCallLog(tail, previous ? 6 : 0);
   if (!action) return false;
   // 지금 적은 글 때문에 "옛 행 = 통화 완료"로 닫히지 않게 글을 뺀 상태로 진행 상황을 본다.
   const progress = firstVisitProgress({ ...patient, callLog: null });
@@ -553,7 +562,7 @@ export async function recordFirstVisitCallFromLog(
     completedAt: null,
   };
   try {
-    await recordCallResult(supabase, item, action, { memo: logText.trim(), staffId, today });
+    await recordCallResult(supabase, item, action, { memo: written, staffId, today });
     return true;
   } catch (e) {
     if (e instanceof CallConflictError) return false;

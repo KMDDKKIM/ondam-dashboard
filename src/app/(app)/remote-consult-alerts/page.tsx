@@ -8,7 +8,9 @@ import {
   setRemoteStatus,
   type RemoteConsultRequest,
 } from '@/lib/supabase/remoteConsult';
-import { STATUS_LABEL, maskRrn, type RemoteStatus } from '@/lib/remoteConsult';
+import { STATUS_LABEL, maskRrn, sourceLabel, type RemoteStatus } from '@/lib/remoteConsult';
+import { REMOTE_NEW_EVENT } from '@/lib/remoteAlert';
+import { RemoteNotifyButton } from '@/components/RemoteNotifyButton';
 import { formatSavedAt } from '@/lib/savedAt';
 import type { Staff } from '@/lib/types';
 
@@ -35,7 +37,7 @@ const ACTIONS: { status: RemoteStatus; label: string }[] = [
   { status: 'absent', label: '부재' },
 ];
 
-// 구글폼으로 들어온 비대면진료 신청 목록. 새 신청은 "대기"로 뜨고, 처리하면 성공/실패/부재를 눌러 표시한다
+// 구글폼·웹페이지(보폐고 엔오 랜딩)로 들어온 비대면진료 신청 목록. 어디서 왔는지는 이름 옆 작은 표시로 구분한다. 새 신청은 "대기"로 뜨고, 처리하면 성공/실패/부재를 눌러 표시한다
 // (예전 시트의 행 색깔을 대신한다). 주민번호는 가려 두고 "주민번호 보기"를 눌러야 잠깐 펼쳐진다.
 export default function RemoteConsultAlertsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -69,7 +71,13 @@ export default function RemoteConsultAlertsPage() {
   useEffect(() => {
     load();
     const t = timers.current;
-    return () => Object.values(t).forEach(clearTimeout);
+    // 새 신청 알림(RemoteConsultAlerter)이 실시간으로 받으면 이 화면 목록도 다시 읽는다.
+    const onNew = () => load();
+    window.addEventListener(REMOTE_NEW_EVENT, onNew);
+    return () => {
+      window.removeEventListener(REMOTE_NEW_EVENT, onNew);
+      Object.values(t).forEach(clearTimeout);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,7 +130,8 @@ export default function RemoteConsultAlertsPage() {
     <div>
       <h1 style={{ marginBottom: 6 }}>📨 비대면진료 신청</h1>
       <p className="muted-text" style={{ marginBottom: 16 }}>
-        구글폼으로 들어온 신청이 자동으로 여기에 떠요. 처리하면 성공·실패·부재를 눌러 표시하세요.
+        구글폼·웹페이지로 들어온 신청이 자동으로 여기에 떠요(새 신청은 어느 화면에서든 오른쪽 아래 알림으로도 떠요). 처리하면
+        성공·실패·부재를 눌러 표시하세요. <RemoteNotifyButton style={{ marginLeft: 4 }} />
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -166,6 +175,19 @@ export default function RemoteConsultAlertsPage() {
                   <strong style={{ fontSize: 16 }}>{r.patientName || '(이름 없음)'}</strong>
                   <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 10, background: style.bg, color: style.fg }}>
                     {STATUS_LABEL[r.status]}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '1px 8px',
+                      borderRadius: 10,
+                      border: '1px solid var(--color-line)',
+                      background: r.source === 'landing' ? 'rgba(62, 130, 196, 0.12)' : 'var(--color-surface)',
+                      color: r.source === 'landing' ? 'var(--color-blue)' : 'var(--color-muted)',
+                    }}
+                  >
+                    {sourceLabel(r.source)}
                   </span>
                   <span className="muted-text" style={{ fontSize: 12 }}>
                     신청 {formatSavedAt(r.submittedAt)}

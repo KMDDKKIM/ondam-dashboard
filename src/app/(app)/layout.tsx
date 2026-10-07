@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { AppMain } from '@/components/AppMain';
 import { ConfirmHost } from '@/components/ConfirmHost';
 import { LeaveResultNotice } from '@/components/LeaveResultNotice';
+import { RemoteConsultAlerter } from '@/components/RemoteConsultAlerter';
 import { listRoomsWithUnread } from '@/lib/supabase/chatRooms';
 import { totalUnreadCount } from '@/lib/chatHelpers';
 import { isStaffGrade } from '@/lib/staffGrade';
@@ -83,6 +84,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       <ConfirmHost />
       <LeaveResultNotice />
+      {/* 비대면진료 새 신청 실시간 알림 — 어느 메뉴 화면에 있든 오른쪽 아래에 뜬다. */}
+      <RemoteConsultAlerter />
     </div>
   );
 }

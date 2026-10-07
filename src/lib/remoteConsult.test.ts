@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeMaterial, formatRrn, maskRrn, normalizeRrn, parseFormSubmission, parseFormTimestamp } from './remoteConsult';
+import {
+  dedupeMaterial,
+  formatRrn,
+  maskRrn,
+  normalizeRrn,
+  normalizeSource,
+  parseFormSubmission,
+  parseFormTimestamp,
+  sourceLabel,
+} from './remoteConsult';
 
 describe('parseFormTimestamp', () => {
   it('한국 로케일 시트의 "2026. 9. 21 오후 2:34:56"을 한국 시각으로 읽어 UTC ISO 로 바꾼다', () => {
@@ -86,5 +95,51 @@ describe('dedupeMaterial', () => {
     const a = dedupeMaterial({ rawTimestamp: '2026. 9. 21 오후 2:34:56', patientName: '홍길동', phone: '010-0000-0000', submittedAt: 'x' });
     const b = dedupeMaterial({ rawTimestamp: '2026. 9. 21 오후 2:34:56', patientName: ' 홍길동 ', phone: '01000000000', submittedAt: 'y' });
     expect(a).toBe(b);
+  });
+});
+
+describe('normalizeSource / sourceLabel', () => {
+  it('구글폼·웹페이지(landing)만 그대로 받는다', () => {
+    expect(normalizeSource('google_form')).toBe('google_form');
+    expect(normalizeSource('landing')).toBe('landing');
+    expect(normalizeSource(' Landing ')).toBe('landing');
+  });
+
+  it('없거나 목록에 없는 값은 모두 구글폼으로 본다', () => {
+    expect(normalizeSource(undefined)).toBe('google_form');
+    expect(normalizeSource(null)).toBe('google_form');
+    expect(normalizeSource('')).toBe('google_form');
+    expect(normalizeSource('kakao')).toBe('google_form');
+    expect(normalizeSource("landing'; drop table x")).toBe('google_form');
+    expect(normalizeSource(['landing'])).toBe('google_form');
+    expect(normalizeSource(1)).toBe('google_form');
+  });
+
+  it('화면에는 웹페이지/구글폼으로 보인다', () => {
+    expect(sourceLabel('landing')).toBe('웹페이지');
+    expect(sourceLabel('google_form')).toBe('구글폼');
+    expect(sourceLabel('이상한값')).toBe('구글폼');
+  });
+});
+
+describe('parseFormSubmission (웹페이지 신청)', () => {
+  it('랜딩 페이지가 보내는 문자열 값 모양도 그대로 읽는다', () => {
+    const p = parseFormSubmission({
+      타임스탬프: '2026-10-07T05:30:00.000Z',
+      성함: '홍길동',
+      주민등록번호: '900101-1234567',
+      연락처: '010-0000-0000',
+      주소: '서울시 어딘가',
+      '원하시는 진료': '보폐고 엔오',
+      증상: '기침',
+      '개인정보 수집·이용 동의': '동의',
+    });
+    expect(p.submittedAt).toBe('2026-10-07T05:30:00.000Z');
+    expect(p.patientName).toBe('홍길동');
+    expect(p.phone).toBe('010-0000-0000');
+    expect(p.address).toBe('서울시 어딘가');
+    expect(p.service).toBe('보폐고 엔오');
+    expect(p.rrn).toBe('9001011234567');
+    expect(p.answers).toEqual([{ question: '증상', answer: '기침' }]);
   });
 });
