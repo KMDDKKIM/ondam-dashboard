@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { herbsForFormula, parseFormulaHerbs, parseFormulaImport, splitFormulaName, summarizeFormulaHerbs } from './herbFormulas';
+import { herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
 
 // 처방·약재 이름은 시험용 값이다(공개 저장소).
 describe('parseFormulaHerbs', () => {
@@ -95,5 +95,66 @@ describe('summarizeFormulaHerbs · herbsForFormula', () => {
         { herbName: '나', prepMethod: '', gramsPerPacket: 0 },
       ])
     ).toEqual([{ herbName: '가', prepMethod: '炒', gramsPerPacket: 4 }]);
+  });
+});
+
+describe('parseFormulaJson', () => {
+  const one = (o: object) => JSON.stringify([o]);
+
+  it('배열의 처방을 읽는다(약재 name·prep·grams)', () => {
+    const { rows, skipped, error } = parseFormulaJson(
+      one({ name: '시험탕', nameHanja: '試驗湯', source: '시험서', indication: '시험 주치', memo: '가감법', herbs: [{ name: '가', prep: '炒', grams: 6 }, { name: '나', grams: '4g' }] })
+    );
+    expect(error).toBeUndefined();
+    expect(skipped).toEqual([]);
+    expect(rows[0]).toMatchObject({ name: '시험탕', nameHanja: '試驗湯', source: '시험서', indication: '시험 주치', memo: '가감법' });
+    expect(rows[0].herbs).toEqual([
+      { herbName: '가', prepMethod: '炒', gramsPerPacket: 6 },
+      { herbName: '나', prepMethod: '', gramsPerPacket: 4 },
+    ]);
+  });
+
+  it('{ formulas: [...] } 모양과 한글 키도 받는다', () => {
+    const { rows } = parseFormulaJson(JSON.stringify({ formulas: [{ 처방명: '시험탕(試驗湯)', 출전: '시험서', 주치: '주치', 약재: [{ 약재명: '가', 용량: 3 }] }] }));
+    expect(rows[0]).toMatchObject({ name: '시험탕', nameHanja: '試驗湯', source: '시험서', indication: '주치' });
+  });
+
+  it('그램을 모르는 약재(null)는 0으로 들어간다', () => {
+    const { rows } = parseFormulaJson(one({ name: '시험탕', herbs: [{ name: '가', grams: null }] }));
+    expect(rows[0].herbs[0].gramsPerPacket).toBe(0);
+  });
+
+  it('출전이 없으면 기본 출전을 붙인다', () => {
+    expect(parseFormulaJson(one({ name: '시험탕', herbs: [{ name: '가', grams: 1 }] }), '채움생').rows[0].source).toBe('채움생');
+  });
+
+  it('처방명·약재가 없는 항목은 건너뛰고 번호를 알려 준다', () => {
+    const { rows, skipped } = parseFormulaJson(JSON.stringify([{ herbs: [{ name: '가', grams: 1 }] }, { name: '시험탕' }, { name: '정상탕', herbs: [{ name: '가', grams: 1 }] }]));
+    expect(rows.map((r) => r.name)).toEqual(['정상탕']);
+    expect(skipped.map((s) => s.line)).toEqual([1, 2]);
+  });
+
+  it('같은 처방명+출전은 뒤엣것으로 덮어쓰고, 출전이 다르면 따로 둔다', () => {
+    const { rows } = parseFormulaJson(
+      JSON.stringify([
+        { name: '보중익기탕', source: 'A서', herbs: [{ name: '가', grams: 1 }] },
+        { name: '보중익기탕', source: 'B서', herbs: [{ name: '가', grams: 2 }] },
+        { name: '보중익기탕', source: 'A서', herbs: [{ name: '가', grams: 3 }] },
+      ])
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.source === 'A서')?.herbs[0].gramsPerPacket).toBe(3);
+  });
+
+  it('JSON이 아니거나 배열이 아니면 error', () => {
+    expect(parseFormulaJson('{ 깨짐').error).toBeTruthy();
+    expect(parseFormulaJson('{"a":1}').error).toBeTruthy();
+  });
+});
+
+describe('splitHerbNameList', () => {
+  it('공백·쉼표·가운뎃점으로 나누고 중복을 뺀다', () => {
+    expect(splitHerbNameList('당귀 천궁,백출·당귀')).toEqual(['당귀', '천궁', '백출']);
+    expect(splitHerbNameList('  ')).toEqual([]);
   });
 });

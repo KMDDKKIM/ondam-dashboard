@@ -7,12 +7,13 @@ interface Row {
   name: string;
   name_hanja: string;
   source: string;
+  indication?: string | null;
   herbs: HerbLine[] | null;
   memo: string;
 }
 
 function rowToFormula(r: Row): HerbFormula {
-  return { id: r.id, name: r.name, nameHanja: r.name_hanja, source: r.source, herbs: Array.isArray(r.herbs) ? r.herbs : [], memo: r.memo };
+  return { id: r.id, name: r.name, nameHanja: r.name_hanja, source: r.source, indication: r.indication ?? '', herbs: Array.isArray(r.herbs) ? r.herbs : [], memo: r.memo };
 }
 
 // PostgREST 필터 문자열에서 쓰이는 문자(쉼표·괄호·따옴표)와 LIKE 와일드카드를 검색어에서 뺀다.
@@ -20,18 +21,39 @@ function cleanQuery(q: string): string {
   return q.replace(/[,()"%_\*]/g, ' ').trim();
 }
 
-/** 처방명(한글·한자)에 검색어가 들어간 처방을 이름순으로. 검색어가 비면 빈 목록. */
-export async function searchHerbFormulas(supabase: SupabaseClient, query: string, limit = 30): Promise<HerbFormula[]> {
-  const q = cleanQuery(query);
-  if (!q) return [];
-  const { data, error } = await supabase
-    .from('herb_formulas')
-    .select('id, name, name_hanja, source, herbs, memo')
-    .or(`name.ilike.%${q}%,name_hanja.ilike.%${q}%`)
-    .order('name', { ascending: true })
-    .limit(limit);
+const SELECT = 'id, name, name_hanja, source, indication, herbs, memo';
+
+export interface FormulaSearch {
+  /** 처방명(한글·한자)에 들어갈 글 */
+  query?: string;
+  /** 이 약재가 전부 들어 있는 처방만 */
+  include?: string[];
+  /** 이 약재가 하나도 안 들어 있는 처방만 */
+  exclude?: string[];
+}
+
+// 배열 리터럴({a,b})에 넣을 약재 이름 — 쉼표·괄호·따옴표·중괄호는 뺀다.
+function arrayLiteral(names: string[]): string {
+  return `{${names.map((n) => n.replace(/[,{}()"\\]/g, '')).filter(Boolean).join(',')}}`;
+}
+
+/**
+ * 처방집 검색 — 처방명, 포함 약재, 제외 약재를 함께 걸 수 있다. 조건이 하나도 없으면 빈 목록.
+ * 약재 이름은 정확히 같은 것만 센다(herb_names 칸). limit 보다 더 있으면 hasMore.
+ */
+export async function searchHerbFormulas(supabase: SupabaseClient, search: FormulaSearch, limit = 40): Promise<{ rows: HerbFormula[]; hasMore: boolean }> {
+  const q = cleanQuery(search.query ?? '');
+  const include = (search.include ?? []).map((n) => n.trim()).filter(Boolean);
+  const exclude = (search.exclude ?? []).map((n) => n.trim()).filter(Boolean);
+  if (!q && include.length === 0 && exclude.length === 0) return { rows: [], hasMore: false };
+  let query = supabase.from('herb_formulas').select(SELECT);
+  if (q) query = query.or(`name.ilike.%${q}%,name_hanja.ilike.%${q}%`);
+  if (include.length > 0) query = query.contains('herb_names', include);
+  for (const name of exclude) query = query.not('herb_names', 'cs', arrayLiteral([name]));
+  const { data, error } = await query.order('name', { ascending: true }).limit(limit + 1);
   if (error) throw error;
-  return ((data ?? []) as Row[]).map(rowToFormula);
+  const rows = ((data ?? []) as Row[]).map(rowToFormula);
+  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
 export async function countHerbFormulas(supabase: SupabaseClient): Promise<number | null> {
@@ -40,7 +62,7 @@ export async function countHerbFormulas(supabase: SupabaseClient): Promise<numbe
 }
 
 export async function findHerbFormula(supabase: SupabaseClient, name: string, source: string): Promise<HerbFormula | null> {
-  const { data, error } = await supabase.from('herb_formulas').select('id, name, name_hanja, source, herbs, memo').eq('name', name).eq('source', source).maybeSingle();
+  const { data, error } = await supabase.from('herb_formulas').select(SELECT).eq('name', name).eq('source', source).maybeSingle();
   if (error) throw error;
   return data ? rowToFormula(data as Row) : null;
 }
@@ -73,6 +95,8 @@ export async function importHerbFormulas(supabase: SupabaseClient, rows: Formula
       name: r.name,
       name_hanja: r.nameHanja,
       source: r.source,
+      indication: r.indication,
+      memo: r.memo,
       herbs: r.herbs,
       created_by: createdBy,
       updated_at: now,

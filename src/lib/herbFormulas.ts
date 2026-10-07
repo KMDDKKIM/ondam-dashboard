@@ -15,6 +15,8 @@ export interface HerbFormula {
   nameHanja: string;
   /** 출전/출처(예: 사상의학, 채움생) — 없으면 빈 문자열. 같은 처방명이라도 출전이 다르면 따로 둔다. */
   source: string;
+  /** 주치/효능 */
+  indication: string;
   herbs: HerbLine[];
   memo: string;
 }
@@ -71,6 +73,8 @@ export interface FormulaImportRow {
   name: string;
   nameHanja: string;
   source: string;
+  indication: string;
+  memo: string;
   herbs: HerbLine[];
   /** 그램이 안 붙어 반영 못 한 약재 이름(있으면 확인이 필요하다) */
   danglingNames: string[];
@@ -137,7 +141,7 @@ export function parseFormulaImport(text: string, defaultSource = ''): FormulaImp
     }
     // 출전: 약재 칸 앞에 칸이 더 있으면 그 칸(보통 두 번째), 없으면 기본 출전.
     const source = herbsIndex >= 2 ? fields[1] : defaultSource.trim();
-    const row: FormulaImportRow = { name, nameHanja, source, herbs: parsed.herbs, danglingNames: parsed.danglingNames };
+    const row: FormulaImportRow = { name, nameHanja, source, indication: '', memo: '', herbs: parsed.herbs, danglingNames: parsed.danglingNames };
     const key = `${name}\u0000${source}`;
     const existing = byKey.get(key);
     if (existing != null) rows[existing] = row;
@@ -160,4 +164,105 @@ export function herbsForFormula(herbs: HerbLine[]): HerbLine[] {
   return herbs
     .filter((h) => h.herbName.trim() !== '' && h.gramsPerPacket > 0)
     .map((h) => ({ herbName: h.herbName.trim(), prepMethod: h.prepMethod.trim(), gramsPerPacket: h.gramsPerPacket }));
+}
+
+// ---- JSON 가져오기(다른 자료에서 정리해 온 처방집) ----
+
+type Json = Record<string, unknown>;
+
+function text(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '';
+}
+
+function pick(obj: Json, keys: string[]): unknown {
+  for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+  return undefined;
+}
+
+/** "6", 6, "6g", "6.5 g" → 숫자. 모르는 값(null·빈 글·숫자 아님)은 0 — 처방전에서 직접 채우게 둔다. */
+function gramsOf(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : 0;
+  if (typeof v === 'string') {
+    const n = Number(v.trim().replace(/\s*g$/i, ''));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return 0;
+}
+
+/**
+ * JSON 처방집을 처방 목록으로 바꾼다. 최상위는 배열이거나 { formulas: [...] }.
+ * 각 처방: { name, nameHanja?, source?, indication?, memo?, herbs: [{ name, prep?, grams }] }
+ * (한글 키 처방명·한자명·출전·주치·비고·약재, 약재의 herbName·prepMethod·gramsPerPacket 도 받는다.)
+ * 그램을 모르는 약재는 grams 를 null 로 두면 0(미입력)으로 들어간다. 같은 처방명+출전이 두 번이면 뒤엣것을 쓴다.
+ */
+export function parseFormulaJson(textInput: string, defaultSource = ''): FormulaImportResult & { error?: string } {
+  let data: unknown;
+  try {
+    data = JSON.parse(textInput);
+  } catch {
+    return { rows: [], skipped: [], error: 'JSON 형식이 아니에요(괄호나 쉼표가 맞는지 확인해 주세요).' };
+  }
+  const list = Array.isArray(data) ? data : data && typeof data === 'object' && Array.isArray((data as Json).formulas) ? ((data as Json).formulas as unknown[]) : null;
+  if (!list) return { rows: [], skipped: [], error: '처방 목록(배열)을 찾지 못했어요. [ {...}, {...} ] 모양이어야 해요.' };
+
+  const rows: FormulaImportRow[] = [];
+  const skipped: { line: number; reason: string }[] = [];
+  const byKey = new Map<string, number>();
+
+  list.forEach((raw, index) => {
+    const no = index + 1;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      skipped.push({ line: no, reason: '처방이 객체가 아니에요' });
+      return;
+    }
+    const obj = raw as Json;
+    const { name, nameHanja: parsedHanja } = splitFormulaName(text(pick(obj, ['name', '처방명'])));
+    if (!name) {
+      skipped.push({ line: no, reason: '처방명이 비어 있어요' });
+      return;
+    }
+    const herbsRaw = pick(obj, ['herbs', '약재']);
+    if (!Array.isArray(herbsRaw) || herbsRaw.length === 0) {
+      skipped.push({ line: no, reason: '약재 목록이 없어요' });
+      return;
+    }
+    const herbs: HerbLine[] = [];
+    for (const h of herbsRaw) {
+      if (!h || typeof h !== 'object') continue;
+      const ho = h as Json;
+      const herbName = text(pick(ho, ['name', 'herbName', '약재', '약재명']));
+      if (!herbName) continue;
+      herbs.push({
+        herbName,
+        prepMethod: text(pick(ho, ['prep', 'prepMethod', '수치', '포제'])),
+        gramsPerPacket: gramsOf(pick(ho, ['grams', 'gramsPerPacket', '용량', '그램'])),
+      });
+    }
+    if (herbs.length === 0) {
+      skipped.push({ line: no, reason: '읽을 수 있는 약재가 없어요' });
+      return;
+    }
+    const row: FormulaImportRow = {
+      name,
+      nameHanja: text(pick(obj, ['nameHanja', 'name_hanja', '한자명', '한자'])) || parsedHanja,
+      source: text(pick(obj, ['source', '출전', '서적'])) || defaultSource.trim(),
+      indication: text(pick(obj, ['indication', '주치', '효능'])),
+      memo: text(pick(obj, ['memo', '비고', '가감'])),
+      herbs,
+      danglingNames: [],
+    };
+    const key = `${row.name}\u0000${row.source}`;
+    const existing = byKey.get(key);
+    if (existing != null) rows[existing] = row;
+    else {
+      byKey.set(key, rows.length);
+      rows.push(row);
+    }
+  });
+  return { rows, skipped };
+}
+
+/** "당귀 천궁, 백출" → ['당귀','천궁','백출'] (약재 포함·제외 검색칸 입력). 중복은 하나로. */
+export function splitHerbNameList(input: string): string[] {
+  return [...new Set(input.split(/[\s,，、·]+/).map((t) => t.trim()).filter(Boolean))];
 }
