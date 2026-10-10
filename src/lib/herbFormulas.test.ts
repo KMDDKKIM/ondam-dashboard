@@ -114,6 +114,12 @@ describe('parseFormulaJson', () => {
     ]);
   });
 
+  it('약재의 한자 이름(hanja)을 함께 보관한다', () => {
+    const { rows } = parseFormulaJson(one({ name: '시험탕', herbs: [{ name: '당귀', hanja: '當歸', grams: 6 }, { name: '가', grams: 1 }] }));
+    expect(rows[0].herbs[0]).toEqual({ herbName: '당귀', prepMethod: '', gramsPerPacket: 6, hanja: '當歸' });
+    expect(rows[0].herbs[1]).not.toHaveProperty('hanja');
+  });
+
   it('{ formulas: [...] } 모양과 한글 키도 받는다', () => {
     const { rows } = parseFormulaJson(JSON.stringify({ formulas: [{ 처방명: '시험탕(試驗湯)', 출전: '시험서', 주치: '주치', 약재: [{ 약재명: '가', 용량: 3 }] }] }));
     expect(rows[0]).toMatchObject({ name: '시험탕', nameHanja: '試驗湯', source: '시험서', indication: '주치' });

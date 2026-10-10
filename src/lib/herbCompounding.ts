@@ -7,6 +7,8 @@ export interface HerbLine {
   prepMethod: string;
   /** 1첩당 그램수(소수 가능 — 예: 7.5g). */
   gramsPerPacket: number;
+  /** 한자 이름(처방집에서 가져온 약재에만 있다) — 처방전 입력·인쇄에는 쓰지 않는다. */
+  hanja?: string;
 }
 
 export interface HerbCompoundingOrder {

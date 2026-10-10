@@ -86,12 +86,19 @@ export async function saveHerbFormula(
   if (error) throw error;
 }
 
-/** 붙여넣어 가져온 처방들을 한꺼번에 넣는다(같은 처방명+출전은 덮어쓴다). 200개씩 나눠 보낸다. */
-export async function importHerbFormulas(supabase: SupabaseClient, rows: FormulaImportRow[], createdBy: string | null): Promise<number> {
+/**
+ * 가져온 처방들을 한꺼번에 넣는다(같은 처방명+출전은 덮어쓴다). 100개씩 나눠 보내고, 한 묶음이 끝날 때마다 onProgress(넣은 수, 전체 수)를 부른다.
+ */
+export async function importHerbFormulas(
+  supabase: SupabaseClient,
+  rows: FormulaImportRow[],
+  createdBy: string | null,
+  onProgress?: (done: number, total: number) => void
+): Promise<number> {
   const now = new Date().toISOString();
   let saved = 0;
-  for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200).map((r) => ({
+  for (let i = 0; i < rows.length; i += 100) {
+    const chunk = rows.slice(i, i + 100).map((r) => ({
       name: r.name,
       name_hanja: r.nameHanja,
       source: r.source,
@@ -104,6 +111,7 @@ export async function importHerbFormulas(supabase: SupabaseClient, rows: Formula
     const { error } = await supabase.from('herb_formulas').upsert(chunk, { onConflict: 'name,source' });
     if (error) throw error;
     saved += chunk.length;
+    onProgress?.(saved, rows.length);
   }
   return saved;
 }

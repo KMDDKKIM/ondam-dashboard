@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { herbsForFormula, parseFormulaImport, parseFormulaJson, splitHerbNameList, summarizeFormulaHerbs, type FormulaImportResult, type HerbFormula } from '@/lib/herbFormulas';
@@ -31,6 +31,10 @@ export function FormulaPicker({ value, onChange }: Props) {
   const [saveName, setSaveName] = useState('');
   const [saveSource, setSaveSource] = useState('');
   const [importText, setImportText] = useState('');
+  // 파일로 가져올 때는 글을 칸에 펼치지 않고 따로 들고 있는다(수 MB라 칸에 넣으면 화면이 느려진다).
+  const [fileText, setFileText] = useState<{ name: string; text: string } | null>(null);
+  const [progress, setProgress] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [importSource, setImportSource] = useState('');
   const [busy, setBusy] = useState(false);
   const requestId = useRef(0);
@@ -83,7 +87,8 @@ export function FormulaPicker({ value, onChange }: Props) {
     onChange({
       ...value,
       prescriptionName: value.prescriptionName.trim() ? value.prescriptionName : formula.name,
-      herbs: formula.herbs.map((h) => ({ ...h })),
+      // 한자 이름은 처방전 입력·인쇄에 쓰지 않아 빼고 채운다.
+      herbs: formula.herbs.map((h) => ({ herbName: h.herbName, prepMethod: h.prepMethod, gramsPerPacket: h.gramsPerPacket })),
     });
     setNotice(`"${formula.name}" 처방의 약재 ${formula.herbs.length}개를 채웠어요.`);
     setQuery('');
@@ -136,36 +141,54 @@ export function FormulaPicker({ value, onChange }: Props) {
   }
 
   // 글이 [ 나 { 로 시작하면 JSON(다른 자료에서 정리해 온 처방집), 아니면 한 줄에 한 처방인 글로 읽는다.
-  const importIsJson = /^\s*[[{]/.test(importText);
-  const preview: (FormulaImportResult & { error?: string }) | null = importText.trim()
-    ? importIsJson
-      ? parseFormulaJson(importText, importSource)
-      : parseFormulaImport(importText, importSource)
-    : null;
+  // 큰 파일을 렌더링 때마다 다시 읽지 않도록 글·기본 출전이 바뀔 때만 계산한다.
+  const sourceText = fileText ? fileText.text : importText;
+  const preview = useMemo<(FormulaImportResult & { error?: string }) | null>(() => {
+    if (!sourceText.trim()) return null;
+    return /^\s*[[{]/.test(sourceText) ? parseFormulaJson(sourceText, importSource) : parseFormulaImport(sourceText, importSource);
+  }, [sourceText, importSource]);
 
   function readJsonFile(file: File | undefined) {
     if (!file) return;
-    file.text().then(setImportText, () => setError('파일을 읽지 못했어요.'));
+    file.text().then(
+      (text) => {
+        setFileText({ name: file.name, text });
+        setImportText('');
+      },
+      () => setError('파일을 읽지 못했어요.')
+    );
   }
 
   async function runImport() {
     if (!preview || preview.rows.length === 0) return;
     setBusy(true);
     setError('');
+    setProgress(`0/${preview.rows.length}`);
     try {
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const saved = await importHerbFormulas(supabase, preview.rows, user?.id ?? null);
-      setNotice(`처방 ${saved}개를 처방집에 넣었어요${preview.skipped.length > 0 ? ` (읽지 못한 줄 ${preview.skipped.length}개는 건너뜀)` : ''}.`);
+      const saved = await importHerbFormulas(supabase, preview.rows, user?.id ?? null, (done, all) => setProgress(`${done.toLocaleString('ko-KR')}/${all.toLocaleString('ko-KR')}`));
+      setNotice(`처방 ${saved.toLocaleString('ko-KR')}개를 처방집에 넣었어요${preview.skipped.length > 0 ? ` (읽지 못한 항목 ${preview.skipped.length}개는 건너뜀)` : ''}.`);
       setImportText('');
+      setFileText(null);
       refreshTotal();
     } catch {
-      setError('가져오지 못했어요. (처방집 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
+      setError('가져오다가 멈췄어요. 같은 파일을 다시 가져오면 이어서 덮어써요. (처방집 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
     } finally {
       setBusy(false);
+      setProgress('');
     }
+  }
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   return (
@@ -228,7 +251,8 @@ export function FormulaPicker({ value, onChange }: Props) {
           {searching && results.length === 0 && <p className="muted-text" style={{ fontSize: 12, margin: 8 }}>찾는 중...</p>}
           {!searching && results.length === 0 && !error && <p className="muted-text" style={{ fontSize: 12, margin: 8 }}>처방집에 없어요.</p>}
           {results.map((f) => (
-            <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, borderBottom: '1px solid var(--color-line)' }}>
+            <div key={f.id} style={{ borderBottom: '1px solid var(--color-line)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
               <button
                 type="button"
                 onClick={() => apply(f)}
@@ -243,9 +267,21 @@ export function FormulaPicker({ value, onChange }: Props) {
                 {f.indication && <div style={{ fontSize: 12, marginTop: 2 }}>{f.indication.length > 70 ? `${f.indication.slice(0, 70)}…` : f.indication}</div>}
                 <div className="muted-text" style={{ fontSize: 12, marginTop: 2 }}>{summarizeFormulaHerbs(f.herbs, 12)}</div>
               </button>
+              {f.memo && (
+                <button type="button" onClick={() => toggleExpanded(f.id)} style={{ ...linkButton, padding: '9px 4px', whiteSpace: 'nowrap' }}>
+                  {expanded.has(f.id) ? '접기' : '자세히'}
+                </button>
+              )}
               <button type="button" onClick={() => remove(f)} aria-label={`${f.name} 삭제`} style={{ border: 'none', background: 'none', color: 'var(--color-muted)', fontSize: 14, padding: '7px 8px' }}>
                 ×
               </button>
+            </div>
+            {expanded.has(f.id) && f.memo && (
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 12, margin: '0 8px 8px', padding: 8, borderRadius: 6, background: 'var(--color-surface-2)', maxHeight: 220, overflowY: 'auto' }}>
+                {f.memo}
+                {f.herbs.some((h) => h.hanja) ? `\n\n약재(한자): ${f.herbs.map((h) => `${h.herbName}${h.hanja ? `(${h.hanja})` : ''}`).join(' · ')}` : ''}
+              </pre>
+            )}
             </div>
           ))}
         </div>
@@ -292,9 +328,17 @@ export function FormulaPicker({ value, onChange }: Props) {
               같은 처방명+출전은 덮어써요.
             </p>
             <input type="file" accept=".json,application/json,.txt,.tsv,.csv" onChange={(e) => readJsonFile(e.target.files?.[0])} style={{ fontSize: 12, marginBottom: 6 }} />
+            {fileText && (
+              <p style={{ fontSize: 12, margin: '0 0 6px' }}>
+                📄 {fileText.name} ({Math.round(fileText.text.length / 1024).toLocaleString('ko-KR')}KB){' '}
+                <button type="button" onClick={() => setFileText(null)} style={linkButton}>
+                  파일 빼기
+                </button>
+              </p>
+            )}
             <textarea
               className="input-field"
-              style={{ minHeight: 90, fontSize: 12 }}
+              style={{ minHeight: 90, fontSize: 12, display: fileText ? 'none' : undefined }}
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               placeholder={'시험탕(試驗湯) | 사상의학 | 가 12g 나 8g 다 라 4g\n보중탕 | 가 6g 나 4g'}
@@ -308,7 +352,7 @@ export function FormulaPicker({ value, onChange }: Props) {
                 style={{ flex: '1 1 180px', padding: '5px 8px', fontSize: 13 }}
               />
               <button type="button" onClick={runImport} disabled={busy || !preview || preview.rows.length === 0} className="btn-primary" style={{ fontSize: 13 }}>
-                {preview ? `처방 ${preview.rows.length}개 가져오기` : '가져오기'}
+                {busy && progress ? `가져오는 중 ${progress}` : preview ? `처방 ${preview.rows.length.toLocaleString('ko-KR')}개 가져오기` : '가져오기'}
               </button>
             </div>
             {preview && (

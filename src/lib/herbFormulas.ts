@@ -232,10 +232,12 @@ export function parseFormulaJson(textInput: string, defaultSource = ''): Formula
       const ho = h as Json;
       const herbName = text(pick(ho, ['name', 'herbName', '약재', '약재명']));
       if (!herbName) continue;
+      const hanja = text(pick(ho, ['hanja', 'herbHanja', '한자']));
       herbs.push({
         herbName,
         prepMethod: text(pick(ho, ['prep', 'prepMethod', '수치', '포제'])),
         gramsPerPacket: gramsOf(pick(ho, ['grams', 'gramsPerPacket', '용량', '그램'])),
+        ...(hanja ? { hanja } : {}),
       });
     }
     if (herbs.length === 0) {
