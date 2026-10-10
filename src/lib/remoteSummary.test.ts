@@ -51,6 +51,16 @@ describe('summarizeAnswers', () => {
   });
 });
 
+describe('summarizeAnswers - 대리 신청', () => {
+  it('복용하실 분 번호가 있으면 복용자 칩에 같이 보여 준다', () => {
+    const { chips } = summarizeAnswers([
+      { question: '복용하실 분', answer: '부모님' },
+      { question: '복용하실 분 번호', answer: '010-1111-2222' },
+    ]);
+    expect(chips).toEqual([{ label: '복용자', value: '부모님 · 010-1111-2222', tone: 'warn' }]);
+  });
+});
+
 describe('shortSymptoms', () => {
   it('부위 이름을 떼고 증상만 남긴다', () => {
     expect(shortSymptoms('목 - 쉰 목소리, 목 - 잦은 헛기침')).toBe('쉰 목소리, 잦은 헛기침');

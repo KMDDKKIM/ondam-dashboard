@@ -57,7 +57,11 @@ export function summarizeAnswers(answers: AnswerItem[]): RemoteSummary {
   if (box) chips.push({ label: '수량', value: shortBox(box), tone: 'main' });
 
   const patient = find(answers, '복용하실 분');
-  if (patient && patient !== '본인') chips.push({ label: '복용자', value: patient, tone: 'warn' });
+  const patientPhone = find(answers, '복용하실 분 번호');
+  if (patient && patient !== '본인') {
+    // 선물·대리 신청이면 진료 전화는 드실 분께 건다(신청서의 '복용하실 분 번호').
+    chips.push({ label: '복용자', value: patientPhone ? `${patient} · ${patientPhone}` : patient, tone: 'warn' });
+  }
 
   const pregnancy = find(answers, '임신·수유');
   if (pregnancy && pregnancy !== '해당 없음') chips.push({ label: '임신·수유', value: pregnancy, tone: 'warn' });
