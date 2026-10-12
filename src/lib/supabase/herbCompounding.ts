@@ -153,3 +153,24 @@ export async function listKnownHerbCompoundingPatients(supabase: SupabaseClient)
   }
   return Array.from(seen.values());
 }
+
+/**
+ * 같은 환자의 이전 처방전들(최근 것부터). 이름이 같고, 차트번호를 적었으면 차트번호도 같은 것만 — 동명이인을 가린다.
+ * 인쇄하면 자동으로 저장되는 처방전도 여기에 들어 있다. 지금 보고 있는 처방전(exceptId)은 뺀다.
+ */
+export async function listHerbCompoundingOrdersForPatient(
+  supabase: SupabaseClient,
+  patientName: string,
+  chartNo: string,
+  exceptId = '',
+  limit = 8
+): Promise<HerbCompoundingOrder[]> {
+  const name = patientName.trim();
+  if (!name) return [];
+  let query = supabase.from('herb_compounding_orders').select('*').eq('patient_name', name);
+  if (chartNo.trim()) query = query.eq('chart_no', chartNo.trim());
+  const { data, error } = await query.order('order_date', { ascending: false }).order('created_at', { ascending: false }).limit(limit + 1);
+  if (error) throw error;
+  return (data as HerbCompoundingRow[]).map(fromRow).filter((o) => o.id !== exceptId).slice(0, limit);
+}
+
