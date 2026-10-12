@@ -57,7 +57,7 @@ export function PatientHistory({ value, onChange }: Props) {
   }
 
   return (
-    <div style={{ margin: '-4px 0 14px', padding: '8px 12px', borderRadius: 10, background: 'var(--color-surface-2)' }}>
+    <div style={{ margin: '0 0 14px', padding: '8px 12px', borderRadius: 10, background: 'var(--color-surface-2)' }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import './herb-compounding.css';
 import { OrderForm } from '@/components/herbCompounding/OrderForm';
 import { FormulaPicker } from '@/components/herbCompounding/FormulaPicker';
+import { PatientHistory } from '@/components/herbCompounding/PatientHistory';
 import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
 import { canSaveOrder, incompleteHerbLines, type HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { todayKst } from '@/lib/kst';
@@ -281,6 +282,8 @@ export default function HerbCompoundingPage() {
         </button>
         <div className="herb-formula-title">📖 처방집</div>
         <div className="herb-formula-body">
+          {/* 환자를 고르거나 이름을 적으면 같은 환자의 이전 처방이 처방집 검색 위에 뜬다. */}
+          <PatientHistory value={order} onChange={setOrder} />
           <FormulaPicker value={order} onChange={setOrder} />
         </div>
       </aside>
