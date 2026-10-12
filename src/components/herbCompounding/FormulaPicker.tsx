@@ -194,7 +194,7 @@ export function FormulaPicker({ value, onChange }: Props) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>
-        처방집 검색 — 처방명(한글·한자)을 치고 누르면 약재 목록이 채워져요{total != null ? ` · 처방집 ${total.toLocaleString('ko-KR')}개` : ''}
+        처방명(한글·한자)을 치고 누르면 왼쪽 약재 목록이 채워져요{total != null ? ` · 처방집 ${total.toLocaleString('ko-KR')}개` : ''}
       </label>
       <input
         className="input-field"
@@ -239,7 +239,7 @@ export function FormulaPicker({ value, onChange }: Props) {
       {notice && <p style={{ color: 'var(--color-green)', fontSize: 13, margin: '6px 0 0' }}>{notice}</p>}
 
       {hasCondition && (
-        <div className="card" style={{ marginTop: 6, maxHeight: 320, overflowY: 'auto', padding: 4 }}>
+        <div className="card" style={{ marginTop: 6, maxHeight: 'min(60vh, 520px)', overflowY: 'auto', padding: 4 }}>
           {results.length > 0 && (
             <p className="muted-text" style={{ fontSize: 12, margin: '4px 8px' }}>
               {hasMore ? `${results.length}개 이상` : `${results.length}개`}

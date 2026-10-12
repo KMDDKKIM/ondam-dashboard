@@ -17,6 +17,7 @@ describe('isActivePath', () => {
 describe('isWidePath', () => {
   it('표가 넓은 화면만 true', () => {
     expect(isWidePath('/reservations')).toBe(true);
+    expect(isWidePath('/herb-compounding')).toBe(true); // 처방 입력(왼쪽) + 처방집(오른쪽) 두 칸
     expect(isWidePath('/herb-print/records')).toBe(true);
     expect(isWidePath('/supply-requests')).toBe(false);
   });

@@ -101,3 +101,64 @@
     margin-bottom: 2mm;
   }
 }
+
+/* 화면: 왼쪽 처방 입력 + 오른쪽 처방집(검색·약재로 찾기·가져오기). 인쇄에는 영향이 없다(.no-print 안). */
+.herb-compounding-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.herb-compounding-grid .herb-formula-side {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  margin-bottom: 0;
+}
+
+.herb-formula-title {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.herb-formula-toggle {
+  display: none;
+}
+
+/* 좁은 화면: 한 열로 쌓고, 처방집을 입력 위에 두되 접어 둔다. */
+@media (max-width: 1100px) {
+  .herb-compounding-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .herb-compounding-grid .herb-formula-side {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    order: -1;
+  }
+
+  .herb-formula-title {
+    display: none;
+  }
+
+  .herb-formula-toggle {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-weight: 700;
+    border: none;
+    background: none;
+    padding: 0;
+  }
+
+  .herb-formula-side[data-open='false'] .herb-formula-body {
+    display: none;
+  }
+
+  .herb-formula-side[data-open='true'] .herb-formula-body {
+    margin-top: 10px;
+  }
+}

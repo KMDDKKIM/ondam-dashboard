@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import './herb-compounding.css';
 import { OrderForm } from '@/components/herbCompounding/OrderForm';
+import { FormulaPicker } from '@/components/herbCompounding/FormulaPicker';
 import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
 import { canSaveOrder, incompleteHerbLines, type HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { todayKst } from '@/lib/kst';
@@ -53,6 +54,8 @@ export default function HerbCompoundingPage() {
   const printSnapshot = useRef<{ patientName: string; chartNo: string } | null>(null);
   const [completedQueue, setCompletedQueue] = useState<{ id: string; name: string }[]>([]);
   const [queueUndone, setQueueUndone] = useState(false);
+  // 좁은 화면에서는 처방집 칸을 접어 두고(위쪽 버튼으로 펼침), 넓은 화면에서는 항상 오른쪽에 펼쳐 둔다.
+  const [sideOpen, setSideOpen] = useState(true);
 
   // 환자명 검색 후보 — 전에 저장한 처방전들에서 이름+차트번호 조합을 뽑는다.
   function refreshKnownPatients() {
@@ -63,6 +66,10 @@ export default function HerbCompoundingPage() {
         // 못 불러와도 직접 입력하면 된다.
       });
   }
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 1100px)').matches) setSideOpen(false);
+  }, []);
+
   useEffect(() => {
     refreshKnownPatients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -224,7 +231,8 @@ export default function HerbCompoundingPage() {
       {/* 화면에서는 입력 칸만 보여준다 — 옆에 미리보기까지 같이 두면 같은 내용이 두 번
           찍혀서 겹쳐 보였다(원장 지적, 2026-09-29). 실제 찍히는 모양은 "인쇄하기"를 눌러
           window.print()가 열릴 때(.print-only)만 보면 된다. */}
-      <div className="no-print card" style={{ padding: 20 }}>
+      <div className="no-print herb-compounding-grid">
+      <div className="card herb-compounding-main" style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontWeight: 700 }}>처방 입력</span>
           <button type="button" onClick={handleNew} className="muted-text" style={{ background: 'none', border: 'none', textDecoration: 'underline', padding: 0 }}>
@@ -264,6 +272,18 @@ export default function HerbCompoundingPage() {
           </p>
         )}
         {!order.id && <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>저장하지 않고 &quot;인쇄하기&quot;를 눌러도 먼저 저장된 뒤 인쇄돼요. 인쇄 후에는 처음 화면으로 돌아와요.</p>}
+      </div>
+
+      {/* 처방집 — 넓은 화면에서는 오른쪽에 붙어 따라오고, 좁은 화면에서는 입력 위에서 접고 펼친다. */}
+      <aside className="card herb-formula-side" data-open={sideOpen} style={{ padding: 16 }}>
+        <button type="button" className="herb-formula-toggle" onClick={() => setSideOpen((v) => !v)} aria-expanded={sideOpen}>
+          📖 처방집 검색 {sideOpen ? '▲' : '▼'}
+        </button>
+        <div className="herb-formula-title">📖 처방집</div>
+        <div className="herb-formula-body">
+          <FormulaPicker value={order} onChange={setOrder} />
+        </div>
+      </aside>
       </div>
 
       <div className="print-only">
