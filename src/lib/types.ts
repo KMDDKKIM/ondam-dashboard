@@ -224,6 +224,8 @@ export interface NonCoveredProduct {
   id: string;
   name: string;
   sortOrder: number;
+  /** 이 상품을 고르면 등록 화면의 "목표 반영"에 자동으로 채울 값(상품 목록 관리에서 정한다). 없으면 null */
+  goalCategory: GoalCategory | null;
 }
 
 // 일일 결산 입력에서 함께 저장하는 숫자. 입력하지 않은 항목은 null.

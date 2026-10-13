@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { defaultGoalFor } from '@/lib/purchaseFilter';
 import { DURATION_PRESETS } from '@/lib/supabase/nonCoveredPurchases';
 import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
@@ -11,6 +12,8 @@ import { GOAL_CATEGORY_LABEL, formatAmount, monthDay, shortDate } from './shared
 interface Props {
   rows: NonCoveredPurchase[];
   products: NonCoveredProduct[];
+  /** 구분 목록(등록 화면과 같은 목록) — 수정할 때 드롭다운으로 고른다. */
+  categories: string[];
   /** 직원 id -> 이름 (승인된 직원). 없으면 삭제된 직원으로 본다. */
   staffNames: Record<string, string>;
   /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
@@ -99,7 +102,58 @@ function creatorLabel(createdBy: string | null, staffNames: Record<string, strin
   return createdBy && staffNames[createdBy] ? staffNames[createdBy] : '(삭제된 직원)';
 }
 
-export function PurchaseTable({ rows, products, staffNames, doctorNames, onSave, onDelete }: Props) {
+// 드롭다운으로 고르되, 목록에 없는 값은 "직접 입력"으로 쓴다. 지금 값이 목록에 없으면(지워진 상품 등) 사라지지 않게 같이 보여 준다.
+const CUSTOM = '__custom__';
+
+function SelectOrCustom({
+  value,
+  options,
+  onChange,
+  placeholder,
+  customLabel,
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  placeholder: string;
+  customLabel: string;
+}) {
+  const [custom, setCustom] = useState(false);
+  const shown = value && !options.includes(value) ? [value, ...options] : options;
+  if (custom) {
+    return (
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="input-field" style={inputBig} autoFocus />
+        <button type="button" onClick={() => setCustom(false)} style={{ padding: '0 12px', borderRadius: 10, border: '1px solid var(--color-line)', background: 'var(--color-surface-2)', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+          목록에서 고르기
+        </button>
+      </div>
+    );
+  }
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        if (e.target.value === CUSTOM) {
+          setCustom(true);
+          onChange('');
+        } else onChange(e.target.value);
+      }}
+      className="input-field"
+      style={inputBig}
+    >
+      {!value && <option value="">선택</option>}
+      {shown.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+      <option value={CUSTOM}>{customLabel}</option>
+    </select>
+  );
+}
+
+export function PurchaseTable({ rows, products, categories, staffNames, doctorNames, onSave, onDelete }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -155,10 +209,18 @@ export function PurchaseTable({ rows, products, staffNames, doctorNames, onSave,
               </select>
             </Field>
             <Field label="구분">
-              <input value={d.category} onChange={(e) => field('category', e.target.value)} className="input-field" style={inputBig} />
+              <SelectOrCustom value={d.category} options={categories} onChange={(v) => field('category', v)} placeholder="새 구분 이름" customLabel="＋ 직접 입력" />
             </Field>
-            <Field label="상품 *">
-              <input value={d.productName} onChange={(e) => field('productName', e.target.value)} className="input-field" style={inputBig} list="non-covered-product-options" />
+            <Field label="상품 * (고르면 목표 반영이 자동으로 바뀌어요)">
+              <SelectOrCustom
+                value={d.productName}
+                options={products.map((p) => p.name)}
+                onChange={(v) =>
+                  setDraft((cur) => (cur ? { ...cur, productName: v, goalCategory: v ? defaultGoalFor(v, products) : cur.goalCategory } : cur))
+                }
+                placeholder="상품명 직접 입력"
+                customLabel="＋ 직접 입력"
+              />
             </Field>
             <Field label="금액 (원)">
               <input type="number" value={d.amount} onChange={(e) => field('amount', e.target.value)} className="input-field" style={inputBig} />
@@ -184,7 +246,7 @@ export function PurchaseTable({ rows, products, staffNames, doctorNames, onSave,
             <Field label="한약 수령일 (해피콜 기준일)">
               <input type="date" value={d.happyCallDate} onChange={(e) => field('happyCallDate', e.target.value)} className="input-field" style={inputBig} />
             </Field>
-            <Field label="처방일수 (한약일 때만)">
+            <Field label="처방일수">
               <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                 {DURATION_PRESETS.map((n) => (
                   <button

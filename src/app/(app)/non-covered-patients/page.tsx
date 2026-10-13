@@ -12,6 +12,9 @@ import {
 } from '@/lib/supabase/nonCoveredPurchases';
 import { addNonCoveredProduct } from '@/lib/supabase/nonCoveredProducts';
 import { orderCategories } from '@/lib/nonCoveredStats';
+import { todayKst } from '@/lib/kst';
+import { ALL_CATEGORIES, EXPORT_HEADERS, PERIOD_PRESET_LABEL, exportFileName, filterPurchases, periodRange, purchaseExportRows, summarizePurchases, type PeriodPreset } from '@/lib/purchaseFilter';
+import { XLSX_MIME, buildXlsx } from '@/lib/xlsx';
 import type { NonCoveredPurchase } from '@/lib/types';
 import { ProductManager } from '@/components/non-covered/ProductManager';
 import { PurchaseForm, type PurchaseFormValues } from '@/components/non-covered/PurchaseForm';
@@ -27,7 +30,10 @@ export default function NonCoveredRecordsPage() {
   const [showForm, setShowForm] = useState(false);
   const [showProductManager, setShowProductManager] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState('전체');
+  const [activeTab, setActiveTab] = useState(ALL_CATEGORIES);
+  // 구매일 기간으로 찾기(비우면 제한 없음)
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
   const knownPatients = useMemo(() => listKnownPatients(purchases), [purchases]);
   const categories = useMemo(() => {
@@ -39,7 +45,29 @@ export default function NonCoveredRecordsPage() {
     purchases.forEach((p) => counts.set(p.category, (counts.get(p.category) ?? 0) + 1));
     return counts;
   }, [purchases]);
-  const filtered = activeTab === '전체' ? purchases : purchases.filter((p) => p.category === activeTab);
+  const filtered = useMemo(() => filterPurchases(purchases, { category: activeTab, from, to }), [purchases, activeTab, from, to]);
+  const summary = useMemo(() => summarizePurchases(filtered), [filtered]);
+
+  function applyPreset(preset: PeriodPreset) {
+    const range = periodRange(preset, todayKst());
+    setFrom(range.from);
+    setTo(range.to);
+  }
+
+  // 지금 보이는 목록(구분 탭 + 기간)을 엑셀 파일로 받는다. 해피콜 일정(1·2·3차)도 같이 들어간다.
+  function downloadExcel() {
+    const rows = purchaseExportRows(filtered, (createdBy) => (createdBy && staffNames[createdBy]) || '(삭제된 직원)');
+    const bytes = buildXlsx(activeTab === ALL_CATEGORIES ? '비급여 구매기록' : activeTab, EXPORT_HEADERS, rows);
+    const blob = new Blob([bytes as BlobPart], { type: XLSX_MIME });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportFileName(activeTab, from, to);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   async function handleSubmit(values: PurchaseFormValues) {
     setSubmitting(true);
@@ -114,7 +142,7 @@ export default function NonCoveredRecordsPage() {
         <PurchaseForm
           products={products}
           categories={categories}
-          defaultCategory={activeTab !== '전체' ? activeTab : GENERAL}
+          defaultCategory={activeTab !== ALL_CATEGORIES ? activeTab : GENERAL}
           knownPatients={knownPatients}
           doctorNames={doctorNames}
           submitting={submitting}
@@ -124,7 +152,7 @@ export default function NonCoveredRecordsPage() {
       )}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {['전체', ...categories].map((tab) => (
+        {[ALL_CATEGORIES, ...categories].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -139,12 +167,32 @@ export default function NonCoveredRecordsPage() {
             }}
           >
             {tab}
-            {tab !== '전체' && countByCategory.has(tab) ? ` (${countByCategory.get(tab)})` : ''}
+            {tab !== ALL_CATEGORIES && countByCategory.has(tab) ? ` (${countByCategory.get(tab)})` : ''}
           </button>
         ))}
       </div>
 
-      <PurchaseTable rows={filtered} products={products} staffNames={staffNames} doctorNames={doctorNames} onSave={handleSave} onDelete={handleDelete} />
+      {/* 기간으로 찾기 + 엑셀 내려받기 — 위의 구분 탭(이벤트·일반 등)과 함께 걸린다. */}
+      <div className="card" style={{ padding: 14, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>기간</span>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="구매일 시작" className="input-field" style={{ width: 150 }} />
+        <span className="muted-text">~</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="구매일 끝" className="input-field" style={{ width: 150 }} />
+        {(['thisMonth', 'lastMonth', 'last3Months', 'thisYear', 'all'] as PeriodPreset[]).map((preset) => (
+          <button key={preset} type="button" onClick={() => applyPreset(preset)} style={{ ...smallBtn, padding: '7px 12px', fontSize: 13, fontWeight: 600 }}>
+            {PERIOD_PRESET_LABEL[preset]}
+          </button>
+        ))}
+        <span style={{ marginLeft: 'auto', fontSize: 14 }}>
+          <b>{summary.count}건</b> · 합계 <b>{summary.total.toLocaleString('ko-KR')}원</b>
+          {summary.missingAmount > 0 && <span className="muted-text"> (금액 미입력 {summary.missingAmount}건 제외)</span>}
+        </span>
+        <button type="button" onClick={downloadExcel} disabled={filtered.length === 0} className="btn-primary" style={{ padding: '9px 16px', fontSize: 14 }}>
+          📥 엑셀 다운로드
+        </button>
+      </div>
+
+      <PurchaseTable rows={filtered} products={products} categories={categories} staffNames={staffNames} doctorNames={doctorNames} onSave={handleSave} onDelete={handleDelete} />
     </div>
   );
 }

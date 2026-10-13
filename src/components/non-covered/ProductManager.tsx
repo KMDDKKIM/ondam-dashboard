@@ -8,9 +8,10 @@ import {
   deleteNonCoveredProduct,
   listNonCoveredProducts,
   renameNonCoveredProduct,
+  setNonCoveredProductGoal,
 } from '@/lib/supabase/nonCoveredProducts';
-import type { NonCoveredProduct } from '@/lib/types';
-import { linkBtn, smallBtn } from './shared';
+import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
+import { GOAL_CATEGORY_LABEL, linkBtn, smallBtn } from './shared';
 
 interface Props {
   supabase: SupabaseClient;
@@ -58,6 +59,17 @@ export function ProductManager({ supabase, products, onProductsChange, onError }
     }
   }
 
+  async function handleGoal(p: NonCoveredProduct, value: string) {
+    const goal = (value || null) as GoalCategory | null;
+    try {
+      onError('');
+      await setNonCoveredProductGoal(supabase, p.id, goal);
+      onProductsChange(await listNonCoveredProducts(supabase));
+    } catch {
+      onError('목표 반영을 바꾸지 못했습니다. (상품 목표 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
+    }
+  }
+
   async function handleDelete(p: NonCoveredProduct) {
     if (!await confirmDialog(`"${p.name}"을(를) 상품 목록에서 삭제할까요? (이미 등록된 기록은 그대로 남아요)`)) return;
     try {
@@ -74,6 +86,8 @@ export function ProductManager({ supabase, products, onProductsChange, onError }
       <div style={{ fontWeight: 700, marginBottom: 4 }}>상품 목록 관리</div>
       <p className="muted-text" style={{ marginBottom: 10 }}>
         등록 화면에서 고를 수 있는 상품명이에요. 이름을 고치거나 지워도 이미 등록된 기록은 그대로 남아요.
+        <br />
+        상품 옆의 <b>목표</b>를 정해 두면, 등록·수정 화면에서 그 상품을 고를 때 &quot;목표 반영&quot;이 자동으로 채워져요(그 자리에서 바꿀 수도 있어요).
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         {products.map((p) =>
@@ -112,6 +126,20 @@ export function ProductManager({ supabase, products, onProductsChange, onError }
               }}
             >
               {p.name}
+              <select
+                value={p.goalCategory ?? ''}
+                onChange={(e) => handleGoal(p, e.target.value)}
+                title="이 상품을 고르면 목표 반영에 자동으로 채워요"
+                aria-label={`${p.name} 목표 반영`}
+                style={{ fontSize: 12, padding: '1px 2px', borderRadius: 6, border: '1px solid var(--color-line)', background: 'var(--color-surface)' }}
+              >
+                <option value="">목표 없음</option>
+                {(Object.keys(GOAL_CATEGORY_LABEL) as GoalCategory[]).map((key) => (
+                  <option key={key} value={key}>
+                    {GOAL_CATEGORY_LABEL[key]}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={() => {

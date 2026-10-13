@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { DURATION_PRESETS, defaultHappyCallDate, suggestGoalCategory, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
+import { DURATION_PRESETS, defaultHappyCallDate, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
+import { suggestGoalCategory } from '@/lib/nonCoveredGoal';
+import { defaultGoalFor } from '@/lib/purchaseFilter';
 import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
@@ -59,7 +61,6 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const [happyCallDate, setHappyCallDate] = useState(defaultHappyCallDate(today));
   const [durationDays, setDurationDays] = useState('');
   const [goalCategory, setGoalCategory] = useState<GoalCategory | null>(null);
-  const [goalCategoryTouched, setGoalCategoryTouched] = useState(false);
   const [memo, setMemo] = useState('');
 
   // 상품 목록 관리에서 지금 고른 상품을 지웠으면 선택을 비운다.
@@ -85,7 +86,8 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     setProductChoice(value);
     const picked = value === CUSTOM_PRODUCT ? undefined : products.find((p) => p.id === value);
     setProductName(picked?.name ?? '');
-    if (!goalCategoryTouched) setGoalCategory(picked ? suggestGoalCategory(picked.name) : null);
+    // 상품을 고르면 그 상품에 정해 둔 목표 반영으로 채운다(아래 "목표 반영"에서 바꿀 수 있다).
+    setGoalCategory(picked ? defaultGoalFor(picked.name, products) : null);
   }
 
   const missing = [!name.trim() && '환자 성함', !chartNo.trim() && '차트번호', !productName.trim() && '상품'].filter(Boolean) as string[];
@@ -207,7 +209,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
               value={productName}
               onChange={(e) => {
                 setProductName(e.target.value);
-                if (!goalCategoryTouched) setGoalCategory(suggestGoalCategory(e.target.value));
+                setGoalCategory(suggestGoalCategory(e.target.value));
               }}
               className="input-field"
               style={inputBig}
@@ -234,12 +236,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
 
       <h3 style={sectionTitle}>③ 목표 · 한약 해피콜</h3>
       <div style={fieldGrid}>
-        <Field label="목표 반영">
+        <Field label="목표 반영 (상품을 고르면 자동으로 채워져요 · 바꿀 수 있어요)">
           <select
             value={goalCategory ?? ''}
             onChange={(e) => {
               setGoalCategory((e.target.value || null) as GoalCategory | null);
-              setGoalCategoryTouched(true);
             }}
             className="input-field"
             style={inputBig}
@@ -255,7 +256,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
         <Field label="한약 수령일 (해피콜 기준일, 기본: 구매일 다음날)">
           <input type="date" value={happyCallDate} onChange={(e) => setHappyCallDate(e.target.value)} className="input-field" style={inputBig} />
         </Field>
-        <Field label="처방일수 (한약일 때만)">
+        <Field label="처방일수">
           <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
             {DURATION_PRESETS.map((d) => (
               <button

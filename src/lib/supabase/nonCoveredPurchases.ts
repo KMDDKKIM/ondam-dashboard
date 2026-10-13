@@ -64,13 +64,8 @@ export function defaultHappyCallDate(purchaseDate: string): string {
 
 export const DURATION_PRESETS = [15, 30, 60, 120];
 
-// 특수한약으로 분류되는 품목 — 상품명을 여기서 골라 입력하면 "목표 반영"을
-// 자동으로 특수한약으로 제안한다(그래도 등록 폼에서 직접 바꿀 수 있다).
-export const SPECIAL_HERB_PRODUCTS = ['공진단', '경옥고', '녹용관절고', '보폐고엔오'];
-
-export function suggestGoalCategory(productName: string): GoalCategory | null {
-  return SPECIAL_HERB_PRODUCTS.some((name) => productName.includes(name)) ? 'special_herb' : null;
-}
+// 상품을 고르면 "목표 반영"을 자동으로 채우는 규칙은 lib/nonCoveredGoal.ts, lib/purchaseFilter.ts(defaultGoalFor)에 있다.
+export { SPECIAL_HERB_PRODUCTS, suggestGoalCategory } from '@/lib/nonCoveredGoal';
 
 const PAGE_SIZE = 1000; // Supabase(PostgREST) 한 번에 돌려주는 최대 행 수
 
