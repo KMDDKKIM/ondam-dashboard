@@ -7,6 +7,7 @@ import { OrderForm } from '@/components/herbCompounding/OrderForm';
 import { FormulaPicker } from '@/components/herbCompounding/FormulaPicker';
 import { PatientHistory } from '@/components/herbCompounding/PatientHistory';
 import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
+import { herbPrintHref } from '@/lib/herb-print/handoff';
 import { canSaveOrder, incompleteHerbLines, type HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
@@ -18,12 +19,6 @@ import {
 } from '@/lib/supabase/herbCompounding';
 import { listHerbInventory } from '@/lib/supabase/herbInventory';
 import { completeQueueForPrescription, currentStaff, undoHerbQueueDone } from '@/lib/supabase/herbQueue';
-
-// 복용법(/herb-print) 화면으로 넘어가는 주소 — 환자 성함과 하루 복용 횟수(2·3회일 때)를 실어 보낸다.
-function herbPrintHref(patientName: string, dosesPerDay: number): string {
-  const doses = dosesPerDay === 2 || dosesPerDay === 3 ? `&dosesPerDay=${dosesPerDay}` : '';
-  return `/herb-print?patientName=${encodeURIComponent(patientName.trim())}${doses}`;
-}
 
 function makeEmptyOrder(): HerbCompoundingOrder {
   return {
