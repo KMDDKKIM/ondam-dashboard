@@ -1,5 +1,6 @@
 import { TEMPERATURES, defaultDoses } from "@/lib/herb-print/constants";
-import type { DoctorName, DoseMode, Prescription, Temperature } from "@/lib/herb-print/types";
+import { toggleTemperature } from "@/lib/herb-print/temperature";
+import type { DoctorName, DoseMode, Prescription } from "@/lib/herb-print/types";
 import DoseScheduleEditor from "./DoseScheduleEditor";
 import FoodChecklist from "./FoodChecklist";
 
@@ -148,15 +149,16 @@ export default function PrescriptionForm({
         </div>
       </div>
 
-      <Field label="복용 온도">
+      <Field label="복용 온도 (여러 개 고를 수 있어요)">
         <div className="flex gap-2">
           {TEMPERATURES.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => set("temperature", t as Temperature)}
+              aria-pressed={value.temperatures.includes(t)}
+              onClick={() => set("temperatures", toggleTemperature(value.temperatures, t))}
               className={`rounded px-3 py-1.5 text-sm ${
-                value.temperature === t
+                value.temperatures.includes(t)
                   ? "bg-[#a63a2e] text-white"
                   : "border border-[#d8c9ac] bg-white text-[#6b5a44]"
               }`}

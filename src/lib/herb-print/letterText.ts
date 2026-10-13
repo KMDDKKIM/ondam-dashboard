@@ -1,4 +1,5 @@
 import { CLINIC, FOOD_REASON_GROUPS } from "./constants";
+import { formatTemperatures } from "./temperature";
 import { josaEunNeun, josaEuroRo, josaGwaWa } from "./josa";
 import type { Prescription } from "./types";
 
@@ -128,7 +129,7 @@ export function buildLetter(p: Prescription): LetterParagraphs {
           seg(doseCountText, true),
           seg(", 식사 시간과 관계없이 "),
           ...(doseList ? [seg(doseList, true), seg("에 각 한 포씩, ")] : [seg("각 한 포씩 ")]),
-          seg(p.temperature),
+          seg(formatTemperatures(p.temperatures)),
           seg(" 드시기 바랍니다."),
         ]
       : [
@@ -136,7 +137,7 @@ export function buildLetter(p: Prescription): LetterParagraphs {
           seg(doseCountText, true),
           seg(", "),
           ...(doseList ? [seg(doseList, true), seg("에 한 포씩, ")] : [seg("한 포씩 ")]),
-          seg(p.temperature),
+          seg(formatTemperatures(p.temperatures)),
           seg(" 드시기 바랍니다."),
         ];
 

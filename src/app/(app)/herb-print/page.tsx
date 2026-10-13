@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import LetterPreview from "@/components/herb-print/LetterPreview";
 import PrescriptionForm from "@/components/herb-print/PrescriptionForm";
+import { defaultDoses } from "@/lib/herb-print/constants";
 import { makeEmptyPrescription } from "@/lib/herb-print/defaults";
 import { get, save } from "@/lib/herb-print/storage";
 import type { Prescription } from "@/lib/herb-print/types";
@@ -15,6 +16,27 @@ export default function Home() {
   const [savedMessage, setSavedMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const [fromPrescription, setFromPrescription] = useState("");
+
+  // 한약 처방전 화면에서 넘어오면(?patientName=…&dosesPerDay=3) 환자 성함과 하루 복용 횟수를 채워 둔다 — 복용법은
+  // 처방전을 낸 바로 다음에 쓰는 일이 많아서(원장 요청, 2026-10-13). 복용 횟수는 2·3회만 안내문에서 고를 수 있다.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const patientName = params.get("patientName")?.trim();
+    if (!patientName || params.get("load")) return;
+    const doses = Number(params.get("dosesPerDay"));
+    window.history.replaceState(null, "", "/herb-print");
+    setData((prev) => {
+      const count = doses === 2 || doses === 3 ? doses : null;
+      return {
+        ...prev,
+        patientName,
+        ...(count ? { dosesPerDay: count, doses: defaultDoses(count, prev.doseMode) } : {}),
+      };
+    });
+    setFromPrescription(doses === 2 || doses === 3 ? `${patientName} 님 · 하루 ${doses}회` : patientName + " 님");
+  }, []);
 
   useEffect(() => {
     const loadId = new URLSearchParams(window.location.search).get("load");
@@ -86,6 +108,11 @@ export default function Home() {
               새 안내문 시작
             </button>
           </div>
+          {fromPrescription && (
+            <p className="mb-3 rounded bg-[#e8f1ec] px-3 py-2 text-xs text-[#3b7a4f]">
+              한약 처방전에서 가져왔어요: {fromPrescription}
+            </p>
+          )}
           <PrescriptionForm value={data} onChange={setData} doctorNames={doctorNames} />
           <div className="mt-5 flex items-center gap-2">
             <button

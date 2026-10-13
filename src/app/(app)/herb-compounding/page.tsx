@@ -19,6 +19,12 @@ import {
 import { listHerbInventory } from '@/lib/supabase/herbInventory';
 import { completeQueueForPrescription, currentStaff, undoHerbQueueDone } from '@/lib/supabase/herbQueue';
 
+// 복용법(/herb-print) 화면으로 넘어가는 주소 — 환자 성함과 하루 복용 횟수(2·3회일 때)를 실어 보낸다.
+function herbPrintHref(patientName: string, dosesPerDay: number): string {
+  const doses = dosesPerDay === 2 || dosesPerDay === 3 ? `&dosesPerDay=${dosesPerDay}` : '';
+  return `/herb-print?patientName=${encodeURIComponent(patientName.trim())}${doses}`;
+}
+
 function makeEmptyOrder(): HerbCompoundingOrder {
   return {
     id: '',
@@ -52,7 +58,9 @@ export default function HerbCompoundingPage() {
   const [printedNotice, setPrintedNotice] = useState(false);
   // 대기방의 "처방전 쓰기"로 들어온 경우 그 신청 번호 — 인쇄하면 그 신청을 완료로 바꾼다.
   const queueIdRef = useRef<string | null>(null);
-  const printSnapshot = useRef<{ patientName: string; chartNo: string } | null>(null);
+  const printSnapshot = useRef<{ patientName: string; chartNo: string; dosesPerDay: number } | null>(null);
+  // 방금 인쇄한 처방전의 환자·하루 복용횟수 — 인쇄 뒤 화면이 비워져도 "복용법 작성"으로 넘어갈 수 있게 남겨 둔다.
+  const [lastPrinted, setLastPrinted] = useState<{ patientName: string; dosesPerDay: number } | null>(null);
   const [completedQueue, setCompletedQueue] = useState<{ id: string; name: string }[]>([]);
   const [queueUndone, setQueueUndone] = useState(false);
   // 좁은 화면에서는 처방집 칸을 접어 두고(위쪽 버튼으로 펼침), 넓은 화면에서는 항상 오른쪽에 펼쳐 둔다.
@@ -164,7 +172,7 @@ export default function HerbCompoundingPage() {
     if (!pendingPrint) return;
     setPendingPrint(false);
     printedByButton.current = true;
-    printSnapshot.current = { patientName: order.patientName, chartNo: order.chartNo };
+    printSnapshot.current = { patientName: order.patientName, chartNo: order.chartNo, dosesPerDay: order.dosesPerDay };
     window.print();
   }, [pendingPrint]);
 
@@ -200,6 +208,8 @@ export default function HerbCompoundingPage() {
     const onAfterPrint = () => {
       if (!printedByButton.current) return; // 버튼이 아니라 브라우저 메뉴·단축키로 인쇄한 경우는 그대로 둔다
       printedByButton.current = false;
+      const snap = printSnapshot.current;
+      setLastPrinted(snap ? { patientName: snap.patientName, dosesPerDay: snap.dosesPerDay } : null);
       completeQueueAfterPrint();
       setOrder(makeEmptyOrder());
       setSavedMessage('');
@@ -217,6 +227,7 @@ export default function HerbCompoundingPage() {
     setSavedMessage('');
     setErrorMessage('');
     setPrintedNotice(false);
+    setLastPrinted(null);
     queueIdRef.current = null;
   }
 
@@ -254,12 +265,25 @@ export default function HerbCompoundingPage() {
           <button type="button" onClick={handlePrint} disabled={!canSave || saving}>
             인쇄하기
           </button>
+          {order.patientName.trim() && (
+            <Link href={herbPrintHref(order.patientName, order.dosesPerDay)} className="muted-text" style={{ fontSize: 13, textDecoration: 'underline' }}>
+              복용법 작성 →
+            </Link>
+          )}
           {savedMessage && <span style={{ color: 'var(--color-green)', fontSize: 13 }}>{savedMessage}</span>}
           {errorMessage && <span className="error-text">{errorMessage}</span>}
         </div>
         {printedNotice && (
           <p style={{ color: 'var(--color-green)', fontSize: 13, marginTop: 8, fontWeight: 600 }}>
             ✔ 인쇄했어요. 처음 화면으로 돌아왔고, 방금 처방전은 &quot;과거 기록 보기&quot;에 있어요.
+          </p>
+        )}
+        {printedNotice && lastPrinted && lastPrinted.patientName.trim() && (
+          <p style={{ marginTop: 8 }}>
+            <Link href={herbPrintHref(lastPrinted.patientName, lastPrinted.dosesPerDay)} className="btn-primary" style={{ display: 'inline-block', padding: '8px 16px', fontSize: 14, textDecoration: 'none' }}>
+              💊 {lastPrinted.patientName}님 복용법 작성하러 가기 →
+            </Link>
+            <span className="muted-text" style={{ fontSize: 12, marginLeft: 8 }}>환자 성함{lastPrinted.dosesPerDay === 2 || lastPrinted.dosesPerDay === 3 ? `·하루 ${lastPrinted.dosesPerDay}회` : ''}가 채워져요</span>
           </p>
         )}
         {printedNotice && completedQueue.length > 0 && (

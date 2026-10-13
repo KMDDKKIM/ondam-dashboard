@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
-import type { DoctorName, Dose, DoseMode, Prescription, Temperature } from "./types";
+import { parseTemperatures, serializeTemperatures } from "./temperature";
+import type { DoctorName, Dose, DoseMode, Prescription } from "./types";
 
 // 로그인한 직원 세션으로 접근한다(prescriptions 테이블 RLS는 로그인 사용자 전체 허용).
 const supabase = { from: (table: string) => createClient().from(table) };
@@ -34,7 +35,7 @@ function fromRow(row: PrescriptionRow): Prescription {
     dosesPerDay: row.doses_per_day as 2 | 3,
     doseMode: row.dose_mode as DoseMode,
     doses: row.doses,
-    temperature: row.temperature as Temperature,
+    temperatures: parseTemperatures(row.temperature),
     brewDate: row.brew_date ?? "",
     restrictedFoods: row.restricted_foods,
     restrictedFoodsOther: row.restricted_foods_other,
@@ -55,7 +56,7 @@ function toRow(p: Prescription): PrescriptionRow {
     doses_per_day: p.dosesPerDay,
     dose_mode: p.doseMode,
     doses: p.doses,
-    temperature: p.temperature,
+    temperature: serializeTemperatures(p.temperatures),
     brew_date: p.brewDate || null,
     restricted_foods: p.restrictedFoods,
     restricted_foods_other: p.restrictedFoodsOther,

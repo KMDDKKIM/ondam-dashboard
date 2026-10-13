@@ -17,7 +17,7 @@ export function makeEmptyPrescription(): Prescription {
     dosesPerDay: 2,
     doseMode: "meal",
     doses: defaultDoses(2, "meal"),
-    temperature: "따뜻하게",
+    temperatures: ["따뜻하게"],
     brewDate: todayKst(),
     restrictedFoods: [],
     restrictedFoodsOther: "",

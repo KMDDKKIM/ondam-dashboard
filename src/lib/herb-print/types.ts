@@ -27,7 +27,8 @@ export interface Prescription {
   dosesPerDay: 2 | 3;
   doseMode: DoseMode;
   doses: Dose[];
-  temperature: Temperature;
+  /** 복용 온도 — 여러 개를 고를 수 있다(하나 이상). */
+  temperatures: Temperature[];
   brewDate: string;
   restrictedFoods: string[];
   restrictedFoodsOther: string;
