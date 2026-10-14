@@ -162,7 +162,7 @@ export async function createNonCoveredPurchase(
   if (error) throw error;
   const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
 
-  const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays);
+  const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays, input.goalCategory);
   if (calls.length === 0) return purchase;
 
   const createdIds: string[] = [];
@@ -248,7 +248,8 @@ export async function updateNonCoveredPurchase(
     const state = states.find((s) => s.id === id);
     return state ? [{ slot, ...state }] : [];
   });
-  const ops = planCallResync(desiredCalls(patch.productName, patch.happyCallDate, patch.durationDays), existingCalls);
+  // 일반 한약은 해피콜을 처방전에서 만들므로, 이 구매를 고쳐도 이미 있는 해피콜은 건드리지 않는다(새로 만들지도 지우지도 않는다).
+  const ops = patch.goalCategory === 'herb' ? [] : planCallResync(desiredCalls(patch.productName, patch.happyCallDate, patch.durationDays, patch.goalCategory), existingCalls);
 
   const nextIds: Record<CallSlot, string | null> = { ...current };
   const createdIds: string[] = [];

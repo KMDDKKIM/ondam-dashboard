@@ -12,6 +12,7 @@ import { isStaffGrade } from '@/lib/staffGrade';
 import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
+import { countPendingPickupOrders } from '@/lib/supabase/herbPickup';
 import { countSupplyRequestBadges } from '@/lib/supabase/supplyRequests';
 import { countPendingStaff } from '@/lib/supabase/staffApproval';
 import { countPendingLeaveRequests } from '@/lib/supabase/leave';
@@ -60,7 +61,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     hasActiveProfile(createAdminClient(), user.id).catch(() => false),
   ]);
   // 로그인한 사람이 진료의 본인이면 자기 앞으로 신청된 것만, 데스크 직원이면 전체를 알림으로 보여준다.
-  const herbQueueCount = await countWaitingHerbQueue(supabase, resolveHerbQueueDoctorFilter(staffName, doctorNames)).then((n) => n ?? 0);
+  const herbDoctorFilter = resolveHerbQueueDoctorFilter(staffName, doctorNames);
+  // 데스크 직원(진료의가 아닌 사람)에게는 "수령예정일 입력 대기"(처방전 출력을 마친 한약)도 같은 숫자 알림에 더한다.
+  const [waitingHerb, pendingPickup] = await Promise.all([
+    countWaitingHerbQueue(supabase, herbDoctorFilter).then((n) => n ?? 0),
+    herbDoctorFilter === null ? countPendingPickupOrders(supabase).then((n) => n ?? 0) : Promise.resolve(0),
+  ]);
+  const herbQueueCount = waitingHerb + pendingPickup;
   // 신청 직후엔 원장님에게(주문해야 함), 주문 후엔 데스크 직원에게(도착 확인해야 함) 알람이 넘어간다.
   const supplyOpenCount = (isOwner ? supplyBadges.awaitingOrder : supplyBadges.awaitingArrival) ?? 0;
 

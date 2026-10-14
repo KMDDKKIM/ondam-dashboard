@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { createClient } from '@/lib/supabase/client';
+import { removeOrderCalls } from '@/lib/supabase/herbPickup';
 import { deleteHerbCompoundingOrder, listRecentHerbCompoundingOrders, type HerbCompoundingSummary } from '@/lib/supabase/herbCompounding';
 
 export default function HerbCompoundingRecordsPage() {
@@ -39,6 +40,8 @@ export default function HerbCompoundingRecordsPage() {
   async function handleDelete(id: string) {
     if (!(await confirmDialog('이 처방전 기록을 삭제할까요?'))) return;
     try {
+      // 이 처방전으로 만든 해피콜 중 아직 손대지 않은 것도 같이 지운다(통화한 기록은 남는다).
+      await removeOrderCalls(createClient(), id).catch(() => {});
       await deleteHerbCompoundingOrder(createClient(), id);
       await loadRecords();
     } catch {

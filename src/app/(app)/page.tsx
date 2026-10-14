@@ -11,6 +11,7 @@ import { supplyAlertFor } from '@/lib/supplyHelpers';
 import { countPendingLeaveRequests } from '@/lib/supabase/leave';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
+import { countPendingPickupOrders } from '@/lib/supabase/herbPickup';
 import { listDoctors } from '@/lib/supabase/doctors';
 import { resolveHerbQueueDoctorFilter } from '@/lib/herbQueue';
 import { todayKst } from '@/lib/kst';
@@ -74,6 +75,8 @@ export default async function HomePage() {
   const summaryError = summaryResult.error;
   const herbDoctorFilter = resolveHerbQueueDoctorFilter(staffName, doctorNames);
   const herbWaiting = await countWaitingHerbQueue(supabase, herbDoctorFilter);
+  // 처방전 출력을 마치고 수령예정일을 기다리는 한약 — 데스크 직원에게만 보여 준다.
+  const herbPickupPending = herbDoctorFilter === null ? await countPendingPickupOrders(supabase) : 0;
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
@@ -106,6 +109,7 @@ export default async function HomePage() {
             supply={supplyResult.error ? null : supplyAlertFor(supplyResult, isOwner)}
             remoteNew={remoteNew}
             herbWaiting={herbWaiting}
+            herbPickupPending={herbPickupPending}
             herbWaitingIsMine={herbDoctorFilter !== null}
             herbTotal={herbTotal}
             todayReservations={todayReservations}

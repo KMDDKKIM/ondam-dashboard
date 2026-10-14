@@ -17,6 +17,7 @@ import {
 import { doctorsAsStaffList, listDoctors, type Doctor } from '@/lib/supabase/doctors';
 import { formatQueueTime, missingFields, sortDone, sortWaiting, type HerbQueueDraft, type HerbQueueItem } from '@/lib/herbQueue';
 import { addDaysKst, todayKst } from '@/lib/kst';
+import { PickupPending } from '@/components/herb-queue/PickupPending';
 
 const cellStyle = { border: '1px solid #ddd', padding: '3px 5px', fontSize: 14 } as const;
 const inputStyle = { fontSize: 14, padding: '3px 4px', width: '100%', border: 'none', background: 'transparent' } as const;
@@ -177,6 +178,9 @@ export default function HerbQueuePage() {
       </p>
 
       {error && <p className="error-text" style={{ marginBottom: 8 }}>{error}</p>}
+
+      {/* 처방전 출력을 마친 한약 — 수령예정일을 넣으면 해피콜이 만들어진다. */}
+      <PickupPending />
 
       <div className="card" style={{ padding: 10, overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: '100%', minWidth: 900 }}>

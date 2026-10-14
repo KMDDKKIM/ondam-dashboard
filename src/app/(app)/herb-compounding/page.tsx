@@ -19,6 +19,7 @@ import {
 } from '@/lib/supabase/herbCompounding';
 import { listHerbInventory } from '@/lib/supabase/herbInventory';
 import { completeQueueForPrescription, currentStaff, undoHerbQueueDone } from '@/lib/supabase/herbQueue';
+import { markOrderPrinted } from '@/lib/supabase/herbPickup';
 
 function makeEmptyOrder(): HerbCompoundingOrder {
   return {
@@ -53,7 +54,7 @@ export default function HerbCompoundingPage() {
   const [printedNotice, setPrintedNotice] = useState(false);
   // 대기방의 "처방전 쓰기"로 들어온 경우 그 신청 번호 — 인쇄하면 그 신청을 완료로 바꾼다.
   const queueIdRef = useRef<string | null>(null);
-  const printSnapshot = useRef<{ patientName: string; chartNo: string; dosesPerDay: number } | null>(null);
+  const printSnapshot = useRef<{ patientName: string; chartNo: string; dosesPerDay: number; orderId: string } | null>(null);
   // 방금 인쇄한 처방전의 환자·하루 복용횟수 — 인쇄 뒤 화면이 비워져도 "복용법 작성"으로 넘어갈 수 있게 남겨 둔다.
   const [lastPrinted, setLastPrinted] = useState<{ patientName: string; dosesPerDay: number } | null>(null);
   const [completedQueue, setCompletedQueue] = useState<{ id: string; name: string }[]>([]);
@@ -167,7 +168,7 @@ export default function HerbCompoundingPage() {
     if (!pendingPrint) return;
     setPendingPrint(false);
     printedByButton.current = true;
-    printSnapshot.current = { patientName: order.patientName, chartNo: order.chartNo, dosesPerDay: order.dosesPerDay };
+    printSnapshot.current = { patientName: order.patientName, chartNo: order.chartNo, dosesPerDay: order.dosesPerDay, orderId: order.id };
     window.print();
   }, [pendingPrint]);
 
@@ -204,6 +205,8 @@ export default function HerbCompoundingPage() {
       if (!printedByButton.current) return; // 버튼이 아니라 브라우저 메뉴·단축키로 인쇄한 경우는 그대로 둔다
       printedByButton.current = false;
       const snap = printSnapshot.current;
+      // 출력을 마친 처방전은 한약 대기방에 "수령예정일 입력 대기"로 올린다(데스크가 수령예정일을 넣으면 해피콜이 만들어진다).
+      if (snap?.orderId) void markOrderPrinted(createClient(), snap.orderId);
       setLastPrinted(snap ? { patientName: snap.patientName, dosesPerDay: snap.dosesPerDay } : null);
       completeQueueAfterPrint();
       setOrder(makeEmptyOrder());
@@ -271,6 +274,7 @@ export default function HerbCompoundingPage() {
         {printedNotice && (
           <p style={{ color: 'var(--color-green)', fontSize: 13, marginTop: 8, fontWeight: 600 }}>
             ✔ 인쇄했어요. 처음 화면으로 돌아왔고, 방금 처방전은 &quot;과거 기록 보기&quot;에 있어요.
+            <span className="muted-text" style={{ fontWeight: 400 }}> 한약 대기방에 &quot;수령예정일 입력 대기&quot;로 올렸어요(데스크가 수령예정일을 넣으면 해피콜이 만들어져요).</span>
           </p>
         )}
         {printedNotice && lastPrinted && lastPrinted.patientName.trim() && (

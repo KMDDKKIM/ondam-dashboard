@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callTypeForPurchase, desiredCalls, planCallResync, type ExistingCall } from './nonCoveredCalls';
+import { callTypeForPurchase, createsCallsFromPurchase, desiredCalls, planCallResync, type ExistingCall } from './nonCoveredCalls';
 
 function existing(slot: 1 | 2 | 3, callDate: string, extra: Partial<ExistingCall> = {}): ExistingCall {
   return { slot, id: `e${slot}`, callDate, note: null, closed: false, attempts: 0, ...extra };
@@ -87,3 +87,23 @@ describe('callTypeForPurchase', () => {
     expect(callTypeForPurchase('약침 패키지', null)).toBe('비급여');
   });
 });
+
+describe('한약·린다이어트는 비급여 구매에서 해피콜을 만들지 않는다(2026-10-14 결정)', () => {
+  it('목표 반영이 한약인 일반 한약은 처방전에서 만든다', () => {
+    expect(desiredCalls('일반한약', '2026-09-20', 30, 'herb')).toEqual([]);
+    expect(createsCallsFromPurchase('녹용보약', 'herb')).toBe(false);
+  });
+
+  it('린다이어트는 목표(다이어트)나 상품 이름으로 만들지 않는다', () => {
+    expect(desiredCalls('린다이어트', '2026-09-20', null, 'diet')).toEqual([]);
+    expect(desiredCalls('린다이어트', '2026-09-20', null, null)).toEqual([]);
+    expect(desiredCalls('린데일리', '2026-09-20', null, null)).toEqual([]);
+  });
+
+  it('특수한약·그 밖의 비급여는 그대로 만든다', () => {
+    expect(desiredCalls('공진단', '2026-09-20', 30, 'special_herb')).toHaveLength(3);
+    expect(desiredCalls('특수약침', '2026-09-20', null, null)).toHaveLength(1);
+    expect(createsCallsFromPurchase('경옥고', 'special_herb')).toBe(true);
+  });
+});
+

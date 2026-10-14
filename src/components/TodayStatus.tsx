@@ -13,6 +13,8 @@ export interface TodayStatusProps {
   remoteNew: number | null;
   /** 원장님 처리를 기다리는 한약 처방 신청 수 — 로그인한 사람이 진료의면 자기 앞으로 온 것만, 아니면 전체. null 이면 조회 실패. */
   herbWaiting?: number | null;
+  /** 처방전 출력을 마치고 수령예정일을 기다리는 한약 수(데스크 직원에게만 넘어온다). 0이면 줄을 안 보인다. null 이면 조회 실패. */
+  herbPickupPending?: number | null;
   /** herbWaiting 이 로그인한 진료의 앞으로 온 것만 센 값이면 true(문구에 "내"를 붙인다). */
   herbWaitingIsMine?: boolean;
   /** 등록된 한약재 전체 개수. 0이면 "재고 0 없음(정상)" 대신 "등록된 약재가 없어요". null 이면 조회 실패. */
@@ -37,6 +39,7 @@ export function TodayStatus({
   supply,
   remoteNew,
   herbWaiting = 0,
+  herbPickupPending = 0,
   herbWaitingIsMine = false,
   herbTotal,
   todayReservations,
@@ -90,6 +93,10 @@ export function TodayStatus({
     rows.push({ key: 'remote', icon: '📨', text: `비대면진료 신청 ${remoteNew}건이 처리를 기다려요`, state: 'todo', badge: '처리하기', href: '/remote-consult-alerts' });
   } else {
     rows.push({ key: 'remote', icon: '📨', text: '처리할 비대면진료 신청 없음', state: 'ok', badge: '정상', href: '/remote-consult-alerts' });
+  }
+
+  if (herbPickupPending != null && herbPickupPending > 0) {
+    rows.push({ key: 'herbPickup', icon: '📦', text: `한약 수령예정일 ${herbPickupPending}건을 입력해 주세요(입력하면 해피콜이 만들어져요)`, state: 'todo', badge: '입력하기', href: '/herb-queue' });
   }
 
   if (herbWaiting == null) {

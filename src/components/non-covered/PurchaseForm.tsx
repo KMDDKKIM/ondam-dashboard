@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { DURATION_PRESETS, defaultHappyCallDate, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { suggestGoalCategory } from '@/lib/nonCoveredGoal';
 import { defaultGoalFor } from '@/lib/purchaseFilter';
+import { createsCallsFromPurchase } from '@/lib/nonCoveredCalls';
 import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
 import { todayKst } from '@/lib/kst';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
@@ -112,7 +113,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     });
   }
 
-  const callHint = !happyCallDate
+  const callHint = !createsCallsFromPurchase(productName, goalCategory)
+    ? goalCategory === 'herb'
+      ? '한약 해피콜은 처방전을 출력한 뒤 한약 대기방에서 수령예정일을 넣으면 만들어져요 (여기서는 만들지 않아요)'
+      : '린다이어트 해피콜은 새 기준을 정할 때까지 만들지 않아요'
+    : !happyCallDate
     ? '해피콜 없음 (수령일이 비어 있어요)'
     : durationDays
       ? (() => {

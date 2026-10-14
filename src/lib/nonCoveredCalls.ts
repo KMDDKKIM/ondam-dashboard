@@ -3,6 +3,7 @@
 
 import { addDays, computeHerbCallDates } from './happyCallStats';
 import type { ManualCallType } from './happyCallQueue';
+import type { GoalCategory } from './types';
 
 export type CallSlot = 1 | 2 | 3;
 export const CALL_SLOTS: readonly CallSlot[] = [1, 2, 3];
@@ -16,13 +17,17 @@ export interface DesiredCall {
 /**
  * 수령일 + 처방일수가 있으면 한약 처방과 같은 공식으로 3회, 수령일만 있으면 수령일 다음날 1회,
  * 수령일이 없으면 콜 없음.
+ * 단 일반 한약(목표 반영 = 한약)은 처방전 출력 후 한약 대기방에서 수령예정일을 넣을 때 만들고(lib/herbCallSchedule.ts),
+ * 린다이어트는 새 기준을 정할 때까지 만들지 않는다(원장 결정, 2026-10-14). 특수한약 등은 그대로.
  */
 export function desiredCalls(
   productName: string,
   happyCallDate: string | null,
-  durationDays: number | null
+  durationDays: number | null,
+  goalCategory: GoalCategory | null = null
 ): DesiredCall[] {
   if (!happyCallDate) return [];
+  if (!createsCallsFromPurchase(productName, goalCategory)) return [];
   if (durationDays) {
     const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, durationDays);
     return [
@@ -32,6 +37,12 @@ export function desiredCalls(
     ];
   }
   return [{ slot: 1, callDate: addDays(happyCallDate, 1), note: `비급여 구매 후속 - ${productName}` }];
+}
+
+/** 비급여 구매를 등록할 때 해피콜을 자동으로 만드는 상품인가. 한약(처방전 기준)과 린다이어트(기준 정리 중)는 아니다. */
+export function createsCallsFromPurchase(productName: string, goalCategory: GoalCategory | null): boolean {
+  if (goalCategory === 'herb' || goalCategory === 'diet') return false;
+  return callTypeForPurchase(productName, null) !== '린다이어트';
 }
 
 export interface ExistingCall {
