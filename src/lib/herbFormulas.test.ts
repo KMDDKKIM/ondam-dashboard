@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
+import { combineFormulaIntoOrder, herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
 
 // 처방·약재 이름은 시험용 값이다(공개 저장소).
 describe('parseFormulaHerbs', () => {
@@ -162,5 +162,42 @@ describe('splitHerbNameList', () => {
   it('공백·쉼표·가운뎃점으로 나누고 중복을 뺀다', () => {
     expect(splitHerbNameList('당귀 천궁,백출·당귀')).toEqual(['당귀', '천궁', '백출']);
     expect(splitHerbNameList('  ')).toEqual([]);
+  });
+});
+
+describe('combineFormulaIntoOrder — 처방집에서 또 고르면 합방', () => {
+  const A = { name: '가탕', herbs: [{ herbName: '갑', prepMethod: '', gramsPerPacket: 4 }, { herbName: '을', prepMethod: '', gramsPerPacket: 6 }] };
+  const B = { name: '나탕', herbs: [{ herbName: '병', prepMethod: '초', gramsPerPacket: 8 }, { herbName: '을', prepMethod: '', gramsPerPacket: 2 }] };
+
+  it('빈 처방전이면 그 처방으로 채우고 처방명도 그것으로(합방 아님)', () => {
+    const r = combineFormulaIntoOrder({ herbs: [{ herbName: '', prepMethod: '', gramsPerPacket: 0 }], prescriptionName: '' }, A);
+    expect(r.herbs.map((h) => h.herbName)).toEqual(['갑', '을']);
+    expect(r.prescriptionName).toBe('가탕');
+    expect(r.combined).toBe(false);
+  });
+
+  it('두 번째 처방은 교체가 아니라 더한다 — 처방명은 +로 잇고, 겹치는 약재는 합치지 않고 두 줄로 남긴다', () => {
+    const first = combineFormulaIntoOrder({ herbs: [], prescriptionName: '' }, A);
+    const r = combineFormulaIntoOrder({ herbs: first.herbs, prescriptionName: first.prescriptionName }, B);
+    expect(r.herbs.map((h) => `${h.herbName}${h.gramsPerPacket}`)).toEqual(['갑4', '을6', '병8', '을2']);
+    expect(r.prescriptionName).toBe('가탕+나탕');
+    expect(r.overlaps).toEqual(['을']);
+    expect(r.combined).toBe(true);
+    expect(r.added).toBe(2);
+  });
+
+  it('같은 처방을 또 골라도 처방명이 "가탕+가탕"이 되지 않는다', () => {
+    const r = combineFormulaIntoOrder({ herbs: A.herbs, prescriptionName: '가탕' }, A);
+    expect(r.prescriptionName).toBe('가탕');
+  });
+
+  it('직접 적어 둔 처방명 뒤에 잇고, 약재가 없으면 직접 적은 처방명을 그대로 둔다', () => {
+    expect(combineFormulaIntoOrder({ herbs: A.herbs, prescriptionName: '내 처방' }, B).prescriptionName).toBe('내 처방+나탕');
+    expect(combineFormulaIntoOrder({ herbs: [], prescriptionName: '내 처방' }, B).prescriptionName).toBe('내 처방');
+  });
+
+  it('한자 이름은 처방전에 쓰지 않아 뺀다', () => {
+    const r = combineFormulaIntoOrder({ herbs: [], prescriptionName: '' }, { name: '다탕', herbs: [{ herbName: '정', prepMethod: '', gramsPerPacket: 3, hanja: '丁' }] });
+    expect(r.herbs[0]).toEqual({ herbName: '정', prepMethod: '', gramsPerPacket: 3 });
   });
 });

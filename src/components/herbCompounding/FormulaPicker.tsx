@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
-import { herbsForFormula, parseFormulaImport, parseFormulaJson, splitHerbNameList, summarizeFormulaHerbs, type FormulaImportResult, type HerbFormula } from '@/lib/herbFormulas';
+import { combineFormulaIntoOrder, herbsForFormula, parseFormulaImport, parseFormulaJson, splitHerbNameList, summarizeFormulaHerbs, type FormulaImportResult, type HerbFormula } from '@/lib/herbFormulas';
 import { createClient } from '@/lib/supabase/client';
 import { countHerbFormulas, deleteHerbFormula, findHerbFormula, importHerbFormulas, saveHerbFormula, searchHerbFormulas } from '@/lib/supabase/herbFormulas';
 
@@ -81,16 +81,15 @@ export function FormulaPicker({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conditionKey]);
 
-  async function apply(formula: HerbFormula) {
-    const filled = value.herbs.filter((h) => h.herbName.trim() !== '' || h.gramsPerPacket > 0).length;
-    if (filled > 0 && !(await confirmDialog(`지금 넣어 둔 약재 ${filled}개를 "${formula.name}" 처방의 약재 ${formula.herbs.length}개로 바꿀까요?`, { confirmLabel: '바꾸기' }))) return;
-    onChange({
-      ...value,
-      prescriptionName: value.prescriptionName.trim() ? value.prescriptionName : formula.name,
-      // 한자 이름은 처방전 입력·인쇄에 쓰지 않아 빼고 채운다.
-      herbs: formula.herbs.map((h) => ({ herbName: h.herbName, prepMethod: h.prepMethod, gramsPerPacket: h.gramsPerPacket })),
-    });
-    setNotice(`"${formula.name}" 처방의 약재 ${formula.herbs.length}개를 채웠어요.`);
+  // 이미 넣어 둔 약재가 있으면 바꾸지 않고 합방으로 더한다(원장 요청, 2026-10-16). 처음부터 다시 하려면 "약재 전체 삭제"를 쓴다.
+  function apply(formula: HerbFormula) {
+    const result = combineFormulaIntoOrder(value, formula);
+    onChange({ ...value, prescriptionName: result.prescriptionName, herbs: result.herbs });
+    setNotice(
+      result.combined
+        ? `"${formula.name}" 처방의 약재 ${result.added}개를 합방으로 더했어요.${result.overlaps.length > 0 ? ` 겹치는 약재(${result.overlaps.join(', ')})는 그램을 합치지 않고 빨간색으로 표시했어요.` : ''}`
+        : `"${formula.name}" 처방의 약재 ${result.added}개를 채웠어요.`
+    );
     setQuery('');
     setIncludeText('');
     setExcludeText('');
@@ -194,7 +193,7 @@ export function FormulaPicker({ value, onChange }: Props) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>
-        처방명(한글·한자)을 치고 누르면 왼쪽 약재 목록이 채워져요{total != null ? ` · 처방집 ${total.toLocaleString('ko-KR')}개` : ''}
+        처방명(한글·한자)을 치고 누르면 왼쪽 약재 목록에 더해져요(합방){total != null ? ` · 처방집 ${total.toLocaleString('ko-KR')}개` : ''}
       </label>
       <input
         className="input-field"

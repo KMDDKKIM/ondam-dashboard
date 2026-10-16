@@ -268,3 +268,37 @@ export function parseFormulaJson(textInput: string, defaultSource = ''): Formula
 export function splitHerbNameList(input: string): string[] {
   return [...new Set(input.split(/[\s,，、·]+/).map((t) => t.trim()).filter(Boolean))];
 }
+
+// ---- 합방(처방집에서 처방을 또 고르면 교체가 아니라 더한다) ----
+
+export interface FormulaCombineResult {
+  herbs: HerbLine[];
+  prescriptionName: string;
+  /** 이번에 더한 약재 수 */
+  added: number;
+  /** 이미 처방전에 있던 약재와 이름이 겹치는 약재(그램은 합치지 않고 두 줄로 남겨 빨간 경고로 확인하게 한다) */
+  overlaps: string[];
+  /** 이미 넣어 둔 약재가 있어서 합방으로 더했는가(false면 빈 처방전을 채운 것) */
+  combined: boolean;
+}
+
+/**
+ * 처방집에서 고른 처방의 약재를 지금 처방전에 더한다(합방, 원장 요청 2026-10-16). 이미 넣어 둔 약재는 지우지 않고,
+ * 겹치는 약재도 그램을 합치지 않는다(겹침은 처방전에서 빨간색으로 경고). 한자 이름은 처방전에 쓰지 않아 뺀다.
+ * 처방명은 비어 있으면 이 처방명으로, 이미 약재가 있어 합방이면 "기존+이 처방"으로 잇는다.
+ */
+export function combineFormulaIntoOrder(current: { herbs: HerbLine[]; prescriptionName: string }, formula: Pick<HerbFormula, 'name' | 'herbs'>): FormulaCombineResult {
+  const kept = current.herbs.filter((h) => h.herbName.trim() !== '' || h.gramsPerPacket > 0);
+  const added = formula.herbs.map((h) => ({ herbName: h.herbName, prepMethod: h.prepMethod, gramsPerPacket: h.gramsPerPacket }));
+  const existingNames = new Set(kept.map((h) => h.herbName.trim()).filter((n) => n !== ''));
+  const overlaps = [...new Set(added.map((h) => h.herbName.trim()).filter((n) => existingNames.has(n)))];
+
+  const oldName = current.prescriptionName.trim();
+  const parts = oldName.split('+').map((p) => p.trim());
+  let prescriptionName: string;
+  if (oldName === '') prescriptionName = formula.name;
+  else if (kept.length === 0 || parts.includes(formula.name)) prescriptionName = current.prescriptionName;
+  else prescriptionName = `${oldName}+${formula.name}`;
+
+  return { herbs: [...kept, ...added], prescriptionName, added: added.length, overlaps, combined: kept.length > 0 };
+}
