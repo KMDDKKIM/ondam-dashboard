@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { confirmDialog } from '@/lib/confirmDialog';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -55,6 +56,7 @@ const STATUS_COLOR = {
 
 export default function SupplyRequestsPage() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [requests, setRequests] = useState<SupplyRequest[]>([]);
   const [items, setItems] = useState<SupplyItem[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
@@ -171,6 +173,7 @@ export default function SupplyRequestsPage() {
       setItemChoice(CUSTOM);
       setFilter('open');
       await load();
+      router.refresh();
     } catch {
       setFormError('신청에 실패했습니다. 다시 시도해 주세요.');
     } finally {
@@ -183,6 +186,8 @@ export default function SupplyRequestsPage() {
     try {
       await action();
       await load();
+      // 왼쪽 메뉴의 물품신청 숫자는 서버에서 계산해 내려오므로, 처리한 직후 다시 읽어 와야 숫자가 바로 바뀐다.
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : '처리에 실패했습니다.');
     }
