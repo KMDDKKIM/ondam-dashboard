@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, duplicateHerbNames, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
@@ -49,6 +49,31 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
     target?.focus();
     target?.select();
   }
+
+  // 약재명에서 엔터 → 다음 줄의 약재명으로 간다. 마지막 줄이면 새 줄을 더해서 간다(원장 요청, 2026-10-16).
+  // 이름을 안 적은 채로는 빈 줄이 쌓이지 않게 새 줄을 만들지 않는다.
+  const pendingFocusRow = useRef<number | null>(null);
+
+  function handleHerbNameEnter(e: React.KeyboardEvent<HTMLInputElement>, row: number) {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    if (row + 1 < value.herbs.length) {
+      const target = herbCellRefs.current[row + 1]?.[0];
+      target?.focus();
+      target?.select();
+      return;
+    }
+    if (value.herbs[row]?.herbName.trim() === '') return;
+    pendingFocusRow.current = row + 1;
+    addHerbRow();
+  }
+
+  useEffect(() => {
+    const row = pendingFocusRow.current;
+    if (row === null) return;
+    pendingFocusRow.current = null;
+    herbCellRefs.current[row]?.[0]?.focus();
+  }, [value.herbs.length]);
 
   function set<K extends keyof HerbCompoundingOrder>(key: K, v: HerbCompoundingOrder[K]) {
     onChange({ ...value, [key]: v });
@@ -307,7 +332,10 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
                   list="herb-name-options"
                   value={herb.herbName}
                   onChange={(e) => updateHerb(i, { herbName: e.target.value })}
-                  onKeyDown={(e) => handleHerbCellTab(e, i, 0)}
+                  onKeyDown={(e) => {
+                    handleHerbNameEnter(e, i);
+                    handleHerbCellTab(e, i, 0);
+                  }}
                   placeholder="당귀"
                   style={isDuplicate(herb.herbName) ? { color: 'var(--color-error)', fontWeight: 700, borderColor: 'var(--color-error)' } : undefined}
                   aria-invalid={isDuplicate(herb.herbName) || undefined}
