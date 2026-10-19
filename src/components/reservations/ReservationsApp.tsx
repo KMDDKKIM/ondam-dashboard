@@ -10,15 +10,18 @@ import { addDaysKst, todayKst } from '@/lib/kst';
 import type { PrintRequest } from '@/lib/reservations/printSheet';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
 import type { MonthlySummary } from '@/lib/monthlySummary';
+import type { WeekTrend } from '@/lib/weeklyTrend';
 
 export function ReservationsApp({
   summary,
   rates,
+  weeklyTrend = null,
   isOwner,
   missingClosingDates = [],
 }: {
   summary: MonthlySummary | null;
   rates: { reservationRate: number | null; noShowRate: number | null };
+  weeklyTrend?: WeekTrend[] | null;
   isOwner: boolean;
   missingClosingDates?: string[];
 }) {
@@ -60,7 +63,7 @@ export function ReservationsApp({
   return (
     <div className="reservation-app app-shell">
       <MissingClosingBanner dates={missingClosingDates} />
-      <WeeklyDashboard records={records} summary={summary} isOwner={isOwner} rates={rates} />
+      <WeeklyDashboard records={records} summary={summary} isOwner={isOwner} rates={rates} weeklyTrend={weeklyTrend} />
       <div className="no-print" style={{ marginBottom: 8 }}>
         <button onClick={handlePrintTomorrow}>내일 예약 시트 인쇄</button>
       </div>

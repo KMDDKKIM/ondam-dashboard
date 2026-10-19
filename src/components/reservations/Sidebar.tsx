@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { DailyRecordSummary } from '@/lib/reservations/types';
-import { currentMonthKst, shortDateKo } from '@/lib/kst';
+import { currentMonthKst, shortDateKo, weekdayKo, weekStartKst } from '@/lib/kst';
 import { groupRecordsByMonth, isMonthOpen, monthOf } from '@/lib/reservations/monthGroups';
 
 interface SidebarProps {
@@ -95,8 +95,13 @@ export function Sidebar({
             </button>
             {open && (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {group.records.map((record) => (
-                  <li key={record.date}>
+                {group.records.map((record, index) => {
+                  // 주(월~일)가 바뀌는 곳에 얇은 선을 넣는다(최근 날짜가 위라서, 윗줄이 더 늦은 주면 그 사이가 경계다).
+                  const weekBreak = index > 0 && weekStartKst(group.records[index - 1].date) !== weekStartKst(record.date);
+                  const weekday = weekdayKo(record.date);
+                  const selected = record.date === selectedDate;
+                  return (
+                  <li key={record.date} style={weekBreak ? { borderTop: '1px solid var(--color-line)', marginTop: 3, paddingTop: 3 } : undefined}>
                     <button
                       onClick={() => onSelectDate(record.date)}
                       style={{
@@ -104,17 +109,19 @@ export function Sidebar({
                         textAlign: 'left',
                         padding: 6,
                         fontSize: 12,
-                        background: record.date === selectedDate ? 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))' : 'transparent',
-                        color: record.date === selectedDate ? '#fff' : 'var(--color-ink)',
-                        fontWeight: record.date === selectedDate ? 700 : 400,
+                        background: selected ? 'linear-gradient(135deg, var(--color-brand-a), var(--color-brand-b))' : 'transparent',
+                        color: selected ? '#fff' : 'var(--color-ink)',
+                        fontWeight: selected ? 700 : 400,
                         border: 'none',
                         borderRadius: 4,
                       }}
                     >
-                      {shortDateKo(record.date)}
+                      {shortDateKo(record.date)}{' '}
+                      <span style={{ color: selected ? '#fff' : weekday === '일' ? 'var(--color-error)' : weekday === '토' ? 'var(--color-blue)' : 'var(--color-muted)' }}>({weekday})</span>
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>

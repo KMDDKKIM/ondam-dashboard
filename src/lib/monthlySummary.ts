@@ -1,7 +1,8 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { computeMonthFigures, revenueMotivation, type DailyFigure, type MonthlyOverrideFigure } from '@/lib/monthlyFigures';
-import { addDaysKst, currentMonthKst, todayKst } from '@/lib/kst';
+import { addDaysKst, currentMonthKst, todayKst, weekStartKst } from '@/lib/kst';
+import { buildWeekTrends, type WeekTrend } from '@/lib/weeklyTrend';
 import { computeReservationRates } from '@/lib/reservationRates';
 
 export interface MonthlySummary {
@@ -246,5 +247,32 @@ export async function getWeeklyRates(today: Date = new Date()): Promise<{
       noshowCount: n(r.noshow_count),
       cancelCount: n(r.cancel_count),
     }))
+  );
+}
+
+// 예약관리 위쪽 "주별 동향" — 이번 주·지난주·지지난주의 예약률·부도취소율·주간매출·평환수·객단가.
+export async function getWeeklyTrend(today: Date = new Date()): Promise<WeekTrend[]> {
+  const admin = createAdminClient();
+  const todayStr = todayKst(today);
+  const from = addDaysKst(weekStartKst(todayStr), -14);
+  const { data, error } = await admin
+    .from('daily_revenue')
+    .select('date, total_revenue, visit_count, excluded_count, reservation_count, kept_count, noshow_count, cancel_count')
+    .gte('date', from)
+    .lte('date', todayStr);
+  if (error) throw error;
+  const n = (v: unknown) => (v != null ? Number(v) : null);
+  return buildWeekTrends(
+    (data ?? []).map((r) => ({
+      date: String(r.date),
+      totalRevenue: n(r.total_revenue),
+      visitCount: n(r.visit_count),
+      excludedCount: n(r.excluded_count),
+      reservationCount: n(r.reservation_count),
+      keptCount: n(r.kept_count),
+      noshowCount: n(r.noshow_count),
+      cancelCount: n(r.cancel_count),
+    })),
+    todayStr
   );
 }

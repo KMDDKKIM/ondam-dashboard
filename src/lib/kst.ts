@@ -43,3 +43,18 @@ export function shortDateKo(date: string): string {
   const [y, m, d] = date.split('-').map(Number);
   return `${String(y).slice(-2)}.${m}.${d}`;
 }
+
+const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 날짜(YYYY-MM-DD)의 요일 한 글자(일월화수목금토). */
+export function weekdayKo(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return WEEKDAYS_KO[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/** 그 날이 든 주의 월요일(한의원은 월~일을 한 주로 본다). */
+export function weekStartKst(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = 일요일
+  return addDaysKst(date, dow === 0 ? -6 : 1 - dow);
+}
