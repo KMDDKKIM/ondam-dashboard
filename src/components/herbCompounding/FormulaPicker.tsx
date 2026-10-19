@@ -142,6 +142,34 @@ export function FormulaPicker({ value, onChange }: Props) {
     }
   }
 
+  // 고른 출전만 남기고 나머지 출전의 처방을 전부 지운다(출전이 많을 때 하나씩 누르지 않게). 개수를 보여 주고 확인을 받는다.
+  async function removeAllExcept(keep: SourceCount) {
+    if (!sourceList) return;
+    const others = sourceList.filter((s) => s.source !== keep.source);
+    const total = others.reduce((acc, s) => acc + s.count, 0);
+    if (total === 0) return;
+    const keepLabel = keep.source || '출전 없음';
+    if (!(await confirmDialog(`"${keepLabel}" ${keep.count.toLocaleString('ko-KR')}개만 남기고, 나머지 출전 ${others.length}곳의 처방 ${total.toLocaleString('ko-KR')}개를 처방집에서 모두 지울까요? 되돌릴 수 없어요(이미 저장한 처방전에는 영향이 없어요).`, { confirmLabel: '나머지 모두 삭제' }))) return;
+    setError('');
+    let deletedTotal = 0;
+    try {
+      for (const item of others) {
+        const label = item.source || '출전 없음';
+        await deleteFormulasBySource(createClient(), item.source, (n) => setSourceBusy(`"${label}" 지우는 중 ${n.toLocaleString('ko-KR')}/${item.count.toLocaleString('ko-KR')} (전체 ${(deletedTotal + n).toLocaleString('ko-KR')}/${total.toLocaleString('ko-KR')})`));
+        deletedTotal += item.count;
+      }
+      setNotice(`"${keepLabel}"만 남기고 처방 ${total.toLocaleString('ko-KR')}개를 처방집에서 지웠어요.`);
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : '지우지 못했어요. 목록을 새로고침해서 남은 것을 확인해 주세요.');
+    } finally {
+      setSourceBusy('');
+      setResults([]);
+      setQuery('');
+      refreshTotal();
+      listFormulaSources(createClient()).then(setSourceList, () => {});
+    }
+  }
+
   async function saveCurrent() {
     const name = (saveName || value.prescriptionName).trim();
     const herbs = herbsForFormula(value.herbs);
@@ -416,6 +444,11 @@ export function FormulaPicker({ value, onChange }: Props) {
                   <li key={item.source} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                     <span style={{ flex: 1 }}>{item.source || '(출전 없음)'}</span>
                     <span className="muted-text">{item.count.toLocaleString('ko-KR')}개</span>
+                    {sourceList.length > 1 && (
+                      <button type="button" onClick={() => removeAllExcept(item)} disabled={sourceBusy !== ''} style={{ fontSize: 12, padding: '2px 8px' }}>
+                        이것만 남기고 나머지 삭제
+                      </button>
+                    )}
                     <button type="button" onClick={() => removeSource(item)} disabled={sourceBusy !== ''} style={{ fontSize: 12, padding: '2px 8px', color: '#b3261e' }}>
                       모두 삭제
                     </button>
