@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { HerbLine } from '@/lib/herbCompounding';
-import type { FormulaImportRow, HerbFormula } from '@/lib/herbFormulas';
+import type { FormulaImportRow, HerbFormula, SourceCount } from '@/lib/herbFormulas';
+import { countBySource } from '@/lib/herbFormulas';
 
 interface Row {
   id: string;
@@ -120,4 +121,43 @@ export async function deleteHerbFormula(supabase: SupabaseClient, id: string): P
   const { data, error } = await supabase.from('herb_formulas').delete().eq('id', id).select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('지우지 못했어요.');
+}
+
+const SOURCE_PAGE = 1000;
+
+/** 처방집에 든 출전별 처방 수. 출전 칸만 1,000개씩 나눠 읽어 센다. */
+export async function listFormulaSources(supabase: SupabaseClient): Promise<SourceCount[]> {
+  const sources: string[] = [];
+  for (let from = 0; ; from += SOURCE_PAGE) {
+    const { data, error } = await supabase
+      .from('herb_formulas')
+      .select('source')
+      .order('id', { ascending: true })
+      .range(from, from + SOURCE_PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { source: string | null }[];
+    for (const r of rows) sources.push(r.source ?? '');
+    if (rows.length < SOURCE_PAGE) break;
+  }
+  return countBySource(sources);
+}
+
+/**
+ * 한 출전의 처방을 모두 지운다. 한꺼번에 지우다 시간이 초과되지 않게 300개씩 나눠 지우고, 묶음마다 onProgress(지운 수)를 부른다.
+ * 처방집에서 지울 뿐이라 이미 저장한 한약 처방전에는 영향이 없다.
+ */
+export async function deleteFormulasBySource(supabase: SupabaseClient, source: string, onProgress?: (deleted: number) => void): Promise<number> {
+  let deleted = 0;
+  for (;;) {
+    const { data, error } = await supabase.from('herb_formulas').select('id').eq('source', source).limit(300);
+    if (error) throw error;
+    const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+    if (ids.length === 0) return deleted;
+    const { data: gone, error: deleteError } = await supabase.from('herb_formulas').delete().in('id', ids).select('id');
+    if (deleteError) throw deleteError;
+    // RLS 등으로 한 개도 못 지웠으면 같은 묶음을 계속 읽는 무한 반복이 되므로 멈춘다.
+    if (!gone || gone.length === 0) throw new Error('지우지 못했어요(권한을 확인해 주세요).');
+    deleted += gone.length;
+    onProgress?.(deleted);
+  }
 }

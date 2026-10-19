@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combineFormulaIntoOrder, herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
+import { combineFormulaIntoOrder, countBySource, herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
 
 // 처방·약재 이름은 시험용 값이다(공개 저장소).
 describe('parseFormulaHerbs', () => {
@@ -199,5 +199,20 @@ describe('combineFormulaIntoOrder — 처방집에서 또 고르면 합방', () 
   it('한자 이름은 처방전에 쓰지 않아 뺀다', () => {
     const r = combineFormulaIntoOrder({ herbs: [], prescriptionName: '' }, { name: '다탕', herbs: [{ herbName: '정', prepMethod: '', gramsPerPacket: 3, hanja: '丁' }] });
     expect(r.herbs[0]).toEqual({ herbName: '정', prepMethod: '', gramsPerPacket: 3 });
+  });
+});
+
+describe('countBySource — 출전별 처방 수', () => {
+  it('많은 순으로 세고 같으면 이름순, 빈 출전도 한 묶음', () => {
+    expect(countBySource(['나', '가', '나', '', '다', '가', '나'])).toEqual([
+      { source: '나', count: 3 },
+      { source: '가', count: 2 },
+      { source: '', count: 1 },
+      { source: '다', count: 1 },
+    ]);
+  });
+
+  it('비어 있으면 빈 목록', () => {
+    expect(countBySource([])).toEqual([]);
   });
 });

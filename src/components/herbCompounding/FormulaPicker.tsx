@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
-import { combineFormulaIntoOrder, herbsForFormula, parseFormulaImport, parseFormulaJson, splitHerbNameList, summarizeFormulaHerbs, type FormulaImportResult, type HerbFormula } from '@/lib/herbFormulas';
+import { combineFormulaIntoOrder, herbsForFormula, parseFormulaImport, parseFormulaJson, splitHerbNameList, summarizeFormulaHerbs, type FormulaImportResult, type HerbFormula, type SourceCount } from '@/lib/herbFormulas';
 import { createClient } from '@/lib/supabase/client';
-import { countHerbFormulas, deleteHerbFormula, findHerbFormula, importHerbFormulas, saveHerbFormula, searchHerbFormulas } from '@/lib/supabase/herbFormulas';
+import { countHerbFormulas, deleteFormulasBySource, deleteHerbFormula, findHerbFormula, importHerbFormulas, listFormulaSources, saveHerbFormula, searchHerbFormulas } from '@/lib/supabase/herbFormulas';
 
 interface Props {
   value: HerbCompoundingOrder;
@@ -37,6 +37,9 @@ export function FormulaPicker({ value, onChange }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [importSource, setImportSource] = useState('');
   const [busy, setBusy] = useState(false);
+  // 출전별 정리: null이면 아직 안 불러온 것
+  const [sourceList, setSourceList] = useState<SourceCount[] | null>(null);
+  const [sourceBusy, setSourceBusy] = useState('');
   const requestId = useRef(0);
 
   function refreshTotal() {
@@ -104,6 +107,38 @@ export function FormulaPicker({ value, onChange }: Props) {
       refreshTotal();
     } catch {
       setError('지우지 못했어요.');
+    }
+  }
+
+  async function loadSources() {
+    setError('');
+    setSourceBusy('불러오는 중…');
+    try {
+      setSourceList(await listFormulaSources(createClient()));
+    } catch {
+      setError('출전 목록을 불러오지 못했어요.');
+    } finally {
+      setSourceBusy('');
+    }
+  }
+
+  // 가져온 처방 묶음(출전)을 통째로 지운다 — 되돌릴 수 없어서 개수를 보여 주고 확인을 받는다.
+  async function removeSource(item: SourceCount) {
+    const label = item.source || '출전 없음';
+    if (!(await confirmDialog(`"${label}" 처방 ${item.count.toLocaleString('ko-KR')}개를 처방집에서 모두 지울까요? 되돌릴 수 없어요(이미 저장한 처방전에는 영향이 없어요).`, { confirmLabel: '모두 삭제' }))) return;
+    setError('');
+    try {
+      const deleted = await deleteFormulasBySource(createClient(), item.source, (n) => setSourceBusy(`"${label}" 지우는 중 ${n.toLocaleString('ko-KR')}/${item.count.toLocaleString('ko-KR')}`));
+      setNotice(`"${label}" 처방 ${deleted.toLocaleString('ko-KR')}개를 처방집에서 지웠어요.`);
+      setResults([]);
+      setQuery('');
+      refreshTotal();
+      setSourceList(await listFormulaSources(createClient()));
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : '지우지 못했어요.');
+      refreshTotal();
+    } finally {
+      setSourceBusy('');
     }
   }
 
@@ -362,6 +397,31 @@ export function FormulaPicker({ value, onChange }: Props) {
                 {preview.rows.some((r) => r.danglingNames.length > 0) && ` · 그램이 안 붙은 약재가 있는 처방 ${preview.rows.filter((r) => r.danglingNames.length > 0).length}개(그 약재는 빠져요)`}
                 {preview.skipped.length > 0 && ` · 읽지 못한 줄 ${preview.skipped.length}개(${preview.skipped.slice(0, 5).map((s) => `${s.line}번`).join(', ')}${preview.skipped.length > 5 ? ' …' : ''})`}
               </p>
+            )}
+          </div>
+
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>처방집 정리 — 출전별로 지우기</p>
+            <p className="muted-text" style={{ fontSize: 12, margin: '0 0 6px' }}>
+              예전에 가져온 처방을 출전(책 이름) 단위로 한꺼번에 지울 수 있어요. 지우면 되돌릴 수 없고, 다시 쓰려면 파일로 다시 가져와야 해요.
+            </p>
+            <button type="button" onClick={loadSources} disabled={sourceBusy !== ''} style={{ fontSize: 13 }}>
+              {sourceList ? '출전 목록 새로고침' : '출전 목록 불러오기'}
+            </button>
+            {sourceBusy && <span className="muted-text" style={{ fontSize: 12, marginLeft: 8 }}>{sourceBusy}</span>}
+            {sourceList && (
+              <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {sourceList.length === 0 && <li className="muted-text" style={{ fontSize: 12 }}>처방집이 비어 있어요.</li>}
+                {sourceList.map((item) => (
+                  <li key={item.source} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ flex: 1 }}>{item.source || '(출전 없음)'}</span>
+                    <span className="muted-text">{item.count.toLocaleString('ko-KR')}개</span>
+                    <button type="button" onClick={() => removeSource(item)} disabled={sourceBusy !== ''} style={{ fontSize: 12, padding: '2px 8px', color: '#b3261e' }}>
+                      모두 삭제
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>

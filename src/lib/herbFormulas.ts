@@ -302,3 +302,18 @@ export function combineFormulaIntoOrder(current: { herbs: HerbLine[]; prescripti
 
   return { herbs: [...kept, ...added], prescriptionName, added: added.length, overlaps, combined: kept.length > 0 };
 }
+
+// ---- 출전별 정리(가져온 처방 묶음을 한꺼번에 지울 때) ----
+
+export interface SourceCount {
+  /** 출전(빈 문자열이면 출전을 안 적은 처방) */
+  source: string;
+  count: number;
+}
+
+/** 처방들의 출전을 세어 많은 순(같으면 이름순)으로. */
+export function countBySource(sources: string[]): SourceCount[] {
+  const map = new Map<string, number>();
+  for (const s of sources) map.set(s, (map.get(s) ?? 0) + 1);
+  return [...map].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source, 'ko'));
+}
