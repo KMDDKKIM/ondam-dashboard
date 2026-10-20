@@ -119,7 +119,7 @@ export function CareBoard() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>케어 보드</h1>
-      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. 린다이어트 환자의 단계 날짜는 <Link href="/diet-programs" style={{ textDecoration: 'underline' }}>린다이어트 관리</Link>에서 데스크가 채워요.</p>
+      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. 린다이어트 환자의 이름·디톡스 시작일·주수는 <Link href="/diet-programs" style={{ textDecoration: 'underline' }}>린다이어트 환자</Link> 화면에서 데스크가 적어요. 기록이 끊긴 분이나 이상 증상은 <a href="https://chart.leandiet.co.kr/briefing" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>린다이어트 차트 브리핑</a>의 "연락 필요 환자"에서 확인하세요.</p>
 
       <h2 style={{ fontSize: 17, margin: '0 0 8px' }}>📨 오늘 카톡 보낼 분 {due.length > 0 && <span style={{ color: 'var(--color-error)' }}>{due.length}건</span>}</h2>
       {loading && <p className="muted-text">불러오는 중…</p>}
@@ -137,7 +137,7 @@ export function CareBoard() {
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
               <tr>
-                {['환자', '방식', '단계', '약 소진 예정', '마지막 기록', '마지막 원장 연락'].map((h) => (
+                {['환자', '방식', '단계', '약 소진 예정', '마지막 원장 연락'].map((h) => (
                   <th key={h} style={th}>{h}</th>
                 ))}
               </tr>
@@ -145,16 +145,12 @@ export function CareBoard() {
             <tbody>
               {programs.map((p) => {
                 const end = medicineEndDate(p);
-                const noRecordDays = p.lastRecordDate ? diffDaysKst(p.lastRecordDate, today) : null;
                 return (
                   <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
                     <td style={{ ...td, fontWeight: 700 }}>{p.patientName}</td>
                     <td style={td}>{TRACK_LABEL[p.track]}</td>
                     <td style={td}>{phaseLabel(p, today)}</td>
                     <td style={td}>{end ? `${koDate(end)} (D-${Math.max(0, diffDaysKst(today, end))})` : '-'}</td>
-                    <td style={{ ...td, color: noRecordDays != null && noRecordDays >= 3 ? 'var(--color-error)' : undefined }}>
-                      {p.lastRecordDate ? `${koDate(p.lastRecordDate)}${noRecordDays != null && noRecordDays >= 3 ? ` (${noRecordDays}일 전)` : ''}` : '-'}
-                    </td>
                     <td style={td}>{p.lastDoctorContactDate ? koDate(p.lastDoctorContactDate) : '-'}</td>
                   </tr>
                 );

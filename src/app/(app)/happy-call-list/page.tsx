@@ -4,7 +4,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useState } from 'react';
 import { createManualEntry, deleteUntouchedManualEntry } from '@/lib/supabase/happyCallQueue';
 import { useHappyCallWorklist } from '@/components/happy-call/useHappyCallWorklist';
-import { CallActions, DoneTodaySection, OrdinalBadge, OverdueBadge, PhoneCell, kindText } from '@/components/happy-call/CallParts';
+import { CallActions, DoneTodaySection, OrdinalBadge, OverdueBadge, PhoneCell, ScriptButton, kindText } from '@/components/happy-call/CallParts';
 import { diffDaysKst, todayKst } from '@/lib/kst';
 import { MANUAL_CALL_TYPES, type ManualCallType, type WorklistItem } from '@/lib/happyCallQueue';
 
@@ -170,7 +170,10 @@ export default function HappyCallListPage() {
                       <span style={{ marginRight: 6, color: item.dueDate < today ? 'var(--color-error)' : undefined }}>{item.dueDate}</span>
                       <OverdueBadge dueDate={item.dueDate} today={today} />
                     </td>
-                    <td style={cellStyle}>{[item.note, item.memo].filter(Boolean).join(' · ') || ''}</td>
+                    <td style={cellStyle}>
+                      {[item.note, item.memo].filter(Boolean).join(' · ') || ''}
+                      <ScriptButton note={item.note} patientName={item.patientName} />
+                    </td>
                     <td style={cellStyle}>
                       <CallActions
                         item={item}
@@ -228,7 +231,10 @@ export default function HappyCallListPage() {
                             <td style={cellStyle}>
                               <PhoneCell phone={item.phone} source={item.phoneSource} ambiguous={item.phoneAmbiguous} />
                             </td>
-                            <td style={cellStyle}>{[item.note, item.memo].filter(Boolean).join(' · ') || ''}</td>
+                            <td style={cellStyle}>
+                      {[item.note, item.memo].filter(Boolean).join(' · ') || ''}
+                      <ScriptButton note={item.note} patientName={item.patientName} />
+                    </td>
                             <td style={cellStyle}>
                               {deletable(item) && (
                                 <button type="button" onClick={() => handleDelete(item)} style={{ ...smallButton, color: 'var(--color-error)' }}>

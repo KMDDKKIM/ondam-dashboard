@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dietPillStartDate, holidayClusters, medicineEndDate, ownerDueMessages, phaseLabel, type DietProgram } from './dietProgram';
-import { fillScript, koDate, OWNER_SCRIPTS, scriptValues } from './dietScripts';
+import { deskCallNote, deskCodeFromNote, dietPillStartDate, holidayClusters, medicineEndDate, ownerDueMessages, phaseLabel, planDeskSync, scheduledDeskCalls, type DietProgram } from './dietProgram';
+import { deskScriptForNote, deskScriptText, fillScript, koDate, OWNER_SCRIPTS, scriptValues } from './dietScripts';
 
 // 환자 이름은 시험용 값이다(공개 저장소).
 function program(p: Partial<DietProgram> = {}): DietProgram {
   return {
     id: 'p1', patientName: '가나다', chartNo: '', phone: '', track: 'visit', firstDate: null, weeks: 12, paidAt: null, shippedAt: null,
-    detoxStartDate: '2026-10-05', detoxDays: 3, medicineEndDate: null, revisitDate: null, lastRecordDate: null, lastDoctorContactDate: null,
+    detoxStartDate: '2026-10-05', detoxDays: 3, medicineEndDate: null, revisitDate: null, lastDoctorContactDate: null,
     status: 'active', endedAt: null, memo: '', ...p,
   };
 }
@@ -57,14 +57,6 @@ describe('ownerDueMessages — 원장 카톡', () => {
 
   it('종료된 환자는 아무것도 안 뜬다', () => {
     expect(ownerDueMessages([program({ status: 'ended' })], '2026-12-24', [])).toEqual([]);
-  });
-
-  it('기록이 3일 끊기면 안부(공7), 기록이 하루 안이고 원장 연락 3일이면 안부(공4)', () => {
-    expect(codes(ownerDueMessages([program({ lastRecordDate: '2026-10-12' })], '2026-10-15', []))).toContain('no-record');
-    expect(codes(ownerDueMessages([program({ lastRecordDate: '2026-10-13' })], '2026-10-15', []))).not.toContain('no-record');
-    const p = program({ lastRecordDate: '2026-10-15', lastDoctorContactDate: '2026-10-12' });
-    expect(codes(ownerDueMessages([p], '2026-10-15', []))).toContain('checkin');
-    expect(codes(ownerDueMessages([program({ lastRecordDate: '2026-10-13', lastDoctorContactDate: '2026-10-12' })], '2026-10-15', []))).not.toContain('checkin');
   });
 
   it('재진일: 대면은 단계 전환 안내, 비대면은 재처방 안내', () => {
@@ -119,5 +111,86 @@ describe('카톡 문구', () => {
 
   it('koDate', () => {
     expect(koDate('2026-10-19')).toBe('10월 19일(월)');
+  });
+});
+
+describe('기록 기반 연락은 자동으로 만들지 않는다(원장 결정)', () => {
+  it('기록이 끊기거나 잘 올라와도 원장 카톡이 생기지 않는다', () => {
+    const list = ownerDueMessages([program({ detoxStartDate: '2026-10-12', weeks: 12 })], '2026-10-15', []);
+    expect(codes(list)).not.toContain('no-record' as never);
+    expect(codes(list)).not.toContain('checkin' as never);
+  });
+});
+
+describe('scheduledDeskCalls — 날짜로 정해지는 데스크 해피콜', () => {
+  it('디톡스 전날, 다이어트환 시작일, 약 소진 10일 전', () => {
+    const calls = scheduledDeskCalls(program()); // 디톡스 10/5, 3일 → 환 시작 10/8, 12주 → 약 소진 12/27
+    const get = (code: string) => calls.filter((c) => c.code === code).map((c) => c.callDate);
+    expect(get('detox-eve')).toEqual(['2026-10-04']);
+    expect(get('pill-start')).toEqual(['2026-10-08']);
+    expect(get('reorder')).toEqual(['2026-12-17']);
+  });
+
+  it('월초 안부는 다이어트환 시작 뒤 약 소진 예정일까지의 매월 1일', () => {
+    const monthly = scheduledDeskCalls(program()).filter((c) => c.code === 'monthly').map((c) => c.callDate);
+    expect(monthly).toEqual(['2026-11-01', '2026-12-01']);
+  });
+
+  it('디톡스 시작일이 없으면 아무것도 만들지 않는다', () => {
+    expect(scheduledDeskCalls(program({ detoxStartDate: null }))).toEqual([]);
+  });
+
+  it('해가 바뀌는 프로그램도 월초 안부가 이어진다', () => {
+    const monthly = scheduledDeskCalls(program({ detoxStartDate: '2026-11-20', weeks: 12 })).filter((c) => c.code === 'monthly').map((c) => c.callDate);
+    expect(monthly).toEqual(['2026-12-01', '2027-01-01', '2027-02-01']);
+  });
+});
+
+describe('planDeskSync', () => {
+  const desired = [
+    { code: 'detox-eve' as const, callDate: '2026-10-04' },
+    { code: 'pill-start' as const, callDate: '2026-10-08' },
+  ];
+
+  it('없는 것만 만들고, 지난 날짜는 새로 만들지 않는다', () => {
+    expect(planDeskSync(desired, [], '2026-10-06')).toEqual([{ type: 'create', code: 'pill-start', callDate: '2026-10-08' }]);
+    expect(planDeskSync(desired, [], '2026-10-01')).toHaveLength(2);
+  });
+
+  it('이미 있는 것은 그대로 둔다', () => {
+    const existing = [{ code: 'pill-start', callDate: '2026-10-08', entryId: 'e1', touched: false }];
+    expect(planDeskSync(desired, existing, '2026-10-06')).toEqual([]);
+  });
+
+  it('날짜가 바뀌어 필요 없어진 것은 손대지 않았을 때만 지운다', () => {
+    const existing = [
+      { code: 'pill-start', callDate: '2026-10-09', entryId: 'e1', touched: false },
+      { code: 'detox-eve', callDate: '2026-10-03', entryId: 'e2', touched: true },
+    ];
+    const ops = planDeskSync(desired, existing, '2026-10-06');
+    expect(ops).toContainEqual({ type: 'remove', entryId: 'e1' });
+    expect(ops).not.toContainEqual({ type: 'remove', entryId: 'e2' });
+    expect(ops).toContainEqual({ type: 'create', code: 'pill-start', callDate: '2026-10-08' });
+  });
+});
+
+describe('데스크 해피콜 문구', () => {
+  it('해피콜 문구(note)로 단계를 알아낸다', () => {
+    expect(deskCodeFromNote(deskCallNote('detox-eve', 'visit'))).toBe('detox-eve');
+    expect(deskCodeFromNote(deskCallNote('reorder', 'remote'))).toBe('reorder');
+    expect(deskCodeFromNote('린다이어트 · 모르는 문구')).toBeNull();
+    expect(deskCodeFromNote('한약 수령확인')).toBeNull();
+  });
+
+  it('대면/비대면 문구를 구분하고 이름·코디명·월을 채운다', () => {
+    expect(deskScriptForNote(deskCallNote('reorder', 'visit'))).toContain('내원 가능하신 날짜');
+    expect(deskScriptForNote(deskCallNote('reorder', 'remote'))).toContain('통화 편하신 시간');
+    const text = deskScriptText(deskCallNote('monthly', 'visit'), '가나다', '코디A', '2026-11-01') as string;
+    expect(text).toContain('가나다님~ 코디 코디A입니다');
+    expect(text).toContain('어느새 11월이네요! 10월 한 달도');
+  });
+
+  it('1월 안부는 전월이 12월', () => {
+    expect(deskScriptText(deskCallNote('monthly', 'visit'), '가', '나', '2027-01-01')).toContain('12월 한 달도');
   });
 });

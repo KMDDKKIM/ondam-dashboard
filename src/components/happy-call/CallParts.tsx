@@ -10,7 +10,10 @@ import {
   type CallAction,
   type WorklistItem,
 } from '@/lib/happyCallQueue';
-import { kstTimeOf } from '@/lib/kst';
+import { deskScriptForNote, deskScriptText } from '@/lib/dietScripts';
+import { kstTimeOf, todayKst } from '@/lib/kst';
+import { createClient } from '@/lib/supabase/client';
+import { currentStaff } from '@/lib/supabase/herbQueue';
 
 // 해피콜 목록 페이지와 홈 위젯이 함께 쓰는 작은 화면 조각들.
 
@@ -256,5 +259,33 @@ export function DoneTodaySection({
         ))}
       </ul>
     </details>
+  );
+}
+
+/**
+ * 린다이어트 해피콜(데스크 담당)의 카톡 문구 복사 단추 — 이름·코디명·월을 채워 복사한다. 린다이어트 해피콜이 아니면 아무것도 안 보인다.
+ * 나머지 {칸}(결제링크·송장번호 등)은 카톡에 붙여넣은 뒤 직접 채운다.
+ */
+export function ScriptButton({ note, patientName }: { note: string | null; patientName: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  if (deskScriptForNote(note) == null) return null;
+
+  async function copy() {
+    try {
+      const me = await currentStaff(createClient());
+      const text = deskScriptText(note, patientName, me.name, todayKst());
+      if (text == null) return;
+      await navigator.clipboard.writeText(text);
+      setState('copied');
+    } catch {
+      setState('failed');
+    }
+    setTimeout(() => setState('idle'), 1800);
+  }
+
+  return (
+    <button type="button" onClick={copy} style={{ ...smallButton, marginLeft: 6, padding: '2px 8px' }}>
+      {state === 'copied' ? '✓ 복사했어요' : state === 'failed' ? '복사 실패' : '📋 문구 복사'}
+    </button>
   );
 }

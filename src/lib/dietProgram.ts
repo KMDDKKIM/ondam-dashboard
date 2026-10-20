@@ -1,6 +1,7 @@
-// 린다이어트 프로그램 카드와 "원장 카톡" 일정 계산(순수 로직) — 원장 요청 2026-10-20.
-// 기준은 온유한의원 사례의 대면/비대면 해피콜 문서다. 그중 원장이 직접 보내는 카톡 9개만 이 파일이 계산하고,
-// 코디(데스크) 담당 메시지는 다음 단계에서 해피콜 목록에 붙인다. 화면/DB 코드는 supabase/dietPrograms.ts.
+// 린다이어트 프로그램 카드와 해피콜 일정 계산(순수 로직) — 원장 요청 2026-10-20.
+// 기준은 온유한의원 사례의 대면/비대면 해피콜 문서다. 원장이 직접 보내는 카톡(케어 보드)과 데스크(코디)가 거는 해피콜(해피콜 목록)을
+// 구분해서 각각 계산한다. 기록이 3일 끊긴 환자 연락은 특수한 경우라 자동화하지 않는다(린다이어트 차트 브리핑에서 확인).
+// 화면/DB 코드는 supabase/dietPrograms.ts.
 
 import { CLINIC_HOLIDAYS } from './clinicHolidays';
 import { addDaysKst, diffDaysKst, weekdayKo } from './kst';
@@ -22,7 +23,6 @@ export interface DietProgram {
   detoxDays: number;
   medicineEndDate: string | null;
   revisitDate: string | null;
-  lastRecordDate: string | null;
   lastDoctorContactDate: string | null;
   status: DietStatus;
   endedAt: string | null;
@@ -61,9 +61,7 @@ export type OwnerMessageCode =
   | 'remote-second'   // 비10 2차 상담 후 재처방 안내
   | 'remote-nudge'    // 비9 2차 상담이 아직 안 잡힌 비대면 환자 안부
   | 'pill-day1'       // 공3 다이어트환 시작 다음 날 안부
-  | 'checkin'         // 공4 기록 잘하는 환자 안부(원장 연락 3일 간격)
   | 'weekly'          // 공5 매주 월요일 문안
-  | 'no-record'       // 공7 기록이 끊긴 환자 안부
   | 'refill'          // 공9 약 소진 4일 전 연복 권유
   | 'holiday';        // 공10 연휴 전 공지
 
@@ -72,9 +70,7 @@ export const OWNER_MESSAGE_LABEL: Record<OwnerMessageCode, string> = {
   'remote-second': '2차 상담 후 재처방 안내',
   'remote-nudge': '2차 상담 일정 확인 안부',
   'pill-day1': '다이어트환 첫날 안부',
-  checkin: '기록 잘하는 분 안부',
   weekly: '월요일 문안',
-  'no-record': '기록이 끊긴 분 안부',
   refill: '연복 권유(약 소진 임박)',
   holiday: '연휴 전 공지',
 };
@@ -129,17 +125,8 @@ function candidates(p: DietProgram, today: string, holidays: readonly string[]):
   // 공3: 다이어트환 시작 다음 날
   if (pillStart) out.push({ code: 'pill-day1', dueDate: addDaysKst(pillStart, 1), windowDays: 2 });
 
-  // 공4: 기록은 잘 올라오는데(마지막 기록이 하루 안) 원장 연락이 3일 지났다
-  if (started && pillStart && p.lastRecordDate && diffDaysKst(p.lastRecordDate, today) <= 1) {
-    const base = p.lastDoctorContactDate ?? pillStart;
-    out.push({ code: 'checkin', dueDate: addDaysKst(base, 3), windowDays: 7 });
-  }
-
   // 공5: 월요일마다(복용 중인 환자에게). 월요일 당일에만 보인다.
   if (started && stillOnMedicine && weekdayKo(today) === '월') out.push({ code: 'weekly', dueDate: today, windowDays: 0 });
-
-  // 공7: 마지막 기록이 3일 넘게 없다
-  if (started && p.lastRecordDate) out.push({ code: 'no-record', dueDate: addDaysKst(p.lastRecordDate, 3), windowDays: 4 });
 
   // 공9: 약 소진 4일 전
   if (end) out.push({ code: 'refill', dueDate: addDaysKst(end, -4), windowDays: 4 });
@@ -170,4 +157,120 @@ export function ownerDueMessages(programs: DietProgram[], today: string, sends: 
   // 많이 밀린 것부터, 같으면 환자 이름순
   const name = new Map(programs.map((p) => [p.id, p.patientName]));
   return result.sort((a, b) => b.overdueDays - a.overdueDays || (name.get(a.programId) ?? '').localeCompare(name.get(b.programId) ?? '', 'ko'));
+}
+
+// ---- 데스크(코디) 해피콜 ----
+// 날짜로 정해지는 것(scheduled)은 프로그램 날짜에서 계산해 해피콜 목록에 미리 만들고, 그날그날 일어나는 일(event: 진료 후·결제 확인·발송)은
+// 데스크가 단추를 누를 때 오늘 날짜로 만든다.
+
+export type DeskCallCode =
+  | 'consult-done' // 대3/비4 진료·상담 후 안내(등록할 때)
+  | 'paid'         // 대4/비5 결제 확인 후 리뷰·앱 안내
+  | 'shipped'      // 대5/비6/대9/비11 발송 완료 송장 안내
+  | 'received'     // 비7 약 수령 확인(비대면, 발송 다음 날)
+  | 'detox-eve'    // 공1 디톡스 전날 복용법
+  | 'pill-start'   // 공2 다이어트환 시작일 안내
+  | 'monthly'      // 공6 월초 안부
+  | 'reorder'      // 대6/비8 약 소진 10일 전 재진·2차 상담 예약
+  | 'finish';      // 공11 종료 안내와 네이버 리뷰
+
+export const SCHEDULED_DESK_CODES: readonly DeskCallCode[] = ['detox-eve', 'pill-start', 'monthly', 'reorder'];
+
+/** 해피콜 목록에 적히는 문구의 앞머리 — 목록에서 린다이어트 해피콜을 알아보고 문구(스크립트)를 찾는 데 쓴다. */
+export const DESK_NOTE_PREFIX = '린다이어트 · ';
+
+export function deskCallLabel(code: DeskCallCode, track: DietTrack): string {
+  switch (code) {
+    case 'consult-done':
+      return track === 'visit' ? '진료 후 안내(채널 추가·약 수령 방식)' : '상담 후 처방 요약·결제 링크';
+    case 'paid':
+      return track === 'visit' ? '결제 후 리뷰·앱 안내' : '결제 확인 후 주소 확인·리뷰·앱 안내';
+    case 'shipped':
+      return '발송 완료 송장 안내';
+    case 'received':
+      return '약 수령 확인';
+    case 'detox-eve':
+      return '디톡스 전날 복용법 안내';
+    case 'pill-start':
+      return '다이어트환 시작 컨디션·식단 안내';
+    case 'monthly':
+      return '월초 안부';
+    case 'reorder':
+      return track === 'visit' ? '재진 예약 안내(약 소진 10일 전)' : '2차 전화상담 예약(약 소진 10일 전)';
+    case 'finish':
+      return '종료 안내·네이버 리뷰 요청';
+  }
+}
+
+export function deskCallNote(code: DeskCallCode, track: DietTrack): string {
+  return DESK_NOTE_PREFIX + deskCallLabel(code, track);
+}
+
+/** 해피콜 목록의 문구로 어떤 데스크 해피콜인지 찾는다(린다이어트 해피콜이 아니거나 모르는 문구면 null). */
+export function deskCodeFromNote(note: string | null | undefined): DeskCallCode | null {
+  if (!note || !note.startsWith(DESK_NOTE_PREFIX)) return null;
+  const label = note.slice(DESK_NOTE_PREFIX.length).trim();
+  const codes: DeskCallCode[] = ['consult-done', 'paid', 'shipped', 'received', 'detox-eve', 'pill-start', 'monthly', 'reorder', 'finish'];
+  for (const code of codes) {
+    for (const track of ['visit', 'remote'] as DietTrack[]) if (deskCallLabel(code, track) === label) return code;
+  }
+  return null;
+}
+
+export interface DesiredDeskCall {
+  code: DeskCallCode;
+  callDate: string;
+}
+
+/** 날짜로 정해지는 데스크 해피콜 — 디톡스 전날, 다이어트환 시작일, 월초 안부(복용 기간 중 매월 1일), 약 소진 10일 전. */
+export function scheduledDeskCalls(p: DietProgram): DesiredDeskCall[] {
+  const out: DesiredDeskCall[] = [];
+  const end = medicineEndDate(p);
+  const pillStart = dietPillStartDate(p);
+  if (p.detoxStartDate) out.push({ code: 'detox-eve', callDate: addDaysKst(p.detoxStartDate, -1) });
+  if (pillStart) out.push({ code: 'pill-start', callDate: pillStart });
+  if (pillStart && end) {
+    // 다이어트환 시작 다음 달부터 약 소진 예정일까지의 매월 1일
+    let month = pillStart.slice(0, 7);
+    for (let i = 0; i < 36; i++) {
+      const [y, m] = month.split('-').map(Number);
+      const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      const first = `${next}-01`;
+      if (first > end) break;
+      out.push({ code: 'monthly', callDate: first });
+      month = next;
+    }
+  }
+  if (end) out.push({ code: 'reorder', callDate: addDaysKst(end, -10) });
+  return out;
+}
+
+export interface ExistingDeskCall {
+  code: string;
+  callDate: string;
+  entryId: string;
+  /** 이미 처리했거나 전화를 시도한 해피콜(건드리면 안 된다) */
+  touched: boolean;
+}
+
+export type DeskSyncOp =
+  | { type: 'create'; code: DeskCallCode; callDate: string }
+  | { type: 'remove'; entryId: string };
+
+/**
+ * 원하는 해피콜과 이미 만들어 둔 해피콜을 비교해 할 일을 정한다. 같은 (단계, 날짜)는 그대로 두고, 없는 것은 만들고(오늘 이후만 —
+ * 이미 지난 날짜는 새로 만들지 않는다), 더 이상 필요 없는 것은 아직 손대지 않았을 때만 지운다.
+ */
+export function planDeskSync(desired: DesiredDeskCall[], existing: ExistingDeskCall[], today: string): DeskSyncOp[] {
+  const have = new Set(existing.map((e) => `${e.code}|${e.callDate}`));
+  const want = new Set(desired.map((d) => `${d.code}|${d.callDate}`));
+  const ops: DeskSyncOp[] = [];
+  for (const d of desired) {
+    if (d.callDate < today || have.has(`${d.code}|${d.callDate}`)) continue;
+    ops.push({ type: 'create', code: d.code, callDate: d.callDate });
+  }
+  for (const e of existing) {
+    if (!want.has(`${e.code}|${e.callDate}`) && !e.touched) ops.push({ type: 'remove', entryId: e.entryId });
+  }
+  return ops;
 }
