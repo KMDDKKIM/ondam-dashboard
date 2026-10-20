@@ -27,6 +27,8 @@ export interface TodayStatusProps {
   calls?: { open: number; overdue: number } | null;
   /** 원장 승인을 기다리는 연차 신청 수 — 원장에게만 내려주고, 0건·조회 실패면 항목을 감춘다. */
   leavePending?: number | null;
+  /** 오늘 원장이 카톡을 보낼 환자 수 — 원장에게만 내려주고, 0건·조회 실패면 항목을 감춘다. */
+  careDue?: number | null;
 }
 
 type Row = TodayRow;
@@ -46,6 +48,7 @@ export function TodayStatus({
   firstVisitMissing,
   calls,
   leavePending,
+  careDue,
 }: TodayStatusProps) {
   const rows: Row[] = [];
 
@@ -70,6 +73,9 @@ export function TodayStatus({
   const callRow = callsRow(calls);
   if (callRow) rows.push(callRow);
 
+  if (careDue != null && careDue > 0) {
+    rows.push({ key: 'care', icon: '💌', text: `오늘 카톡 보낼 환자 ${careDue}명이 있어요`, state: 'todo', badge: '케어 보드', href: '/care-board' });
+  }
   if (leavePending != null && leavePending > 0) {
     rows.push({ key: 'leave', icon: '🗓️', text: `연차 신청 ${leavePending}건이 승인을 기다려요`, state: 'todo', badge: '승인하기', href: '/leave' });
   }

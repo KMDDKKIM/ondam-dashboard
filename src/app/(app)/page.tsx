@@ -12,6 +12,7 @@ import { countPendingLeaveRequests } from '@/lib/supabase/leave';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 import { countPendingPickupOrders } from '@/lib/supabase/herbPickup';
+import { countOwnerDue } from '@/lib/supabase/dietPrograms';
 import { listDoctors } from '@/lib/supabase/doctors';
 import { resolveHerbQueueDoctorFilter } from '@/lib/herbQueue';
 import { todayKst } from '@/lib/kst';
@@ -77,6 +78,8 @@ export default async function HomePage() {
   const herbWaiting = await countWaitingHerbQueue(supabase, herbDoctorFilter);
   // 처방전 출력을 마치고 수령예정일을 기다리는 한약 — 데스크 직원에게만 보여 준다.
   const herbPickupPending = herbDoctorFilter === null ? await countPendingPickupOrders(supabase) : 0;
+  // 오늘 원장이 카톡 보낼 환자 — 원장에게만.
+  const careDue = isOwner ? await countOwnerDue(supabase, today) : null;
 
   const todayLabel = new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
@@ -116,6 +119,7 @@ export default async function HomePage() {
             firstVisitMissing={firstVisitMissing}
             calls={calls}
             leavePending={leavePending}
+            careDue={careDue}
           />
         }
         calls={<TodayHappyCalls />}

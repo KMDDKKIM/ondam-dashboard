@@ -21,6 +21,8 @@ interface SidebarProps {
   herbQueueCount?: number;
   /** 물품신청 메뉴 배지 건수 — 원장님에게는 주문 대기, 그 외에는 도착 확인 대기 건수(호출하는 쪽에서 역할별로 골라 내려준다). */
   supplyOpenCount?: number;
+  /** 오늘 원장이 카톡 보낼 환자 수 — 케어 보드 메뉴(원장에게만 내려온다) */
+  careDueCount?: number;
   /** 승인을 기다리는 직원 가입 신청 수 — 직원 승인 메뉴(원장님에게만 보임)에 숫자 배지를 붙인다. */
   pendingStaffCount?: number;
   /** 승인을 기다리는 연차 신청 수 — 연차 관리 메뉴(원장에게만 내려옴)에 숫자 배지를 붙인다. */
@@ -47,6 +49,7 @@ export function Sidebar({
   remoteNewCount = 0,
   herbQueueCount = 0,
   supplyOpenCount = 0,
+  careDueCount = 0,
   pendingStaffCount = 0,
   pendingLeaveCount = 0,
   hasIncentiveProfile = false,
@@ -263,6 +266,11 @@ export function Sidebar({
                       {item.href === '/supply-requests' && supplyOpenCount > 0 && (
                         <span className="side-badge" title={supplyBadgeLabel}>
                           {supplyOpenCount > 99 ? '99+' : supplyOpenCount}
+                        </span>
+                      )}
+                      {item.href === '/care-board' && careDueCount > 0 && (
+                        <span className="side-badge" title="오늘 카톡 보낼 환자">
+                          {careDueCount > 99 ? '99+' : careDueCount}
                         </span>
                       )}
                       {item.href === '/leave' && pendingLeaveCount > 0 && (

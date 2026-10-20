@@ -13,6 +13,8 @@ import { fetchMissingClosingDates } from '@/lib/supabase/dailyRevenue';
 import { countNewRemoteRequests } from '@/lib/supabase/remoteConsult';
 import { countWaitingHerbQueue } from '@/lib/supabase/herbQueue';
 import { countPendingPickupOrders } from '@/lib/supabase/herbPickup';
+import { countOwnerDue } from '@/lib/supabase/dietPrograms';
+import { todayKst } from '@/lib/kst';
 import { countSupplyRequestBadges } from '@/lib/supabase/supplyRequests';
 import { countPendingStaff } from '@/lib/supabase/staffApproval';
 import { countPendingLeaveRequests } from '@/lib/supabase/leave';
@@ -69,6 +71,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   const herbQueueCount = waitingHerb + pendingPickup;
   // 신청 직후엔 원장님에게(주문해야 함), 주문 후엔 데스크 직원에게(도착 확인해야 함) 알람이 넘어간다.
+  // 케어 보드(원장 전용): 오늘 카톡 보낼 환자 수. 표를 아직 안 만들었거나 읽기에 실패하면 알림을 숨긴다.
+  const careDueCount = isOwner ? ((await countOwnerDue(supabase, todayKst())) ?? 0) : 0;
   const supplyOpenCount = (isOwner ? supplyBadges.awaitingOrder : supplyBadges.awaitingArrival) ?? 0;
 
   return (
@@ -81,6 +85,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         remoteNewCount={remoteNewCount}
         herbQueueCount={herbQueueCount}
         supplyOpenCount={supplyOpenCount}
+        careDueCount={careDueCount}
         pendingStaffCount={pendingStaffCount}
         pendingLeaveCount={pendingLeaveCount}
         hasIncentiveProfile={hasIncentiveProfile}
