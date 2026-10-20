@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deskCallNote, deskCodeFromNote, dietPillStartDate, holidayClusters, medicineEndDate, ownerDueMessages, phaseLabel, planDeskSync, scheduledDeskCalls, type DietProgram } from './dietProgram';
+import { deskCallNote, deskCodeFromNote, deskNoteDisplay, deskStageRank, needsConsultDoneCall, dietPillStartDate, holidayClusters, medicineEndDate, ownerDueMessages, phaseLabel, planDeskSync, scheduledDeskCalls, type DietProgram } from './dietProgram';
 import { deskScriptForNote, deskScriptText, fillScript, koDate, OWNER_SCRIPTS, scriptValues } from './dietScripts';
 
 // 환자 이름은 시험용 값이다(공개 저장소).
@@ -192,5 +192,33 @@ describe('데스크 해피콜 문구', () => {
 
   it('1월 안부는 전월이 12월', () => {
     expect(deskScriptText(deskCallNote('monthly', 'visit'), '가', '나', '2027-01-01')).toContain('12월 한 달도');
+  });
+});
+
+describe('같은 날 데스크 해피콜 순서와 표시', () => {
+  it('진료 후 → 결제 → 송장 → … 순서 번호', () => {
+    const order = (['consult-done', 'paid', 'shipped', 'detox-eve', 'reorder', 'finish'] as const).map((c) => deskStageRank(deskCallNote(c, 'visit')));
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(deskStageRank('한약 수령확인')).toBeGreaterThan(deskStageRank(deskCallNote('finish', 'visit')));
+  });
+
+  it('목록에는 앞머리를 뺀 문구를 보여 준다', () => {
+    expect(deskNoteDisplay(deskCallNote('monthly', 'visit'))).toBe('월초 안부');
+    expect(deskNoteDisplay('한약 수령확인')).toBe('한약 수령확인');
+    expect(deskNoteDisplay(null)).toBe('');
+  });
+});
+
+describe('needsConsultDoneCall — 진료 후 안내를 올릴지', () => {
+  it('디톡스 시작 전(또는 오늘 시작, 또는 시작일 모름)이면 올린다', () => {
+    expect(needsConsultDoneCall('2026-10-23', '2026-10-20')).toBe(true);
+    expect(needsConsultDoneCall('2026-10-20', '2026-10-20')).toBe(true);
+    expect(needsConsultDoneCall(null, '2026-10-20')).toBe(true);
+    expect(needsConsultDoneCall('', '2026-10-20')).toBe(true);
+  });
+
+  it('디톡스를 이미 시작한(진행 중인) 환자는 올리지 않는다', () => {
+    expect(needsConsultDoneCall('2026-10-19', '2026-10-20')).toBe(false);
+    expect(needsConsultDoneCall('2026-09-01', '2026-10-20')).toBe(false);
   });
 });

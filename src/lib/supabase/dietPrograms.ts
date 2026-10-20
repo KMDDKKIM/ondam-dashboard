@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   deskCallNote,
+  needsConsultDoneCall,
   ownerDueMessages,
   planDeskSync,
   scheduledDeskCalls,
@@ -157,8 +158,8 @@ async function removeUntouchedDeskCalls(supabase: SupabaseClient, programId: str
 // ---- 프로그램 ----
 
 /**
- * 환자를 등록한다. 진료·상담을 마친 뒤 등록하는 것이라 "진료 후 안내" 해피콜을 오늘 날짜로 함께 만들고, 날짜로 정해지는
- * 해피콜(디톡스 전날 등)도 바로 맞춘다.
+ * 환자를 등록한다. 진료·상담을 마친 뒤 등록하는 것이라 "진료 후 안내" 해피콜을 오늘 날짜로 함께 만들고(디톡스를 이미 시작한 환자는 제외),
+ * 날짜로 정해지는 해피콜(디톡스 전날 등)도 바로 맞춘다.
  */
 export async function createDietProgram(
   supabase: SupabaseClient,
@@ -179,7 +180,7 @@ export async function createDietProgram(
   const program = rowToProgram(data as Row);
   // 해피콜 목록 쪽 오류가 환자 등록 자체를 막지 않게 한다(카드는 이미 만들어졌다).
   try {
-    await createDeskCall(supabase, program, 'consult-done', todayKst(), createdBy);
+    if (needsConsultDoneCall(program.detoxStartDate, todayKst())) await createDeskCall(supabase, program, 'consult-done', todayKst(), createdBy);
     await syncDeskCalls(supabase, program, createdBy);
   } catch {
     // 해피콜은 환자 수정 때 다시 맞춰진다.

@@ -274,3 +274,25 @@ export function planDeskSync(desired: DesiredDeskCall[], existing: ExistingDeskC
   }
   return ops;
 }
+
+const DESK_STAGE_ORDER: DeskCallCode[] = ['consult-done', 'paid', 'shipped', 'received', 'detox-eve', 'pill-start', 'monthly', 'reorder', 'finish'];
+
+/** 같은 날 올라온 데스크 해피콜을 진행 순서(진료 후 → 결제 → 송장 → …)로 정렬하는 번호. 린다이어트 해피콜이 아니면 맨 뒤. */
+export function deskStageRank(note: string | null | undefined): number {
+  const code = deskCodeFromNote(note);
+  return code ? DESK_STAGE_ORDER.indexOf(code) : DESK_STAGE_ORDER.length;
+}
+
+/** 해피콜 목록에 보여 줄 문구 — 종류 칸에 이미 "린다이어트"가 있어서 앞머리를 뺀다. */
+export function deskNoteDisplay(note: string | null | undefined): string {
+  if (!note) return '';
+  return note.startsWith(DESK_NOTE_PREFIX) ? note.slice(DESK_NOTE_PREFIX.length) : note;
+}
+
+/**
+ * 등록할 때 "진료 후 안내"를 올릴지. 디톡스를 이미 시작한 환자(시작일이 오늘보다 앞)는 진료 직후가 아니라 진행 중에 등록하는 것이라
+ * 이 안내가 필요 없다(원장 요청, 2026-10-20).
+ */
+export function needsConsultDoneCall(detoxStartDate: string | null | undefined, today: string): boolean {
+  return !detoxStartDate || detoxStartDate >= today;
+}

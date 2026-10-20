@@ -8,6 +8,7 @@
 //  - 바빠서 못 걸면 "내일로 미루기"(예정일을 내일로).
 //  - 예정일이 지난 미완료 콜은 계속 목록에 남고 가장 위에 정렬된다.
 
+import { deskStageRank } from './dietProgram';
 import type { HappyCallPatient } from './types';
 import { addDaysKst, diffDaysKst, kstDateOf } from './kst';
 
@@ -233,6 +234,7 @@ export function buildWorklist(items: WorklistItem[], today: string): Worklist {
       (a, b) =>
         a.dueDate.localeCompare(b.dueDate) ||
         a.patientName.localeCompare(b.patientName, 'ko') ||
+        deskStageRank(a.note) - deskStageRank(b.note) ||
         a.key.localeCompare(b.key)
     );
   const upcoming = items
@@ -241,6 +243,7 @@ export function buildWorklist(items: WorklistItem[], today: string): Worklist {
       (a, b) =>
         a.dueDate.localeCompare(b.dueDate) ||
         a.patientName.localeCompare(b.patientName, 'ko') ||
+        deskStageRank(a.note) - deskStageRank(b.note) ||
         a.key.localeCompare(b.key)
     );
   const doneToday = items

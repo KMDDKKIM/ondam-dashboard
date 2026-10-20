@@ -55,7 +55,7 @@ export default function DietProgramsPage() {
     setError('');
     try {
       await createDietProgram(supabase, { patientName: name, phone, track, firstDate: today, detoxStartDate: detoxStart, weeks: weeks ? Number(weeks) : null }, staffId);
-      setNotice(`${name.trim()}님을 등록했어요. 해피콜 목록에 "진료 후 안내"와 앞으로의 안내가 올라갔어요.`);
+      setNotice(`${name.trim()}님을 등록했어요. 해피콜 목록에 앞으로의 안내가 올라갔어요.`);
       setName('');
       setPhone('');
       setDetoxStart('');
@@ -179,7 +179,7 @@ export default function DietProgramsPage() {
       </p>
 
       <div className="card" style={{ padding: 12, marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>+ 환자 등록 <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>(진료·상담을 마친 뒤에 등록하면 "진료 후 안내"가 바로 올라가요)</span></div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>+ 환자 등록 <span className="muted-text" style={{ fontWeight: 400, fontSize: 12 }}>(진료·상담을 마친 뒤에 등록하면 "진료 후 안내"가 바로 올라가요. 디톡스를 이미 시작한 분은 이 안내 없이 등록돼요)</span></div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={labelStyle}>
             환자명

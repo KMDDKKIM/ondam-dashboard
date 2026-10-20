@@ -6,6 +6,7 @@ import { createManualEntry, deleteUntouchedManualEntry } from '@/lib/supabase/ha
 import { useHappyCallWorklist } from '@/components/happy-call/useHappyCallWorklist';
 import { CallActions, DoneTodaySection, OrdinalBadge, OverdueBadge, PhoneCell, ScriptButton, kindText } from '@/components/happy-call/CallParts';
 import { diffDaysKst, todayKst } from '@/lib/kst';
+import { deskNoteDisplay } from '@/lib/dietProgram';
 import { MANUAL_CALL_TYPES, type ManualCallType, type WorklistItem } from '@/lib/happyCallQueue';
 
 const cellStyle = { border: '1px solid #ddd', padding: 6, verticalAlign: 'top' as const };
@@ -171,7 +172,7 @@ export default function HappyCallListPage() {
                       <OverdueBadge dueDate={item.dueDate} today={today} />
                     </td>
                     <td style={cellStyle}>
-                      {[item.note, item.memo].filter(Boolean).join(' · ') || ''}
+                      {[deskNoteDisplay(item.note), item.memo].filter(Boolean).join(' · ') || ''}
                       <ScriptButton note={item.note} patientName={item.patientName} />
                     </td>
                     <td style={cellStyle}>
@@ -232,7 +233,7 @@ export default function HappyCallListPage() {
                               <PhoneCell phone={item.phone} source={item.phoneSource} ambiguous={item.phoneAmbiguous} />
                             </td>
                             <td style={cellStyle}>
-                      {[item.note, item.memo].filter(Boolean).join(' · ') || ''}
+                      {[deskNoteDisplay(item.note), item.memo].filter(Boolean).join(' · ') || ''}
                       <ScriptButton note={item.note} patientName={item.patientName} />
                     </td>
                             <td style={cellStyle}>
