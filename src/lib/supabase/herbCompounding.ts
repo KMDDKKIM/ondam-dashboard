@@ -138,12 +138,12 @@ export interface KnownHerbPatient {
 // 처방 입력 화면의 "전에 저장한 사람이면 다시 고르기" 자동완성용. 차트번호가 없는 사람도
 // (신환 등) 후보에 넣는다 — 차트번호로 거르면 정작 그 사람에게는 이 기능이 무용해진다.
 // 이름+차트번호 조합이 같으면 하나로 묶는다.
-export async function listKnownHerbCompoundingPatients(supabase: SupabaseClient): Promise<KnownHerbPatient[]> {
+export async function listKnownHerbCompoundingPatients(supabase: SupabaseClient, limit = 300): Promise<KnownHerbPatient[]> {
   const { data, error } = await supabase
     .from('herb_compounding_orders')
     .select('patient_name, chart_no')
     .order('created_at', { ascending: false })
-    .limit(300);
+    .limit(limit);
   if (error) throw error;
   const seen = new Map<string, KnownHerbPatient>();
   for (const row of data as { patient_name: string; chart_no: string | null }[]) {

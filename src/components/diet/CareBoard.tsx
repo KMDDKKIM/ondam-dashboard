@@ -7,10 +7,8 @@ import { fillScript, koDate, OWNER_SCRIPTS, scriptValues } from '@/lib/dietScrip
 import { diffDaysKst, todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
 import { loadOwnerDue, recordOwnerSend } from '@/lib/supabase/dietPrograms';
-import { addCarePatient, deleteCarePatient, listCarePatients, loadCarePatientStatus, type CarePatientStatus } from '@/lib/supabase/herbCare';
-import { confirmDialog } from '@/lib/confirmDialog';
-import { herbCareStatus } from '@/lib/herbCare';
 import { currentStaff } from '@/lib/supabase/herbQueue';
+import { CareHerbPatients } from './CareHerbPatients';
 
 const th = { padding: '4px 8px', fontSize: 12, textAlign: 'left', color: 'var(--color-muted)', whiteSpace: 'nowrap' } as const;
 const td = { padding: '5px 8px', fontSize: 13, whiteSpace: 'nowrap' } as const;
@@ -77,15 +75,10 @@ export function CareBoard() {
   const today = todayKst();
   const [programs, setPrograms] = useState<DietProgram[]>([]);
   const [due, setDue] = useState<DueMessage[]>([]);
-  const [patients, setPatients] = useState<CarePatientStatus[]>([]);
-  const [newName, setNewName] = useState('');
-  const [newChart, setNewChart] = useState('');
-  const [adding, setAdding] = useState(false);
   const [doctorName, setDoctorName] = useState('');
   const [staffId, setStaffId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dietError, setDietError] = useState('');
-  const [herbError, setHerbError] = useState('');
 
   const load = useCallback(async () => {
     const me = await currentStaff(supabase);
@@ -99,12 +92,6 @@ export function CareBoard() {
     } catch {
       setDietError('린다이어트 프로그램을 불러오지 못했어요. (프로그램 카드 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
     }
-    try {
-      setPatients(await loadCarePatientStatus(supabase, await listCarePatients(supabase), today));
-      setHerbError('');
-    } catch {
-      setHerbError('등록한 환자를 불러오지 못했어요. (한약 패키지 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
-    }
     setLoading(false);
   }, [supabase, today]);
 
@@ -116,32 +103,6 @@ export function CareBoard() {
     await recordOwnerSend(supabase, { programId: item.programId, code: item.code, dueDate: item.dueDate }, action, staffId, today);
     setDue((prev) => prev.filter((d) => !(d.programId === item.programId && d.code === item.code && d.dueDate === item.dueDate)));
     if (action === 'sent') setPrograms((prev) => prev.map((p) => (p.id === item.programId ? { ...p, lastDoctorContactDate: today } : p)));
-  }
-
-  async function addPatient() {
-    if (!newName.trim() || adding) return;
-    setAdding(true);
-    setHerbError('');
-    try {
-      await addCarePatient(supabase, { patientName: newName, chartNo: newChart });
-      setNewName('');
-      setNewChart('');
-      setPatients(await loadCarePatientStatus(supabase, await listCarePatients(supabase), today));
-    } catch {
-      setHerbError('등록하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  async function removePatient(p: CarePatientStatus) {
-    if (!(await confirmDialog(`${p.patientName}님을 케어 보드에서 뺄까요? (처방전·결제 기록은 그대로예요)`, { confirmLabel: '빼기' }))) return;
-    try {
-      await deleteCarePatient(supabase, p.id);
-      setPatients((prev) => prev.filter((x) => x.id !== p.id));
-    } catch {
-      setHerbError('빼지 못했어요.');
-    }
   }
 
   const byId = new Map(programs.map((p) => [p.id, p]));
@@ -190,63 +151,7 @@ export function CareBoard() {
         </div>
       )}
 
-      <h2 style={{ fontSize: 17, margin: '20px 0 8px' }}>🌿 한약 환자 ({patients.length}명)</h2>
-      <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 12 }}>
-        챙기고 싶은 환자를 직접 등록하면 처방전·한약 패키지 기준으로 복용 현황과 패키지 잔여를 보여 드려요. 자동으로 올라가지는 않아요. 패키지를 결제한 환자 전체는 <Link href="/herb-packages" style={{ textDecoration: 'underline' }}>한약 패키지 현황</Link>에서 볼 수 있어요.
-      </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
-        <label style={{ fontSize: 12 }}>
-          환자명
-          <input className="input-field" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addPatient()} style={{ display: 'block', width: 120, fontSize: 13 }} />
-        </label>
-        <label style={{ fontSize: 12 }}>
-          차트번호(선택)
-          <input className="input-field" value={newChart} onChange={(e) => setNewChart(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addPatient()} style={{ display: 'block', width: 110, fontSize: 13 }} />
-        </label>
-        <button type="button" className="btn-primary" disabled={!newName.trim() || adding} onClick={() => void addPatient()} style={{ fontSize: 13, padding: '6px 14px' }}>
-          {adding ? '등록 중…' : '등록'}
-        </button>
-      </div>
-      {herbError && <p className="error-text">{herbError}</p>}
-      {patients.length > 0 && (
-        <div className="card" style={{ padding: 8, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
-                {['환자', '최근 처방', '복용', '끝나는 날', '패키지 잔여', '다음 해피콜', ''].map((h, i) => (
-                  <th key={`${h}-${i}`} style={th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map((p) => (
-                <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
-                  <td style={{ ...td, fontWeight: 700 }}>
-                    {p.patientName}
-                    {p.chartNo && <span className="muted-text" style={{ fontSize: 11, fontWeight: 400 }}> {p.chartNo}</span>}
-                  </td>
-                  <td style={td}>{p.herb ? p.herb.prescriptionName || '-' : '처방전 없음'}</td>
-                  <td style={td}>
-                    {p.herb ? herbCareStatus(p.herb) : '-'}
-                    {p.herb?.pickupMissing && <span className="muted-text" style={{ fontSize: 11 }}> · 수령일 미입력(처방일 기준)</span>}
-                  </td>
-                  <td style={td}>{p.herb?.endDate ? koDate(p.herb.endDate) : '-'}</td>
-                  <td style={{ ...td, color: p.balance && p.balance.remainingDays === 0 ? 'var(--color-error)' : undefined }}>
-                    {p.balance ? `${p.balance.remainingDays}일 / ${p.balance.totalDays}일` : '-'}
-                  </td>
-                  <td style={td}>{p.nextCallDate ? koDate(p.nextCallDate) : '-'}</td>
-                  <td style={td}>
-                    <button type="button" onClick={() => removePatient(p)} style={{ fontSize: 11, padding: '2px 6px', color: '#b3261e' }}>
-                      빼기
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {!herbError && !loading && patients.length === 0 && <p className="muted-text">아직 등록한 환자가 없어요.</p>}
+      <CareHerbPatients />
     </div>
   );
 }

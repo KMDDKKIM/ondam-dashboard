@@ -69,3 +69,27 @@ export function herbCareStatus(e: HerbCareEntry): string {
   if (e.dayNo <= 0) return `복용 시작 D-${1 - e.dayNo}`;
   return e.days > 0 ? `${e.dayNo}/${e.days}일째` : `${e.dayNo}일째`;
 }
+
+export interface CallRecord {
+  callDate: string;
+  done: boolean;
+  /** 결과를 기록한 시각(ISO). 아직 아무도 전화하지 않은 해피콜은 null */
+  completedAt: string | null;
+}
+
+export interface CallSummary {
+  /** 마지막으로 해피콜을 한(부재중 시도 포함) 날짜 */
+  lastCallDate: string | null;
+  /** 앞으로 걸 해피콜 중 가장 이른 날짜 */
+  nextCallDate: string | null;
+}
+
+/**
+ * 한 환자의 해피콜 요약 — 마지막으로 전화한 날과 다음 해피콜 날짜. 전화한 날은 결과를 기록한 시각(한국 날짜)으로 보고,
+ * 다음 해피콜은 아직 끝나지 않은 해피콜 중 예정일이 가장 이른 것이다(예정일이 이미 지난 것도 포함 — 밀린 해피콜이다).
+ */
+export function summarizeCalls(records: CallRecord[], kstDateOf: (iso: string) => string): CallSummary {
+  const called = records.flatMap((r) => (r.completedAt ? [kstDateOf(r.completedAt)] : [])).sort();
+  const upcoming = records.filter((r) => !r.done).map((r) => r.callDate).sort();
+  return { lastCallDate: called.length > 0 ? called[called.length - 1] : null, nextCallDate: upcoming.length > 0 ? upcoming[0] : null };
+}

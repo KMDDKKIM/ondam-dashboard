@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHerbCare, herbCareStatus, type HerbCareOrder } from './herbCare';
+import { buildHerbCare, herbCareStatus, summarizeCalls, type HerbCareOrder } from './herbCare';
 
 // 환자 이름은 시험용 값이다(공개 저장소).
 function order(o: Partial<HerbCareOrder> = {}): HerbCareOrder {
@@ -45,5 +45,28 @@ describe('buildHerbCare', () => {
 
   it('시작 전이면 D-day', () => {
     expect(herbCareStatus(buildHerbCare([order({ pickupDate: '2026-10-12' })], '2026-10-10')[0])).toBe('복용 시작 D-2');
+  });
+});
+
+describe('summarizeCalls — 마지막·다음 해피콜', () => {
+  const kst = (iso: string) => iso.slice(0, 10); // 시험에서는 UTC 날짜를 그대로 쓴다
+
+  it('마지막으로 전화한 날은 결과를 기록한 시각 중 가장 늦은 날(부재중 시도 포함)', () => {
+    const r = summarizeCalls(
+      [
+        { callDate: '2026-10-10', done: true, completedAt: '2026-10-10T03:00:00Z' },
+        { callDate: '2026-10-14', done: false, completedAt: '2026-10-15T03:00:00Z' }, // 부재중 시도
+        { callDate: '2026-10-25', done: false, completedAt: null },
+      ],
+      kst
+    );
+    expect(r.lastCallDate).toBe('2026-10-15');
+    expect(r.nextCallDate).toBe('2026-10-14'); // 아직 끝나지 않은 해피콜 중 가장 이른 날
+  });
+
+  it('끝나지 않은 해피콜이 없으면 다음 해피콜 없음, 전화한 적이 없으면 마지막 없음', () => {
+    expect(summarizeCalls([{ callDate: '2026-10-10', done: true, completedAt: '2026-10-10T03:00:00Z' }], kst)).toEqual({ lastCallDate: '2026-10-10', nextCallDate: null });
+    expect(summarizeCalls([{ callDate: '2026-10-25', done: false, completedAt: null }], kst)).toEqual({ lastCallDate: null, nextCallDate: '2026-10-25' });
+    expect(summarizeCalls([], kst)).toEqual({ lastCallDate: null, nextCallDate: null });
   });
 });
