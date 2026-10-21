@@ -263,18 +263,31 @@ export function DoneTodaySection({
 }
 
 /**
- * 린다이어트 해피콜(데스크 담당)의 카톡 문구 복사 단추 — 이름·코디명·월을 채워 복사한다. 린다이어트 해피콜이 아니면 아무것도 안 보인다.
- * 나머지 {칸}(결제링크·송장번호 등)은 카톡에 붙여넣은 뒤 직접 채운다.
+ * 린다이어트 해피콜(데스크 담당)의 카톡 문구 — "📋 문구"를 누르면 그 자리에서 문구가 펼쳐지고, 고쳐 쓴 뒤 복사할 수 있다.
+ * 이름·코디명·예약일시는 채워 두고 나머지 {칸}(송장번호 등)은 빨간 안내로 알려 준다. 린다이어트 해피콜이 아니면 아무것도 안 보인다.
  */
 export function ScriptButton({ note, patientName }: { note: string | null; patientName: string }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   if (deskScriptForNote(note) == null) return null;
+  const unresolved = [...new Set(text.match(/\{[^{}]+\}/g) ?? [])];
+
+  async function toggle() {
+    if (!open && !text) {
+      let staffName = '';
+      try {
+        staffName = (await currentStaff(createClient())).name;
+      } catch {
+        // 코디명 없이 열어도 된다({코디명}이 남아 직접 채우면 된다).
+      }
+      setText(deskScriptText(note, patientName, staffName, todayKst()) ?? '');
+    }
+    setOpen((v) => !v);
+  }
 
   async function copy() {
     try {
-      const me = await currentStaff(createClient());
-      const text = deskScriptText(note, patientName, me.name, todayKst());
-      if (text == null) return;
       await navigator.clipboard.writeText(text);
       setState('copied');
     } catch {
@@ -284,8 +297,19 @@ export function ScriptButton({ note, patientName }: { note: string | null; patie
   }
 
   return (
-    <button type="button" onClick={copy} style={{ ...smallButton, marginLeft: 6, padding: '2px 8px' }}>
-      {state === 'copied' ? '✓ 복사했어요' : state === 'failed' ? '복사 실패' : '📋 문구 복사'}
-    </button>
+    <div style={{ marginTop: 4, whiteSpace: 'normal' }}>
+      <button type="button" onClick={toggle} style={{ ...smallButton, padding: '2px 8px' }}>
+        {open ? '▾ 문구 접기' : '📋 문구'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 4, maxWidth: 360 }}>
+          <textarea className="input-field" value={text} onChange={(e) => setText(e.target.value)} rows={Math.min(14, Math.max(4, text.split('\n').length + 1))} style={{ width: '100%', fontSize: 12, lineHeight: 1.45 }} />
+          {unresolved.length > 0 && <p style={{ margin: '2px 0 4px', fontSize: 11, color: 'var(--color-error)' }}>직접 채울 곳: {unresolved.join(' ')}</p>}
+          <button type="button" onClick={copy} style={{ ...smallButton, padding: '2px 10px' }}>
+            {state === 'copied' ? '✓ 복사했어요' : state === 'failed' ? '복사 실패' : '복사'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

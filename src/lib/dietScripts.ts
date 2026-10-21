@@ -58,6 +58,8 @@ export const DESK_SCRIPTS: Record<DeskCallCode, string> = {
     '{이름}님!\n오늘 저녁부터 디톡스 화이팅입니다 😁💪🏻\n\n1️⃣ 오늘 저녁 식사 후 8시에 {디톡스환} 1포. 내일은 기상 직후 1포, 이후 3시간 간격 1포씩 하루 총 3포.\n\n2️⃣ 내일 아침부터 금식. 허기가 심하면 사골국물에 소금·후추 간해서 드세요. 칼로리는 거의 없고 미네랄은 많아 든든합니다.\n\n3️⃣ 금식 중엔 물 자주, 가능하면 레몬수 👍\n\n★복통이 너무 심하면 복용을 중단하셔도 됩니다.\n\n화이팅!! 성공하실 수 있습니다💪🏻\n궁금한 건 언제든 연락주시고, 매일 아침 공복체중·식사·복약 기록 잊지마세요!!\n❤{앱명} {앱링크}',
   'detox-day2':
     '{이름}님, 안녕하세요~ 코디 {코디명}입니다🤗\n디톡스 둘째 날이네요! 컨디션은 좀 어떠세요?\n\n복통이나 어지러움, 두통이 있으면 편하게 말씀해 주세요. 물은 자주 드시고, 허기가 심하면 사골국물에 소금 간해서 드셔도 괜찮아요 😊\n\n오늘도 아침 공복체중과 복약 기록 잊지 마세요!',
+  'reservation-reminder':
+    '안녕하세요 {이름}님🥰 내일 {예약일시} 예약 잊지 않으셨죠?\n앱 기록이 잘 올라가 있으면 원장님 상담이 훨씬 수월합니다! 조심히 오세요 😊',
   'detox-day3':
     '{이름}님, 코디 {코디명}입니다🤗\n오늘이 디톡스 마지막 날이에요, 정말 고생 많으셨어요! 💪🏻\n\n컨디션은 어떠세요? 불편한 곳 있으면 말씀해 주세요.\n내일부터 다이어트환 복용이 시작되는데, 시작일에 원장님이 직접 안부 연락드릴 예정이에요 😊',
 };
@@ -73,5 +75,8 @@ export function deskScriptText(note: string | null | undefined, patientName: str
   const template = deskScriptForNote(note);
   if (template == null) return null;
   const month = Number(today.slice(5, 7));
-  return fillScript(template, { 이름: patientName, 코디명: staffName, 월: String(month), 전월: String(month === 1 ? 12 : month - 1) });
+  // 예약 리마인드의 문구 끝 "(10/23 14:30)"에서 예약 날짜·시간을 읽어 {예약일시}를 채운다.
+  const when = (note ?? '').match(/\((\d{1,2})\/(\d{1,2})\s*([^)]*)\)\s*$/);
+  const reservation = when ? `${Number(when[1])}월 ${Number(when[2])}일${when[3].trim() ? ` ${when[3].trim()}` : ''}` : undefined;
+  return fillScript(template, { 이름: patientName, 코디명: staffName, 월: String(month), 전월: String(month === 1 ? 12 : month - 1), 예약일시: reservation });
 }

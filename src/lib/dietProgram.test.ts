@@ -27,6 +27,7 @@ function program(p: Partial<DietProgram> = {}): DietProgram {
 }
 const codes = (list: ReturnType<typeof ownerDueMessages>) => list.map((m) => m.code);
 const later = { later: true };
+const weeklyOnly = (p: DietProgram, today: string) => codes(ownerDueMessages([p], today, [])).includes('weekly');
 
 describe('isDietProgramPurchase — 린다이어트 프로그램이 만들어지는 결제', () => {
   it('목표 반영이 다이어트이고 상품명에 린다이어트가 있어야 한다', () => {
@@ -57,12 +58,24 @@ describe('날짜 계산', () => {
 });
 
 describe('ownerDueMessages — 원장 카톡', () => {
-  it('지금은 다이어트환 시작일 안부만 자동으로 올라간다(그 뒤 일정은 정해질 때까지 꺼 둠)', () => {
+  it('지금은 다이어트환 시작일 안부와 첫 4주의 월요일 문안만 자동으로 올라간다(그 밖의 일정은 꺼 둠)', () => {
     expect(LATER_OWNER_MESSAGES).toBe(false);
     expect(codes(ownerDueMessages([program()], '2026-10-08', []))).toEqual(['pill-start']);
-    // 월요일(10/19)에도 월요일 문안·연복 권유 등은 안 올라간다
-    expect(codes(ownerDueMessages([program()], '2026-10-19', []))).toEqual([]);
-    expect(codes(ownerDueMessages([program()], '2026-12-23', []))).toEqual([]);
+    expect(codes(ownerDueMessages([program()], '2026-12-23', []))).toEqual([]); // 연복 권유는 만들지 않는다
+  });
+
+  it('월요일 문안: 다이어트환 시작 다음 날부터 4주(28일) 동안의 월요일에만', () => {
+    // 디톡스 10/5 → 환 시작 10/8(목). 4주 = 10/8 ~ 11/4
+    expect(codes(ownerDueMessages([program()], '2026-10-12', []))).toEqual(['weekly']); // 월
+    expect(codes(ownerDueMessages([program()], '2026-11-02', []))).toEqual(['weekly']); // 월, 마지막 주
+    expect(codes(ownerDueMessages([program()], '2026-11-09', []))).toEqual([]); // 4주 지난 월요일
+    expect(codes(ownerDueMessages([program()], '2026-10-13', []))).toEqual([]); // 화요일
+    expect(weeklyOnly(program({ detoxStartDate: '2026-10-05' }), '2026-10-05')).toBe(false); // 아직 환 시작 전 월요일
+  });
+
+  it('다이어트환 시작일이 월요일이면 그날은 시작 안부만(월요일 문안과 겹치지 않는다)', () => {
+    // 디톡스 10/2 → 환 시작 10/5(월)
+    expect(codes(ownerDueMessages([program({ detoxStartDate: '2026-10-02' })], '2026-10-05', []))).toEqual(['pill-start']);
   });
 
   it('다이어트환 시작일부터 이틀간 보이고, 그 전·그 뒤에는 안 보인다', () => {
@@ -82,13 +95,6 @@ describe('ownerDueMessages — 원장 카톡', () => {
   });
 
   // ---- 꺼 둔 규칙(나중에 켤 때를 위해 규칙 자체는 계속 시험한다) ----
-  it('[later] 매주 월요일 문안은 월요일에만, 복용 중인 환자에게', () => {
-    const monday = '2026-10-19';
-    expect(codes(ownerDueMessages([program()], monday, [], undefined, later))).toContain('weekly');
-    expect(codes(ownerDueMessages([program()], '2026-10-20', [], undefined, later))).not.toContain('weekly');
-    expect(codes(ownerDueMessages([program({ detoxStartDate: '2026-10-25' })], monday, [], undefined, later))).not.toContain('weekly');
-  });
-
   it('[later] 다이어트환 시작 다음 날 안부(공3)', () => {
     expect(codes(ownerDueMessages([program()], '2026-10-09', [], undefined, later))).toContain('pill-day1');
   });
@@ -177,6 +183,17 @@ describe('데스크 해피콜 문구와 순서', () => {
     expect(deskCodeFromNote(deskCallNote('detox-day3'))).toBe('detox-day3');
     expect(deskCodeFromNote('린다이어트 · 모르는 문구')).toBeNull();
     expect(deskCodeFromNote('한약 수령확인')).toBeNull();
+  });
+
+  it('예약 전날 리마인드는 뒤에 예약 정보가 붙어도 알아본다', () => {
+    expect(deskCodeFromNote(deskCallNote('reservation-reminder', '10/23 14:30'))).toBe('reservation-reminder');
+    expect(deskCodeFromNote(deskCallNote('reservation-reminder'))).toBe('reservation-reminder');
+    expect(deskNoteDisplay(deskCallNote('reservation-reminder', '10/23 14:30'))).toBe('예약 전날 리마인드 (10/23 14:30)');
+  });
+
+  it('예약 리마인드 문구는 예약 날짜·시간을 채운다', () => {
+    const text = deskScriptText(deskCallNote('reservation-reminder', '10/23 14:30'), '가나다', '코디A', '2026-10-22') as string;
+    expect(text).toContain('가나다님🥰 내일 10월 23일 14:30 예약 잊지 않으셨죠?');
   });
 
   it('같은 날 순서 번호와 목록 표시', () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { syncDietReservationReminders } from '@/lib/supabase/dietPrograms';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -31,6 +32,10 @@ export function useHappyCallWorklist() {
     // 접수기록부의 초진·재초진이 해피콜 표에 올라가 있어야 콜 목록에 잡힌다 — 등록 화면을 안 열어도 되게 여기서도 맞춘다.
     // 목록 표시를 막지 않도록 따로 돌리고, 새로 올라온 게 있을 때만 한 번 더 읽는다(3분 안에 다시 부르면 건너뛴다).
     void syncHappyCallFromReception(supabase).then((r) => {
+      if (r.created > 0) void reload();
+    });
+    // 내일 예약이 있는 린다이어트 환자에게 "예약 전날 리마인드" 해피콜을 올린다(예약관리의 예약과 맞춘다).
+    void syncDietReservationReminders(supabase).then((r) => {
       if (r.created > 0) void reload();
     });
     const id = ++requestId.current;

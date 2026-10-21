@@ -14,7 +14,8 @@ import {
   type ExistingDeskCall,
   type SendKey,
 } from '@/lib/dietProgram';
-import { todayKst } from '@/lib/kst';
+import { addDaysKst, todayKst } from '@/lib/kst';
+import { reminderDetail } from '@/lib/dietReminders';
 import { listCareDue } from './herbCare';
 import { createManualEntry, getManualEntryStates, removeOpenManualEntries, renameOpenManualEntries } from './happyCallQueue';
 
@@ -114,12 +115,12 @@ async function linkCall(supabase: SupabaseClient, programId: string, code: DeskC
 }
 
 /** 이 프로그램의 데스크 해피콜 하나를 해피콜 목록에 만들고 연결한다(같은 단계·날짜가 이미 있으면 만들지 않는다). */
-export async function createDeskCall(supabase: SupabaseClient, program: DietProgram, code: DeskCallCode, callDate: string, createdBy: string | null): Promise<boolean> {
+export async function createDeskCall(supabase: SupabaseClient, program: DietProgram, code: DeskCallCode, callDate: string, createdBy: string | null, detail?: string): Promise<boolean> {
   const { data: existing } = await supabase.from(CALLS).select('id').eq('program_id', program.id).eq('code', code).eq('due_date', callDate).maybeSingle();
   if (existing) return false;
   const entryId = await createManualEntry(supabase, {
     patientName: program.patientName,
-    note: deskCallNote(code),
+    note: deskCallNote(code, detail),
     callDate,
     createdBy,
     callType: '린다이어트',
@@ -304,4 +305,34 @@ export async function countOwnerDue(supabase: SupabaseClient, today: string): Pr
     // 해피콜 날짜 칸이 없으면 이 부분은 건너뛴다.
   }
   return readSomething ? total : null;
+}
+
+let lastReminderRun = 0;
+const REMINDER_THROTTLE_MS = 3 * 60 * 1000;
+
+/**
+ * 내일 예약이 있는 진행 중 린다이어트 환자에게 "예약 전날 리마인드" 해피콜을 오늘 날짜로 올린다. 예약관리의 예약은 서버(/api/diet-reminders)가
+ * 읽어 프로그램과 맞춰 주고, 같은 환자·같은 날 리마인드는 한 번만 만들어진다. 해피콜 목록을 열 때마다 부르되 3분 안에 다시 부르면 건너뛴다.
+ * 실패해도 해피콜 목록 표시에는 영향이 없다.
+ */
+export async function syncDietReservationReminders(supabase: SupabaseClient, today = todayKst()): Promise<{ created: number }> {
+  const now = Date.now();
+  if (now - lastReminderRun < REMINDER_THROTTLE_MS) return { created: 0 };
+  lastReminderRun = now;
+  try {
+    const tomorrow = addDaysKst(today, 1);
+    const response = await fetch(`/api/diet-reminders?date=${tomorrow}`);
+    if (!response.ok) return { created: 0 };
+    const { matches } = (await response.json()) as { matches: { programId: string; timeLabel: string }[] };
+    if (!matches || matches.length === 0) return { created: 0 };
+    const programs = new Map((await listDietPrograms(supabase)).filter((p) => p.status === 'active').map((p) => [p.id, p]));
+    let created = 0;
+    for (const m of matches) {
+      const program = programs.get(m.programId);
+      if (program && (await createDeskCall(supabase, program, 'reservation-reminder', today, null, reminderDetail(tomorrow, m.timeLabel)))) created += 1;
+    }
+    return { created };
+  } catch {
+    return { created: 0 };
+  }
 }

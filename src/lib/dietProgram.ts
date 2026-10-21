@@ -74,7 +74,7 @@ export type OwnerMessageCode =
   | 'remote-second'   // 비10 2차 상담 후 재처방 안내
   | 'remote-nudge'    // 비9 2차 상담이 아직 안 잡힌 비대면 환자 안부
   | 'pill-day1'       // 공3 다이어트환 시작 다음 날 안부
-  | 'weekly'          // 공5 매주 월요일 문안
+  | 'weekly'          // 공5 매주 월요일 문안(다이어트환 시작 후 첫 4주)
   | 'refill'          // 공9 약 소진 4일 전 연복 권유
   | 'holiday';        // 공10 연휴 전 공지
 
@@ -84,7 +84,7 @@ export const OWNER_MESSAGE_LABEL: Record<OwnerMessageCode, string> = {
   'remote-second': '2차 상담 후 재처방 안내',
   'remote-nudge': '2차 상담 일정 확인 안부',
   'pill-day1': '다이어트환 첫날 안부',
-  weekly: '월요일 문안',
+  weekly: '월요일 문안(첫 4주)',
   refill: '연복 권유(약 소진 임박)',
   holiday: '연휴 전 공지',
 };
@@ -94,6 +94,9 @@ export const OWNER_MESSAGE_LABEL: Record<OwnerMessageCode, string> = {
  * (원장 결정, 2026-10-21). 규칙 코드는 남겨 두었으니 정해지면 켜거나 고쳐 쓴다.
  */
 export const LATER_OWNER_MESSAGES = false;
+
+/** 월요일 문안을 보내는 기간 — 다이어트환 시작일부터 첫 4주(원장 결정, 2026-10-21). */
+export const WEEKLY_MESSAGE_WEEKS = 4;
 
 export interface DueMessage {
   programId: string;
@@ -136,6 +139,11 @@ function candidates(p: DietProgram, today: string, holidays: readonly string[], 
   // 다이어트환 시작일 — 원장이 직접 연락한다(디톡스 3일은 데스크가 연락).
   if (pillStart) out.push({ code: 'pill-start', dueDate: pillStart, windowDays: 2 });
 
+  // 월요일 문안 — 다이어트환 시작 다음 날부터 첫 4주 동안의 월요일(시작일이 월요일이면 그날은 시작 안부가 대신한다). 월요일 당일에만 보인다.
+  if (pillStart && today > pillStart && diffDaysKst(pillStart, today) < WEEKLY_MESSAGE_WEEKS * 7 && weekdayKo(today) === '월') {
+    out.push({ code: 'weekly', dueDate: today, windowDays: 0 });
+  }
+
   if (!later) return out;
 
   const end = medicineEndDate(p);
@@ -151,9 +159,6 @@ function candidates(p: DietProgram, today: string, holidays: readonly string[], 
   // 공3: 다이어트환 시작 다음 날
   if (pillStart) out.push({ code: 'pill-day1', dueDate: addDaysKst(pillStart, 1), windowDays: 2 });
 
-  // 공5: 월요일마다(복용 중인 환자에게). 월요일 당일에만 보인다.
-  if (started && stillOnMedicine && weekdayKo(today) === '월') out.push({ code: 'weekly', dueDate: today, windowDays: 0 });
-
   // 공9: 약 소진 4일 전
   if (end) out.push({ code: 'refill', dueDate: addDaysKst(end, -4), windowDays: 4 });
 
@@ -167,7 +172,7 @@ function candidates(p: DietProgram, today: string, holidays: readonly string[], 
 /**
  * 오늘(또는 며칠 안에 지난) 원장이 카톡을 보낼 차례인 것들. 이미 보냈거나 건너뛴 것(sends)과 종료된 환자는 뺀다.
  * 예정일이 오늘 이전이고 windowDays 안인 것만 낸다 — 오래 지난 건 더 이상 의미가 없어서 사라진다.
- * options.later 로 다이어트환 시작일 이후의 메시지를 켜고 끈다(기본은 LATER_OWNER_MESSAGES).
+ * 항상 올라가는 것은 다이어트환 시작일 안부와 첫 4주의 월요일 문안이다. options.later 로 그 밖의 메시지(연복 권유·연휴 공지 등)를 켜고 끈다(기본은 LATER_OWNER_MESSAGES).
  */
 export function ownerDueMessages(
   programs: DietProgram[],
@@ -196,12 +201,12 @@ export function ownerDueMessages(
 // ---- 데스크 해피콜 ----
 // 디톡스 시작일, 그 다음날, 다다음날(디톡스 3일)에 데스크가 해피콜 목록에서 연락한다(원장 결정, 2026-10-21).
 
-export type DeskCallCode = 'detox-day1' | 'detox-day2' | 'detox-day3';
+export type DeskCallCode = 'detox-day1' | 'detox-day2' | 'detox-day3' | 'reservation-reminder';
 
-const DESK_CODES: readonly DeskCallCode[] = ['detox-day1', 'detox-day2', 'detox-day3'];
+const DESK_CODES: readonly DeskCallCode[] = ['detox-day1', 'detox-day2', 'detox-day3', 'reservation-reminder'];
 
-/** 날짜로 정해지는 데스크 해피콜 종류(프로그램 날짜가 바뀌면 다시 맞춘다). */
-export const SCHEDULED_DESK_CODES: readonly DeskCallCode[] = DESK_CODES;
+/** 프로그램 날짜로 정해지는 데스크 해피콜 종류(프로그램 날짜가 바뀌면 다시 맞춘다). 예약 전날 리마인드는 예약관리의 예약으로 정해져서 여기에 넣지 않는다. */
+export const SCHEDULED_DESK_CODES: readonly DeskCallCode[] = ['detox-day1', 'detox-day2', 'detox-day3'];
 
 /** 해피콜 목록에 적히는 문구의 앞머리 — 목록에서 린다이어트 해피콜을 알아보고 문구(스크립트)를 찾는 데 쓴다. */
 export const DESK_NOTE_PREFIX = '린다이어트 · ';
@@ -214,18 +219,22 @@ export function deskCallLabel(code: DeskCallCode): string {
       return '디톡스 2일차 컨디션 확인';
     case 'detox-day3':
       return '디톡스 3일차 컨디션 확인';
+    case 'reservation-reminder':
+      return '예약 전날 리마인드';
   }
 }
 
-export function deskCallNote(code: DeskCallCode): string {
-  return DESK_NOTE_PREFIX + deskCallLabel(code);
+/** 해피콜 목록에 적을 문구. detail(예: "10/23 14:30")이 있으면 뒤에 괄호로 붙인다. */
+export function deskCallNote(code: DeskCallCode, detail?: string): string {
+  return DESK_NOTE_PREFIX + deskCallLabel(code) + (detail ? ` (${detail})` : '');
 }
 
 /** 해피콜 목록의 문구로 어떤 데스크 해피콜인지 찾는다(린다이어트 해피콜이 아니거나 모르는 문구면 null). */
 export function deskCodeFromNote(note: string | null | undefined): DeskCallCode | null {
   if (!note || !note.startsWith(DESK_NOTE_PREFIX)) return null;
   const label = note.slice(DESK_NOTE_PREFIX.length).trim();
-  return DESK_CODES.find((code) => deskCallLabel(code) === label) ?? null;
+  // 뒤에 "(10/23 14:30)" 같은 세부 정보가 붙어 있어도 앞부분이 같으면 같은 종류다.
+  return DESK_CODES.find((code) => label === deskCallLabel(code) || label.startsWith(`${deskCallLabel(code)} (`)) ?? null;
 }
 
 export interface DesiredDeskCall {
@@ -236,7 +245,7 @@ export interface DesiredDeskCall {
 /** 디톡스 시작일, 다음날, 다다음날에 거는 데스크 해피콜. 디톡스 시작일을 모르면 없다. */
 export function scheduledDeskCalls(p: Pick<DietProgram, 'detoxStartDate'>): DesiredDeskCall[] {
   if (!p.detoxStartDate) return [];
-  return DESK_CODES.map((code, i) => ({ code, callDate: addDaysKst(p.detoxStartDate as string, i) }));
+  return SCHEDULED_DESK_CODES.map((code, i) => ({ code, callDate: addDaysKst(p.detoxStartDate as string, i) }));
 }
 
 /** 같은 날 올라온 데스크 해피콜을 진행 순서로 정렬하는 번호. 린다이어트 해피콜이 아니면 맨 뒤. */
