@@ -9,6 +9,7 @@ import {
 } from './happyCallQueue';
 import { addDays } from '@/lib/happyCallStats';
 import { syncPackageForPurchase } from './herbPackages';
+import { deleteDietProgramForPurchase, syncDietProgramForPurchase } from './dietPrograms';
 import { CALL_SLOTS, callTypeForPurchase, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
 
 const TABLE = 'non_covered_purchases';
@@ -30,6 +31,8 @@ interface NonCoveredPurchaseRow {
   happy_call_entry_id_3: string | null;
   duration_days: number | null;
   goal_category: GoalCategory | null;
+  detox_start_date?: string | null;
+  diet_weeks?: number | null;
   created_by: string | null;
   created_at: string;
 }
@@ -52,6 +55,8 @@ function rowToPurchase(row: NonCoveredPurchaseRow): NonCoveredPurchase {
     happyCallEntryId3: row.happy_call_entry_id_3,
     durationDays: row.duration_days,
     goalCategory: row.goal_category,
+    detoxStartDate: row.detox_start_date ?? null,
+    dietWeeks: row.diet_weeks ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -114,6 +119,9 @@ export interface NewNonCoveredPurchase {
   happyCallDate: string | null;
   durationDays: number | null;
   goalCategory: GoalCategory | null;
+  /** 린다이어트 결제의 디톡스 시작일·주수(린다이어트가 아니면 비워 둔다) */
+  detoxStartDate?: string | null;
+  dietWeeks?: number | null;
   createdBy: string | null;
 }
 
@@ -156,12 +164,15 @@ export async function createNonCoveredPurchase(
       happy_call_date: input.happyCallDate,
       duration_days: input.durationDays,
       goal_category: input.goalCategory,
+      ...(input.detoxStartDate || input.dietWeeks ? { detox_start_date: input.detoxStartDate || null, diet_weeks: input.dietWeeks ?? null } : {}),
       created_by: input.createdBy,
     })
     .select()
     .single();
   if (error) throw error;
   const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
+  // 린다이어트 결제에 디톡스 시작일을 적었으면 프로그램을 만들어 해피콜 목록(데스크)·케어 보드(원장)에 연락할 일을 올린다. 실패해도 결제 등록은 유지한다.
+  await syncDietProgramForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, phone: input.phone, productName: input.productName, goalCategory: input.goalCategory, purchaseDate: input.purchaseDate, detoxStartDate: input.detoxStartDate ?? null, dietWeeks: input.dietWeeks ?? null }, input.createdBy).catch(() => {});
   // 한약 3개월·1개월 결제면 한약 패키지(잔여 일수)를 만든다. 패키지 표 문제가 결제 등록을 막지 않게 오류는 삼킨다.
   await syncPackageForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory, durationDays: input.durationDays, purchaseDate: input.purchaseDate }, input.createdBy).catch(() => {});
 
@@ -230,6 +241,9 @@ export interface EditableNonCoveredPurchase {
   /** 한약 수령일(해피콜 기준일) */
   happyCallDate: string | null;
   durationDays: number | null;
+  /** 린다이어트 결제의 디톡스 시작일·주수 */
+  detoxStartDate?: string | null;
+  dietWeeks?: number | null;
 }
 
 // 구매를 고치고, 수령일/처방일수/상품명에 맞게 해피콜을 다시 맞춘다(planCallResync):
@@ -288,6 +302,7 @@ export async function updateNonCoveredPurchase(
         goal_category: patch.goalCategory,
         happy_call_date: patch.happyCallDate,
         duration_days: patch.durationDays,
+        ...(patch.detoxStartDate !== undefined || patch.dietWeeks !== undefined ? { detox_start_date: patch.detoxStartDate || null, diet_weeks: patch.dietWeeks ?? null } : {}),
         happy_call_entry_id: nextIds[1],
         happy_call_entry_id_2: nextIds[2],
         happy_call_entry_id_3: nextIds[3],
@@ -298,6 +313,7 @@ export async function updateNonCoveredPurchase(
     await removeOpenManualEntries(supabase, createdIds).catch(() => {});
     throw err;
   }
+  await syncDietProgramForPurchase(supabase, { id: existing.id, patientName: patch.patientName, chartNo: patch.chartNo, phone: patch.phone, productName: patch.productName, goalCategory: patch.goalCategory, purchaseDate: patch.purchaseDate, detoxStartDate: (patch.detoxStartDate !== undefined ? patch.detoxStartDate : existing.detoxStartDate) ?? null, dietWeeks: (patch.dietWeeks !== undefined ? patch.dietWeeks : existing.dietWeeks) ?? null }, existing.createdBy).catch(() => {});
   await syncPackageForPurchase(supabase, { id: existing.id, patientName: patch.patientName, chartNo: patch.chartNo, productName: patch.productName, goalCategory: patch.goalCategory, durationDays: patch.durationDays, purchaseDate: patch.purchaseDate }, existing.createdBy).catch(() => {});
 
   try {
@@ -327,6 +343,8 @@ export async function updateNonCoveredPurchase(
 // 구매를 지우고, 그 구매로 자동 생성된 해피콜 중 아직 열려 있는 것도 함께 지운다
 // (이미 끝난 콜은 통화 기록이라 남긴다). 구매를 먼저 지워야 콜을 지울 수 있다(콜을 가리키는 연결).
 export async function deleteNonCoveredPurchase(supabase: SupabaseClient, purchase: NonCoveredPurchase): Promise<void> {
+  // 린다이어트 프로그램과 그 해피콜(데스크)도 함께 정리한다 — 결제를 지우면 프로그램은 사라지지만 해피콜 목록의 해피콜은 따로 지워야 한다.
+  await deleteDietProgramForPurchase(supabase, purchase.id).catch(() => {});
   const { data, error } = await supabase.from(TABLE).delete().eq('id', purchase.id).select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('삭제하지 못했습니다.');

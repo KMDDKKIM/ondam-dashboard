@@ -34,7 +34,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/reception-log', label: '접수기록부', icon: '📒' },
       { href: '/happy-call-register', label: '초진환자 해피콜', icon: '📞' },
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
-      { href: '/diet-programs', label: '린다이어트 환자', icon: '🥗' },
       // 원장 전용 — 오늘 카톡 보낼 환자, 린다이어트·한약 복용 현황(원장 요청, 2026-10-20).
       { href: '/care-board', label: '케어 보드', icon: '💌', ownerOnly: true },
       { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },

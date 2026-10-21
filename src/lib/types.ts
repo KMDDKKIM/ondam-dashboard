@@ -126,6 +126,9 @@ export interface NonCoveredPurchase {
   happyCallEntryId3: string | null;
   durationDays: number | null;
   goalCategory: GoalCategory | null;
+  /** 린다이어트 결제의 디톡스 시작일과 프로그램 주수 — 적으면 해피콜 목록(데스크)·케어 보드(원장)에 연락할 일이 올라간다 */
+  detoxStartDate?: string | null;
+  dietWeeks?: number | null;
   createdBy: string | null;
   createdAt: string;
 }

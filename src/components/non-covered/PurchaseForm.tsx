@@ -1,6 +1,7 @@
 'use client';
 
 import { packageDaysFromPurchase } from '@/lib/herbPackage';
+import { isDietProgramPurchase } from '@/lib/dietProgram';
 import { useEffect, useState, type FormEvent } from 'react';
 import { DURATION_PRESETS, defaultHappyCallDate, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { suggestGoalCategory } from '@/lib/nonCoveredGoal';
@@ -28,6 +29,9 @@ export interface PurchaseFormValues {
   happyCallDate: string | null;
   durationDays: number | null;
   goalCategory: GoalCategory | null;
+  /** 린다이어트 결제의 디톡스 시작일·주수(린다이어트가 아니면 null) */
+  detoxStartDate: string | null;
+  dietWeeks: number | null;
   /** 상품 목록에 없는 이름을 직접 입력했는지(다음부터 목록에 저장하기 위함) */
   isCustomProduct: boolean;
 }
@@ -64,6 +68,8 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const [durationDays, setDurationDays] = useState('');
   const [goalCategory, setGoalCategory] = useState<GoalCategory | null>(null);
   const [memo, setMemo] = useState('');
+  const [detoxStart, setDetoxStart] = useState('');
+  const [dietWeeks, setDietWeeks] = useState('12');
 
   // 상품 목록 관리에서 지금 고른 상품을 지웠으면 선택을 비운다.
   useEffect(() => {
@@ -92,6 +98,8 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     setGoalCategory(picked ? defaultGoalFor(picked.name, products) : null);
   }
 
+  // 린다이어트 결제는 디톡스 시작일·주수를 적으면 해피콜 목록(데스크)·케어 보드(원장)에 연락할 일이 올라간다.
+  const isDiet = isDietProgramPurchase(productName, goalCategory);
   const missing = [!name.trim() && '환자 성함', !chartNo.trim() && '차트번호', !productName.trim() && '상품'].filter(Boolean) as string[];
 
   function handleSubmit(event: FormEvent) {
@@ -110,6 +118,8 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
       happyCallDate: happyCallDate || null,
       durationDays: durationDays ? Number(durationDays) : null,
       goalCategory,
+      detoxStartDate: isDiet && detoxStart ? detoxStart : null,
+      dietWeeks: isDiet && dietWeeks ? Number(dietWeeks) : null,
       isCustomProduct: productChoice === CUSTOM_PRODUCT,
     });
   }
@@ -118,7 +128,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
   const callHint = !createsCallsFromPurchase(productName, goalCategory)
     ? goalCategory === 'herb'
       ? '한약 해피콜은 처방전을 출력한 뒤 한약 대기방에서 수령예정일을 넣으면 만들어져요 (여기서는 만들지 않아요)'
-      : '린다이어트 해피콜은 새 기준을 정할 때까지 만들지 않아요'
+      : isDiet
+        ? detoxStart
+          ? `디톡스 3일(${detoxStart} · ${addDays(detoxStart, 1)} · ${addDays(detoxStart, 2)})은 해피콜 목록(데스크), 다이어트환 시작일(${addDays(detoxStart, 3)})은 케어 보드(원장)에 올라가요`
+          : '디톡스 시작일을 적으면 해피콜 목록(데스크)과 케어 보드(원장)에 연락할 일이 올라가요'
+        : '이 상품은 해피콜을 만들지 않아요'
     : !happyCallDate
     ? '해피콜 없음 (수령일이 비어 있어요)'
     : durationDays
@@ -294,6 +308,36 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
           </div>
         </Field>
       </div>
+      {isDiet && (
+        <div style={fieldGrid}>
+          <Field label="디톡스 시작일 (적으면 해피콜이 자동으로 올라가요)">
+            <input type="date" value={detoxStart} onChange={(e) => setDetoxStart(e.target.value)} className="input-field" style={inputBig} />
+          </Field>
+          <Field label="프로그램 주수">
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+              {[4, 8, 12, 16].map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setDietWeeks(String(w))}
+                  style={{
+                    padding: '9px 12px',
+                    borderRadius: 10,
+                    border: '1px solid var(--color-line)',
+                    background: dietWeeks === String(w) ? 'var(--color-brand-b)' : 'var(--color-surface-2)',
+                    color: dietWeeks === String(w) ? '#fff' : 'var(--color-ink)',
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {w}주
+                </button>
+              ))}
+              <input type="number" placeholder="직접" min={1} value={dietWeeks} onChange={(e) => setDietWeeks(e.target.value)} className="input-field" style={{ ...inputBig, width: 80 }} />
+            </div>
+          </Field>
+        </div>
+      )}
       <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-teal-deep)', margin: '-4px 0 16px' }}>📞 {callHint}</p>
       {packageDays != null && (
         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-teal-deep)', margin: '-8px 0 16px' }}>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { defaultGoalFor } from '@/lib/purchaseFilter';
+import { isDietProgramPurchase } from '@/lib/dietProgram';
 import { DURATION_PRESETS } from '@/lib/supabase/nonCoveredPurchases';
 import { computeHerbCallDates } from '@/lib/happyCallStats';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
@@ -36,6 +37,9 @@ interface Draft {
   durationDays: string;
   goalCategory: GoalCategory | null;
   memo: string;
+  /** 린다이어트 결제의 디톡스 시작일·주수 */
+  detoxStartDate: string;
+  dietWeeks: string;
 }
 
 const HEADERS = ['구매일', '환자', '차트', '구분', '상품', '금액', '해피콜', '목표', '메모', '진료의', '등록자', ''];
@@ -58,6 +62,8 @@ function toDraft(p: NonCoveredPurchase): Draft {
     durationDays: p.durationDays != null ? String(p.durationDays) : '',
     goalCategory: p.goalCategory,
     memo: p.memo ?? '',
+    detoxStartDate: p.detoxStartDate ?? '',
+    dietWeeks: p.dietWeeks != null ? String(p.dietWeeks) : '',
   };
 }
 
@@ -75,6 +81,9 @@ function toPatch(d: Draft): EditableNonCoveredPurchase {
     goalCategory: d.goalCategory,
     happyCallDate: d.happyCallDate || null,
     durationDays: d.durationDays ? Number(d.durationDays) : null,
+    // 린다이어트가 아니게 바꿨으면 디톡스 시작일·주수는 비운다(프로그램과 해피콜이 함께 정리된다).
+    detoxStartDate: isDietProgramPurchase(d.productName, d.goalCategory) && d.detoxStartDate ? d.detoxStartDate : null,
+    dietWeeks: isDietProgramPurchase(d.productName, d.goalCategory) && d.dietWeeks ? Number(d.dietWeeks) : null,
   };
 }
 
@@ -270,6 +279,16 @@ export function PurchaseTable({ rows, products, categories, staffNames, doctorNa
               </div>
             </Field>
           </div>
+          {isDietProgramPurchase(d.productName, d.goalCategory) && (
+            <div style={fieldGrid}>
+              <Field label="디톡스 시작일 (적으면 해피콜 목록·케어 보드에 연락할 일이 올라가요)">
+                <input type="date" value={d.detoxStartDate} onChange={(e) => field('detoxStartDate', e.target.value)} className="input-field" style={inputBig} />
+              </Field>
+              <Field label="프로그램 주수">
+                <input type="number" min={1} placeholder="12" value={d.dietWeeks} onChange={(e) => field('dietWeeks', e.target.value)} className="input-field" style={{ ...inputBig, width: 100 }} />
+              </Field>
+            </div>
+          )}
           <Field label="메모" style={{ marginBottom: 12 }}>
             <input value={d.memo} onChange={(e) => field('memo', e.target.value)} className="input-field" style={inputBig} />
           </Field>

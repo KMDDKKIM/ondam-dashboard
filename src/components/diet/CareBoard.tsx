@@ -165,7 +165,7 @@ export function CareBoard() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>케어 보드</h1>
-      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. 린다이어트 환자의 이름·디톡스 시작일·주수는 <Link href="/diet-programs" style={{ textDecoration: 'underline' }}>린다이어트 환자</Link> 화면에서 데스크가 적어요. 기록이 끊긴 분이나 이상 증상은 <a href="https://chart.leandiet.co.kr/briefing" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>린다이어트 차트 브리핑</a>의 "연락 필요 환자"에서 확인하세요.</p>
+      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. 린다이어트는 <Link href="/non-covered-patients" style={{ textDecoration: 'underline' }}>비급여 현황</Link>에서 결제를 등록할 때 디톡스 시작일·주수를 적으면 자동으로 올라와요(디톡스 3일은 데스크 해피콜, 다이어트환 시작일은 여기서 원장님이 연락). 기록이 끊긴 분이나 이상 증상은 <a href="https://chart.leandiet.co.kr/briefing" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>린다이어트 차트 브리핑</a>의 "연락 필요 환자"에서 확인하세요.</p>
 
       <h2 style={{ fontSize: 17, margin: '0 0 8px' }}>📨 오늘 연락할 분 {dueTotal > 0 && <span style={{ color: 'var(--color-error)' }}>{dueTotal}건</span>}</h2>
       {loading && <p className="muted-text">불러오는 중…</p>}

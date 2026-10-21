@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   deskCallNote,
-  needsConsultDoneCall,
+  isDietProgramPurchase,
   ownerDueMessages,
   planDeskSync,
   scheduledDeskCalls,
@@ -14,12 +14,12 @@ import {
   type ExistingDeskCall,
   type SendKey,
 } from '@/lib/dietProgram';
-import { addDaysKst, todayKst } from '@/lib/kst';
+import { todayKst } from '@/lib/kst';
 import { listCareDue } from './herbCare';
-import { createManualEntry, getManualEntryStates, removeOpenManualEntries } from './happyCallQueue';
+import { createManualEntry, getManualEntryStates, removeOpenManualEntries, renameOpenManualEntries } from './happyCallQueue';
 
 // 린다이어트 프로그램(diet_programs), 원장 카톡 보냄 기록(diet_program_sends), 데스크 해피콜 연결(diet_program_calls).
-// 승인된 직원 전원이 읽고 쓴다. 데스크 해피콜은 해피콜 목록(happy_call_manual_entries)에 만든다.
+// 승인된 직원 전원이 읽고 쓴다. 프로그램은 비급여 현황의 린다이어트 결제에서 만들고(syncDietProgramForPurchase), 데스크 해피콜은 해피콜 목록(happy_call_manual_entries)에 만든다.
 
 const TABLE = 'diet_programs';
 const SENDS = 'diet_program_sends';
@@ -43,6 +43,7 @@ interface Row {
   status: DietStatus;
   ended_at: string | null;
   memo: string | null;
+  purchase_id?: string | null;
 }
 
 function rowToProgram(r: Row): DietProgram {
@@ -64,11 +65,12 @@ function rowToProgram(r: Row): DietProgram {
     status: r.status,
     endedAt: r.ended_at,
     memo: r.memo ?? '',
+    purchaseId: r.purchase_id ?? null,
   };
 }
 
 /** 화면에서 바꿀 수 있는 값(없는 키는 그대로 둔다). 빈 문자열은 비운다는 뜻이다. */
-export type ProgramPatch = Partial<Omit<DietProgram, 'id'>>;
+export type ProgramPatch = Partial<Omit<DietProgram, 'id' | 'purchaseId'>>;
 
 function patchToRow(patch: ProgramPatch): Record<string, unknown> {
   const blank = (v: string | null | undefined) => (v == null || v === '' ? null : v);
@@ -117,7 +119,7 @@ export async function createDeskCall(supabase: SupabaseClient, program: DietProg
   if (existing) return false;
   const entryId = await createManualEntry(supabase, {
     patientName: program.patientName,
-    note: deskCallNote(code, program.track),
+    note: deskCallNote(code),
     callDate,
     createdBy,
     callType: '린다이어트',
@@ -128,7 +130,7 @@ export async function createDeskCall(supabase: SupabaseClient, program: DietProg
 }
 
 /**
- * 날짜로 정해지는 데스크 해피콜(디톡스 전날·다이어트환 시작·월초 안부·약 소진 10일 전)을 프로그램 날짜에 맞춘다.
+ * 데스크 해피콜(디톡스 시작일·다음날·다다음날)을 프로그램 날짜에 맞춘다.
  * 이미 전화했거나 끝난 해피콜은 건드리지 않는다. 날짜가 바뀌어 필요 없어진 것은 아직 손대지 않았을 때만 지운다.
  */
 export async function syncDeskCalls(supabase: SupabaseClient, program: DietProgram, createdBy: string | null, today = todayKst()): Promise<void> {
@@ -158,36 +160,6 @@ async function removeUntouchedDeskCalls(supabase: SupabaseClient, programId: str
 
 // ---- 프로그램 ----
 
-/**
- * 환자를 등록한다. 진료·상담을 마친 뒤 등록하는 것이라 "진료 후 안내" 해피콜을 오늘 날짜로 함께 만들고(디톡스를 이미 시작한 환자는 제외),
- * 날짜로 정해지는 해피콜(디톡스 전날 등)도 바로 맞춘다.
- */
-export async function createDietProgram(
-  supabase: SupabaseClient,
-  input: { patientName: string; chartNo?: string; phone?: string; track: DietTrack; firstDate?: string; detoxStartDate?: string; weeks?: number | null },
-  createdBy: string | null
-): Promise<void> {
-  const row = patchToRow({
-    patientName: input.patientName,
-    chartNo: input.chartNo ?? '',
-    phone: input.phone ?? '',
-    track: input.track,
-    firstDate: input.firstDate ?? '',
-    detoxStartDate: input.detoxStartDate ?? '',
-    weeks: input.weeks ?? null,
-  });
-  const { data, error } = await supabase.from(TABLE).insert({ ...row, created_by: createdBy }).select('*').single();
-  if (error) throw error;
-  const program = rowToProgram(data as Row);
-  // 해피콜 목록 쪽 오류가 환자 등록 자체를 막지 않게 한다(카드는 이미 만들어졌다).
-  try {
-    if (needsConsultDoneCall(program.detoxStartDate, todayKst())) await createDeskCall(supabase, program, 'consult-done', todayKst(), createdBy);
-    await syncDeskCalls(supabase, program, createdBy);
-  } catch {
-    // 해피콜은 환자 수정 때 다시 맞춰진다.
-  }
-}
-
 export async function updateDietProgram(supabase: SupabaseClient, id: string, patch: ProgramPatch, createdBy: string | null = null): Promise<void> {
   const { data, error } = await supabase.from(TABLE).update(patchToRow(patch)).eq('id', id).select('*');
   if (error) throw error;
@@ -212,27 +184,68 @@ export async function deleteDietProgram(supabase: SupabaseClient, id: string): P
 }
 
 /**
- * 데스크가 누르는 단계 단추. 결제 확인 → 결제 후 안내, 발송 완료 → 송장 안내(비대면은 다음 날 수령 확인도), 종료 → 종료 안내를
- * 오늘 날짜로 해피콜 목록에 만들고 그 날짜도 프로그램에 기록한다.
+ * 비급여 결제에 맞는 린다이어트 프로그램을 만들거나 고치거나 지운다. 린다이어트 결제이고 디톡스 시작일을 적었으면 프로그램이 있어야 하고
+ * (없으면 만들고, 있으면 날짜·이름 등을 맞춘다), 아니면 프로그램과 아직 손대지 않은 해피콜을 지운다. 해피콜은 프로그램 날짜에 맞춰 다시 맞춰진다.
+ * 결제는 이미 저장됐으니 호출하는 쪽에서 오류를 삼켜 결제 등록·수정이 막히지 않게 한다.
  */
-export async function markDietStep(supabase: SupabaseClient, id: string, step: 'paid' | 'shipped' | 'ended', createdBy: string | null, today = todayKst()): Promise<void> {
-  const program = await getProgram(supabase, id);
-  if (!program) throw new Error('환자를 찾지 못했어요.');
-  if (step === 'paid') {
-    await updateDietProgram(supabase, id, { paidAt: today }, createdBy);
-    await createDeskCall(supabase, program, 'paid', today, createdBy);
-  } else if (step === 'shipped') {
-    await updateDietProgram(supabase, id, { shippedAt: today }, createdBy);
-    await createDeskCall(supabase, program, 'shipped', today, createdBy);
-    if (program.track === 'remote') await createDeskCall(supabase, program, 'received', addDaysKst(today, 1), createdBy);
-  } else {
-    await updateDietProgram(supabase, id, { status: 'ended', endedAt: today }, createdBy);
-    await createDeskCall(supabase, program, 'finish', today, createdBy);
-    // 종료하면 아직 하지 않은 앞으로의 예정 해피콜은 필요 없다.
-    const { data } = await supabase.from(CALLS).select('entry_id, code').eq('program_id', id).in('code', [...SCHEDULED_DESK_CODES]);
-    const ids = ((data ?? []) as { entry_id: string }[]).map((r) => r.entry_id);
-    await removeOpenManualEntries(supabase, ids, { onlyUntouched: true });
+export async function syncDietProgramForPurchase(
+  supabase: SupabaseClient,
+  purchase: {
+    id: string;
+    patientName: string;
+    chartNo: string;
+    phone: string | null;
+    productName: string;
+    goalCategory: string | null;
+    purchaseDate: string;
+    detoxStartDate: string | null;
+    dietWeeks: number | null;
+  },
+  createdBy: string | null
+): Promise<void> {
+  const wants = isDietProgramPurchase(purchase.productName, purchase.goalCategory) && !!purchase.detoxStartDate;
+  const { data: existingRow, error } = await supabase.from(TABLE).select('*').eq('purchase_id', purchase.id).maybeSingle();
+  if (error) throw error;
+  const existing = existingRow ? rowToProgram(existingRow as Row) : null;
+
+  if (!wants) {
+    if (existing) await deleteDietProgram(supabase, existing.id);
+    return;
   }
+  const fields: ProgramPatch = {
+    patientName: purchase.patientName,
+    chartNo: purchase.chartNo,
+    phone: purchase.phone ?? '',
+    track: 'visit',
+    firstDate: purchase.purchaseDate,
+    paidAt: purchase.purchaseDate,
+    detoxStartDate: purchase.detoxStartDate ?? '',
+    weeks: purchase.dietWeeks,
+    status: 'active',
+    endedAt: '',
+  };
+  if (existing) {
+    // 환자 이름이 바뀌었으면 아직 안 한 해피콜의 이름도 맞춘다.
+    if (existing.patientName !== purchase.patientName) {
+      const { data: links } = await supabase.from(CALLS).select('entry_id').eq('program_id', existing.id);
+      await renameOpenManualEntries(supabase, ((links ?? []) as { entry_id: string }[]).map((l) => l.entry_id), purchase.patientName).catch(() => {});
+    }
+    await updateDietProgram(supabase, existing.id, fields, createdBy);
+    return;
+  }
+  const { data, error: insertError } = await supabase
+    .from(TABLE)
+    .insert({ ...patchToRow(fields), purchase_id: purchase.id, created_by: createdBy })
+    .select('*')
+    .single();
+  if (insertError) throw insertError;
+  await syncDeskCalls(supabase, rowToProgram(data as Row), createdBy);
+}
+
+/** 결제를 지우기 전에 그 결제로 만든 프로그램과 아직 손대지 않은 해피콜을 지운다(결제를 지우면 프로그램은 함께 사라지지만 해피콜 목록의 해피콜은 따로 지워야 한다). */
+export async function deleteDietProgramForPurchase(supabase: SupabaseClient, purchaseId: string): Promise<void> {
+  const { data } = await supabase.from(TABLE).select('id').eq('purchase_id', purchaseId).maybeSingle();
+  if (data) await deleteDietProgram(supabase, (data as { id: string }).id);
 }
 
 // ---- 원장 카톡 ----
