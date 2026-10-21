@@ -23,6 +23,7 @@ export function FormulaPicker({ value, onChange }: Props) {
   const [excludeText, setExcludeText] = useState('');
   const [results, setResults] = useState<HerbFormula[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [expansions, setExpansions] = useState<{ term: string; names: string[]; kind: 'include' | 'exclude' }[]>([]);
   const [searching, setSearching] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -60,16 +61,18 @@ export function FormulaPicker({ value, onChange }: Props) {
     if (!hasCondition) {
       setResults([]);
       setHasMore(false);
+      setExpansions([]);
       return;
     }
     const id = ++requestId.current;
     setSearching(true);
     const timer = window.setTimeout(() => {
       searchHerbFormulas(createClient(), { query, include: includeNames, exclude: excludeNames })
-        .then(({ rows, hasMore: more }) => {
+        .then(({ rows, hasMore: more, expansions: expanded }) => {
           if (id !== requestId.current) return;
           setResults(rows);
           setHasMore(more);
+          setExpansions(expanded);
           setError('');
         })
         .catch(() => {
@@ -276,7 +279,7 @@ export function FormulaPicker({ value, onChange }: Props) {
             setIncludeText(e.target.value);
             setNotice('');
           }}
-          placeholder="들어간 약재 — 예: 당귀 천궁 (모두 들어간 처방)"
+          placeholder="들어간 약재 — 예: 당귀 복령 (모두 들어간 처방, 일부만 써도 돼요)"
           autoComplete="off"
           style={{ flex: '1 1 200px', padding: '5px 8px', fontSize: 13 }}
         />
@@ -287,7 +290,7 @@ export function FormulaPicker({ value, onChange }: Props) {
             setExcludeText(e.target.value);
             setNotice('');
           }}
-          placeholder="빼는 약재 — 예: 감초 (하나도 안 든 처방)"
+          placeholder="빼는 약재 — 예: 감초 (하나도 안 든 처방, 일부만 써도 돼요)"
           autoComplete="off"
           style={{ flex: '1 1 200px', padding: '5px 8px', fontSize: 13 }}
         />
@@ -295,6 +298,11 @@ export function FormulaPicker({ value, onChange }: Props) {
       {total === 0 && !hasCondition && (
         <p className="muted-text" style={{ fontSize: 12, margin: '6px 0 0' }}>
           처방집이 아직 비어 있어요. 아래 &quot;처방집 관리&quot;에서 OK차트 처방집을 붙여넣어 가져오세요.
+        </p>
+      )}
+      {expansions.length > 0 && (
+        <p className="muted-text" style={{ fontSize: 12, margin: '6px 0 0' }}>
+          {expansions.map((e) => `${e.term} → ${e.names.slice(0, 8).join('·')}${e.names.length > 8 ? ` 외 ${e.names.length - 8}개` : ''} ${e.kind === 'include' ? '중 하나 포함' : '모두 제외'}`).join(' / ')}
         </p>
       )}
       {error && <p className="error-text" style={{ margin: '6px 0 0' }}>{error}</p>}

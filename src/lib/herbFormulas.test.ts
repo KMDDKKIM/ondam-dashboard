@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combineFormulaIntoOrder, countBySource, herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
+import { combineFormulaIntoOrder, countBySource, expandHerbTerm, herbsForFormula, parseFormulaHerbs, parseFormulaImport, parseFormulaJson, splitFormulaName, splitHerbNameList, summarizeFormulaHerbs } from './herbFormulas';
 
 // 처방·약재 이름은 시험용 값이다(공개 저장소).
 describe('parseFormulaHerbs', () => {
@@ -214,5 +214,38 @@ describe('countBySource — 출전별 처방 수', () => {
 
   it('비어 있으면 빈 목록', () => {
     expect(countBySource([])).toEqual([]);
+  });
+});
+
+describe('expandHerbTerm — 약재 이름 부분 검색', () => {
+  const names = ['복령', '백복령', '적복령', '토복령', '복신', '당귀', '당귀미', '인삼', '현삼', '茯苓'];
+
+  it('"복령"은 복령이 든 이름 전부로 펼쳐진다(검색어가 맨 앞)', () => {
+    expect(expandHerbTerm('복령', names)).toEqual(['복령', '백복령', '적복령', '토복령']);
+  });
+
+  it('복신처럼 글자가 다른 약재는 넣지 않는다', () => {
+    expect(expandHerbTerm('복령', names)).not.toContain('복신');
+  });
+
+  it('처방집에 없는 이름이어도 검색어 자신은 남는다', () => {
+    expect(expandHerbTerm('없는약재', names)).toEqual(['없는약재']);
+  });
+
+  it('한 글자는 부분 검색을 하지 않는다(삼 → 인삼·현삼 전부가 걸리는 것을 막는다)', () => {
+    expect(expandHerbTerm('삼', names)).toEqual(['삼']);
+  });
+
+  it('한자도 부분 검색된다', () => {
+    expect(expandHerbTerm('茯苓', ['白茯苓', '赤茯苓', '茯苓'])).toEqual(['茯苓', '白茯苓', '赤茯苓']);
+  });
+
+  it('너무 많이 걸리면 개수를 제한한다', () => {
+    const many = Array.from({ length: 200 }, (_, i) => `가나${i}`);
+    expect(expandHerbTerm('가나', many, 10)).toHaveLength(10);
+  });
+
+  it('빈 검색어는 빈 목록', () => {
+    expect(expandHerbTerm('  ', names)).toEqual([]);
   });
 });

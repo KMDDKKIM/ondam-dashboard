@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { HerbLine } from '@/lib/herbCompounding';
 import type { FormulaImportRow, HerbFormula, SourceCount } from '@/lib/herbFormulas';
-import { countBySource } from '@/lib/herbFormulas';
+import { countBySource, expandHerbTerm } from '@/lib/herbFormulas';
 
 interface Row {
   id: string;
@@ -38,23 +38,77 @@ function arrayLiteral(names: string[]): string {
   return `{${names.map((n) => n.replace(/[,{}()"\\]/g, '')).filter(Boolean).join(',')}}`;
 }
 
+const NAME_PAGE = 1000;
+let herbNameCache: Promise<Set<string>> | null = null;
+
+/** 처방집에 든 약재 이름 전체(한글·한자) — 부분 검색용. 한 번 읽어 두고, 처방집이 바뀌면 resetHerbNameIndex()로 비운다. */
+function loadHerbNameIndex(supabase: SupabaseClient): Promise<Set<string>> {
+  if (!herbNameCache) {
+    herbNameCache = (async () => {
+      const names = new Set<string>();
+      for (let from = 0; ; from += NAME_PAGE) {
+        const { data, error } = await supabase.from('herb_formulas').select('herb_names').order('id', { ascending: true }).range(from, from + NAME_PAGE - 1);
+        if (error) throw error;
+        const rows = (data ?? []) as { herb_names: string[] | null }[];
+        for (const r of rows) for (const n of r.herb_names ?? []) names.add(n);
+        if (rows.length < NAME_PAGE) break;
+      }
+      return names;
+    })().catch((err) => {
+      herbNameCache = null;
+      throw err;
+    });
+  }
+  return herbNameCache;
+}
+
+export function resetHerbNameIndex(): void {
+  herbNameCache = null;
+}
+
+export interface FormulaSearchResult {
+  rows: HerbFormula[];
+  hasMore: boolean;
+  /** 검색어가 여러 이름으로 펼쳐진 경우(예: 복령 → 백복령·적복령 …). 화면에 "이렇게 찾았어요"로 보여 준다. */
+  expansions: { term: string; names: string[]; kind: 'include' | 'exclude' }[];
+}
+
 /**
  * 처방집 검색 — 처방명, 포함 약재, 제외 약재를 함께 걸 수 있다. 조건이 하나도 없으면 빈 목록.
- * 약재 이름은 정확히 같은 것만 센다(herb_names 칸). limit 보다 더 있으면 hasMore.
+ * 약재는 두 글자 이상이면 이름의 일부만 써도 찾는다("복령" → 백복령·적복령 …): 포함은 검색어마다 그중 하나라도 든 처방(검색어끼리는 모두),
+ * 제외는 그중 하나라도 든 처방을 뺀다. 한 글자는 정확히 같은 이름만 센다. limit 보다 더 있으면 hasMore.
  */
-export async function searchHerbFormulas(supabase: SupabaseClient, search: FormulaSearch, limit = 40): Promise<{ rows: HerbFormula[]; hasMore: boolean }> {
+export async function searchHerbFormulas(supabase: SupabaseClient, search: FormulaSearch, limit = 40): Promise<FormulaSearchResult> {
   const q = cleanQuery(search.query ?? '');
   const include = (search.include ?? []).map((n) => n.trim()).filter(Boolean);
   const exclude = (search.exclude ?? []).map((n) => n.trim()).filter(Boolean);
-  if (!q && include.length === 0 && exclude.length === 0) return { rows: [], hasMore: false };
+  if (!q && include.length === 0 && exclude.length === 0) return { rows: [], hasMore: false, expansions: [] };
+
+  // 약재 이름 목록을 못 읽어도(일시 오류) 정확히 같은 이름으로는 검색되게 한다.
+  let allNames: Set<string> = new Set();
+  if (include.length > 0 || exclude.length > 0) {
+    try {
+      allNames = await loadHerbNameIndex(supabase);
+    } catch {
+      allNames = new Set();
+    }
+  }
+  const expansions: FormulaSearchResult['expansions'] = [];
+  const expand = (terms: string[], kind: 'include' | 'exclude') =>
+    terms.map((term) => {
+      const names = expandHerbTerm(term, allNames);
+      if (names.length > 1) expansions.push({ term, names, kind });
+      return names;
+    });
+
   let query = supabase.from('herb_formulas').select(SELECT);
   if (q) query = query.or(`name.ilike.%${q}%,name_hanja.ilike.%${q}%`);
-  if (include.length > 0) query = query.contains('herb_names', include);
-  for (const name of exclude) query = query.not('herb_names', 'cs', arrayLiteral([name]));
+  for (const names of expand(include, 'include')) query = query.filter('herb_names', 'ov', arrayLiteral(names));
+  for (const names of expand(exclude, 'exclude')) query = query.not('herb_names', 'ov', arrayLiteral(names));
   const { data, error } = await query.order('name', { ascending: true }).limit(limit + 1);
   if (error) throw error;
   const rows = ((data ?? []) as Row[]).map(rowToFormula);
-  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+  return { rows: rows.slice(0, limit), hasMore: rows.length > limit, expansions };
 }
 
 export async function countHerbFormulas(supabase: SupabaseClient): Promise<number | null> {
@@ -85,6 +139,7 @@ export async function saveHerbFormula(
     { onConflict: 'name,source' }
   );
   if (error) throw error;
+  resetHerbNameIndex();
 }
 
 /**
@@ -114,6 +169,7 @@ export async function importHerbFormulas(
     saved += chunk.length;
     onProgress?.(saved, rows.length);
   }
+  resetHerbNameIndex();
   return saved;
 }
 
@@ -121,6 +177,7 @@ export async function deleteHerbFormula(supabase: SupabaseClient, id: string): P
   const { data, error } = await supabase.from('herb_formulas').delete().eq('id', id).select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('지우지 못했어요.');
+  resetHerbNameIndex();
 }
 
 const SOURCE_PAGE = 1000;
@@ -158,6 +215,7 @@ export async function deleteFormulasBySource(supabase: SupabaseClient, source: s
     // RLS 등으로 한 개도 못 지웠으면 같은 묶음을 계속 읽는 무한 반복이 되므로 멈춘다.
     if (!gone || gone.length === 0) throw new Error('지우지 못했어요(권한을 확인해 주세요).');
     deleted += gone.length;
+    resetHerbNameIndex();
     onProgress?.(deleted);
   }
 }

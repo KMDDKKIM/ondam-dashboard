@@ -317,3 +317,24 @@ export function countBySource(sources: string[]): SourceCount[] {
   for (const s of sources) map.set(s, (map.get(s) ?? 0) + 1);
   return [...map].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count || a.source.localeCompare(b.source, 'ko'));
 }
+
+// ---- 약재 이름 부분 검색("복령" → 백복령·적복령·복령 …) ----
+
+/** 부분 검색을 켜는 최소 글자 수 — 한 글자("삼")는 너무 많은 약재에 걸려서 정확히 같은 이름만 센다. */
+export const MIN_PARTIAL_HERB_CHARS = 2;
+/** 한 검색어가 펼쳐질 수 있는 약재 이름의 최대 수(요청 주소가 너무 길어지지 않게) */
+export const MAX_HERB_EXPANSION = 80;
+
+/**
+ * 검색어에 해당하는 약재 이름들 — 처방집에 실제로 든 이름 중 검색어가 들어 있는 것 전부(예: "복령" → 백복령·적복령·복령 …)와
+ * 검색어 자신. 두 글자 미만이면 검색어 그대로만. 검색어와 같은 이름이 앞에 온다.
+ */
+export function expandHerbTerm(term: string, allNames: Iterable<string>, max = MAX_HERB_EXPANSION): string[] {
+  const t = term.trim();
+  if (!t) return [];
+  if ([...t].length < MIN_PARTIAL_HERB_CHARS) return [t];
+  const found = new Set<string>();
+  for (const name of allNames) if (name.includes(t) && name !== t) found.add(name);
+  const sorted = [...found].sort((a, b) => a.length - b.length || a.localeCompare(b, 'ko')).slice(0, Math.max(0, max - 1));
+  return [t, ...sorted];
+}
