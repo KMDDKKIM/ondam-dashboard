@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPackageOverview, packageAfterPrintText, packageBalance, packageDaysFromPurchase, packageNote } from './herbPackage';
+import { buildPackageOverview, isCountedOrder, packageAfterPrintText, packageBalance, packageDaysFromPurchase, packageNote, PRINT_TRACKING_START } from './herbPackage';
 
 // 환자·상품 이름은 시험용 값이다(공개 저장소).
 describe('packageDaysFromPurchase — 비급여 결제에서 패키지 일수', () => {
@@ -134,5 +134,20 @@ describe('buildPackageOverview — 환자별 패키지 현황', () => {
   it('같은 환자가 추가 결제하면 합산한다', () => {
     const rows = buildPackageOverview([...pkgs, { patientName: '나', chartNo: '200', totalDays: 30, startDate: '2026-12-01' }], orders);
     expect(rows.find((r) => r.patientName === '나')).toMatchObject({ totalDays: 60, remainingDays: 30, packageCount: 2, lastPaidDate: '2026-12-01' });
+  });
+});
+
+describe('isCountedOrder — 차감할 처방전', () => {
+  it('출력을 마친 처방전은 센다', () => {
+    expect(isCountedOrder({ orderDate: '2026-10-20', printedAt: '2026-10-20T01:00:00Z' })).toBe(true);
+  });
+
+  it('출력 표시를 남기기 시작한 뒤의 저장만 한 처방전은 세지 않는다', () => {
+    expect(isCountedOrder({ orderDate: PRINT_TRACKING_START, printedAt: null })).toBe(false);
+    expect(isCountedOrder({ orderDate: '2026-10-21' })).toBe(false);
+  });
+
+  it('그 전(옛) 처방전은 출력 표시가 없어도 센다 — 이미 결제한 환자를 직접 등록할 때 지난 처방도 차감되게', () => {
+    expect(isCountedOrder({ orderDate: '2026-10-01', printedAt: null })).toBe(true);
   });
 });

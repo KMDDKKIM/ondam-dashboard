@@ -269,7 +269,7 @@ export function Sidebar({
                         </span>
                       )}
                       {item.href === '/care-board' && careDueCount > 0 && (
-                        <span className="side-badge" title="오늘 카톡 보낼 환자">
+                        <span className="side-badge" title="오늘 연락할 환자">
                           {careDueCount > 99 ? '99+' : careDueCount}
                         </span>
                       )}

@@ -74,7 +74,7 @@ export function TodayStatus({
   if (callRow) rows.push(callRow);
 
   if (careDue != null && careDue > 0) {
-    rows.push({ key: 'care', icon: '💌', text: `오늘 카톡 보낼 환자 ${careDue}명이 있어요`, state: 'todo', badge: '케어 보드', href: '/care-board' });
+    rows.push({ key: 'care', icon: '💌', text: `오늘 연락할 환자 ${careDue}명이 있어요`, state: 'todo', badge: '케어 보드', href: '/care-board' });
   }
   if (leavePending != null && leavePending > 0) {
     rows.push({ key: 'leave', icon: '🗓️', text: `연차 신청 ${leavePending}건이 승인을 기다려요`, state: 'todo', badge: '승인하기', href: '/leave' });

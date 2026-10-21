@@ -30,6 +30,17 @@ export function packageDaysFromPurchase(p: PackageSource): number | null {
   return d >= MIN_PACKAGE_DAYS ? Math.round(d) : null;
 }
 
+/**
+ * 처방전 출력 표시(printed_at)를 남기기 시작한 날. 그 전 처방전은 "저장하면 곧 인쇄"하던 때라 출력 표시가 없어도 나간 처방으로 센다
+ * (이미 결제해 둔 환자를 케어 보드에서 직접 등록할 때 지난 처방도 차감되게 한다).
+ */
+export const PRINT_TRACKING_START = '2026-10-15';
+
+/** 패키지에서 차감할 처방전인가 — 출력을 마친 처방전, 또는 출력 표시를 남기기 전(옛) 처방전. */
+export function isCountedOrder(o: { orderDate: string; printedAt?: string | null }): boolean {
+  return o.printedAt != null || o.orderDate < PRINT_TRACKING_START;
+}
+
 export interface PackageRow {
   totalDays: number;
   /** 결제일 — 이 날짜 이후(같은 날 포함) 출력한 처방전부터 차감 */

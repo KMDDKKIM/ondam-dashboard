@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildPackageOverview, packageBalance, packageDaysFromPurchase, type PackageBalance, type PackageOverviewRow, type PackageRow, type PrintedOrder } from '@/lib/herbPackage';
+import { buildPackageOverview, isCountedOrder, packageBalance, packageDaysFromPurchase, type PackageBalance, type PackageOverviewRow, type PackageRow, type PrintedOrder } from '@/lib/herbPackage';
 
 // 한약 패키지(herb_packages) — 비급여 결제(한약)에서 자동으로 만들고, 처방전 출력분의 며칠분을 차감해 잔여를 계산한다(원장 요청, 2026-10-21).
 
@@ -69,15 +69,14 @@ export async function loadPackageBalance(supabase: SupabaseClient, patient: Pati
   const start = packages.map((p) => p.startDate).sort()[0];
   let orderQuery = supabase
     .from('herb_compounding_orders')
-    .select('id, order_date, days_supply, packet_count')
-    .not('printed_at', 'is', null)
+    .select('id, order_date, days_supply, packet_count, printed_at')
     .gte('order_date', start)
     .limit(500);
   orderQuery = chart && name ? orderQuery.or(`chart_no.eq.${chart},and(chart_no.is.null,patient_name.eq.${name})`) : chart ? orderQuery.eq('chart_no', chart) : orderQuery.eq('patient_name', name);
   const { data: orders, error: orderError } = await orderQuery;
   if (orderError) throw orderError;
-  const printed: PrintedOrder[] = ((orders ?? []) as { id: string; order_date: string; days_supply: number | string | null; packet_count: number | string | null }[])
-    .filter((o) => o.id !== excludeOrderId)
+  const printed: PrintedOrder[] = ((orders ?? []) as { id: string; order_date: string; days_supply: number | string | null; packet_count: number | string | null; printed_at: string | null }[])
+    .filter((o) => o.id !== excludeOrderId && isCountedOrder({ orderDate: o.order_date, printedAt: o.printed_at }))
     .map((o) => ({ orderDate: o.order_date, daysSupply: o.days_supply == null ? null : Number(o.days_supply), packetCount: o.packet_count == null ? null : Number(o.packet_count) }));
   return packageBalance(packages, printed);
 }
@@ -96,12 +95,13 @@ export async function loadPackageOverview(supabase: SupabaseClient): Promise<Pac
   const start = packages.map((p) => p.startDate).sort()[0];
   const { data: orders, error: orderError } = await supabase
     .from('herb_compounding_orders')
-    .select('patient_name, chart_no, order_date, days_supply, packet_count')
-    .not('printed_at', 'is', null)
+    .select('patient_name, chart_no, order_date, days_supply, packet_count, printed_at')
     .gte('order_date', start)
     .limit(5000);
   if (orderError) throw orderError;
-  const printed = (orders as { patient_name: string; chart_no: string | null; order_date: string; days_supply: number | string | null; packet_count: number | string | null }[]).map((o) => ({
+  const printed = (orders as { patient_name: string; chart_no: string | null; order_date: string; days_supply: number | string | null; packet_count: number | string | null; printed_at: string | null }[])
+    .filter((o) => isCountedOrder({ orderDate: o.order_date, printedAt: o.printed_at }))
+    .map((o) => ({
     patientName: o.patient_name,
     chartNo: o.chart_no ?? '',
     orderDate: o.order_date,
@@ -109,4 +109,31 @@ export async function loadPackageOverview(supabase: SupabaseClient): Promise<Pac
     packetCount: o.packet_count == null ? null : Number(o.packet_count),
   }));
   return buildPackageOverview(packages, printed);
+}
+
+export interface PatientPackage {
+  id: string;
+  totalDays: number;
+  startDate: string;
+  /** 비급여 결제에서 자동으로 만들어진 것이 아니라 케어 보드에서 직접 넣은 것 */
+  manual: boolean;
+}
+
+/** 케어 보드에서 이미 결제한 환자의 한약 결제 일수를 직접 넣는다(비급여 결제와 연결되지 않은 패키지). */
+export async function addManualPackage(supabase: SupabaseClient, input: { patientName: string; chartNo: string; totalDays: number; startDate: string }): Promise<void> {
+  const { error } = await supabase.from(TABLE).insert({
+    patient_name: input.patientName.trim(),
+    chart_no: input.chartNo.trim() || null,
+    total_days: input.totalDays,
+    start_date: input.startDate,
+    purchase_id: null,
+  });
+  if (error) throw error;
+}
+
+/** 직접 넣은 패키지를 지운다(결제에서 자동으로 만든 패키지는 비급여 결제 기록에서 관리하므로 지우지 않는다). */
+export async function deleteManualPackage(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from(TABLE).delete().eq('id', id).is('purchase_id', null).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('지우지 못했어요.');
 }

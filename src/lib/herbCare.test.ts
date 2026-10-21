@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHerbCare, herbCareStatus, summarizeCalls, type HerbCareOrder } from './herbCare';
+import { buildHerbCare, herbCareStatus, prescriptionLabel, summarizeCalls, type HerbCareOrder } from './herbCare';
 
 // 환자 이름은 시험용 값이다(공개 저장소).
 function order(o: Partial<HerbCareOrder> = {}): HerbCareOrder {
@@ -68,5 +68,25 @@ describe('summarizeCalls — 마지막·다음 해피콜', () => {
     expect(summarizeCalls([{ callDate: '2026-10-10', done: true, completedAt: '2026-10-10T03:00:00Z' }], kst)).toEqual({ lastCallDate: '2026-10-10', nextCallDate: null });
     expect(summarizeCalls([{ callDate: '2026-10-25', done: false, completedAt: null }], kst)).toEqual({ lastCallDate: null, nextCallDate: '2026-10-25' });
     expect(summarizeCalls([], kst)).toEqual({ lastCallDate: null, nextCallDate: null });
+  });
+});
+
+describe('prescriptionLabel — 처방 이름 표시', () => {
+  it('처방명을 적었으면 그대로', () => {
+    expect(prescriptionLabel({ prescriptionName: ' 시험탕 ', herbNames: ['가', '나'] })).toBe('시험탕');
+  });
+
+  it('처방명이 없으면 약재 몇 개로 대신 보여 준다', () => {
+    expect(prescriptionLabel({ prescriptionName: '', herbNames: ['가', '나', '다', '라', '마'] })).toBe('약재: 가·나·다 외 2종');
+    expect(prescriptionLabel({ prescriptionName: '', herbNames: ['가', '나'] })).toBe('약재: 가·나');
+  });
+
+  it('둘 다 없으면 빈 문자열', () => {
+    expect(prescriptionLabel({ prescriptionName: '', herbNames: [] })).toBe('');
+  });
+
+  it('buildHerbCare가 약재 이름을 함께 넘긴다', () => {
+    const [e] = buildHerbCare([{ ...order(), prescriptionName: '', herbNames: ['가', '나'] }], '2026-10-10');
+    expect(prescriptionLabel(e)).toBe('약재: 가·나');
   });
 });

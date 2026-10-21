@@ -12,12 +12,15 @@ export interface HerbCareOrder {
   pickupDate: string | null;
   daysSupply: number | null;
   packetCount: number | null;
+  /** 처방전에 넣은 약재 이름(처방명을 안 적었을 때 대신 보여 주는 용도) */
+  herbNames?: string[];
 }
 
 export interface HerbCareEntry {
   patientName: string;
   chartNo: string;
   prescriptionName: string;
+  herbNames: string[];
   orderDate: string;
   /** 복용 시작일(수령예정일, 없으면 처방일) */
   startDate: string;
@@ -51,6 +54,7 @@ export function buildHerbCare(orders: HerbCareOrder[], today: string, recentEnde
       patientName: o.patientName,
       chartNo: o.chartNo,
       prescriptionName: o.prescriptionName,
+      herbNames: o.herbNames ?? [],
       orderDate: o.orderDate,
       startDate,
       pickupMissing: o.pickupDate == null,
@@ -61,6 +65,19 @@ export function buildHerbCare(orders: HerbCareOrder[], today: string, recentEnde
     });
   }
   return entries.sort((a, b) => (a.endDate ?? '9999').localeCompare(b.endDate ?? '9999') || a.patientName.localeCompare(b.patientName, 'ko'));
+}
+
+/**
+ * 처방 이름 — 처방명을 적었으면 그대로, 안 적었으면 처방전에 넣은 약재 몇 개로 대신 보여 준다("약재: 당귀·천궁·백출 외 9종").
+ * 약재도 없으면 빈 문자열.
+ */
+export function prescriptionLabel(e: Pick<HerbCareEntry, 'prescriptionName' | 'herbNames'>, maxHerbs = 3): string {
+  const name = e.prescriptionName.trim();
+  if (name) return name;
+  const herbs = e.herbNames.filter(Boolean);
+  if (herbs.length === 0) return '';
+  const head = herbs.slice(0, maxHerbs).join('·');
+  return `약재: ${head}${herbs.length > maxHerbs ? ` 외 ${herbs.length - maxHerbs}종` : ''}`;
 }
 
 /** 한 줄 상태 — "4/15일째", "수령 전", "종료 3일 지남". */

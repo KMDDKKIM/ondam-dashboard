@@ -15,6 +15,7 @@ import {
   type SendKey,
 } from '@/lib/dietProgram';
 import { addDaysKst, todayKst } from '@/lib/kst';
+import { listCareDue } from './herbCare';
 import { createManualEntry, getManualEntryStates, removeOpenManualEntries } from './happyCallQueue';
 
 // 린다이어트 프로그램(diet_programs), 원장 카톡 보냄 기록(diet_program_sends), 데스크 해피콜 연결(diet_program_calls).
@@ -269,12 +270,25 @@ export async function loadOwnerDue(supabase: SupabaseClient, today: string): Pro
   return { programs, due: ownerDueMessages(programs, today, sends) };
 }
 
-/** 홈·왼쪽 메뉴 알림용 건수. 표가 아직 없거나 읽기에 실패하면 null(알림을 숨긴다). */
+/**
+ * 홈·왼쪽 메뉴 알림용 건수 — 오늘 원장이 연락할 린다이어트 환자 수 + 다음 해피콜 날짜가 된 한약 환자 수.
+ * 둘 다 읽지 못하면(표가 아직 없는 등) null(알림을 숨긴다). 하나만 못 읽으면 읽은 것만 센다.
+ */
 export async function countOwnerDue(supabase: SupabaseClient, today: string): Promise<number | null> {
+  let total = 0;
+  let readSomething = false;
   try {
     const { due } = await loadOwnerDue(supabase, today);
-    return new Set(due.map((d) => d.programId)).size;
+    total += new Set(due.map((d) => d.programId)).size;
+    readSomething = true;
   } catch {
-    return null;
+    // 린다이어트 표가 없으면 이 부분은 건너뛴다.
   }
+  try {
+    total += (await listCareDue(supabase, today)).length;
+    readSomething = true;
+  } catch {
+    // 해피콜 날짜 칸이 없으면 이 부분은 건너뛴다.
+  }
+  return readSomething ? total : null;
 }
