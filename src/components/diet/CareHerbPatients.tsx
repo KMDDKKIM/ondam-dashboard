@@ -266,7 +266,8 @@ export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: num
     try {
       await updateCarePatient(supabase, p.id, change);
       setPatients((prev) => prev.map((x) => (x.id === p.id ? { ...x, ...('memo' in change ? { memo: change.memo as string } : {}), ...('nextCallDate' in change ? { nextCallDate: change.nextCallDate || null } : {}) } : x)));
-      if ('nextCallDate' in change) onCallsChanged();
+      // 날짜를 바꿨거나 메모를 고쳤으면 위쪽 "오늘 연락할 분" 카드도 새 내용으로 다시 읽는다.
+      if ('nextCallDate' in change || 'memo' in change) onCallsChanged();
     } catch {
       setError('저장하지 못했어요. 다시 시도해 주세요. (케어 보드 해피콜 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
     }
