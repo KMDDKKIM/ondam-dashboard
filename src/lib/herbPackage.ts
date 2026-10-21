@@ -80,3 +80,76 @@ export function packageNote(balance: PackageBalance | null, thisDays: number): P
   if (after < 0) return { level: 'warn', text: `${head} — 이번 ${thisDays}일분은 ${-after}일을 넘어요. 추가 결제가 필요해요` };
   return { level: 'ok', text: `${head} → 이번 ${thisDays}일분 처방 후 ${after}일 남아요` };
 }
+
+/** 처방전 출력을 마친 뒤 안내 — "○○님 한약 패키지 잔여 15일". 패키지를 다 썼으면 경고. 패키지가 없으면 null. */
+export function packageAfterPrintText(patientName: string, balance: PackageBalance | null): PackageNote | null {
+  if (!balance) return null;
+  const who = patientName.trim() ? `${patientName.trim()}님 ` : '';
+  const head = `${who}한약 패키지 잔여 ${balance.remainingDays}일 (총 ${balance.totalDays}일 중 ${balance.usedDays}일 사용)`;
+  if (balance.overDays > 0) return { level: 'warn', text: `${head} — 패키지를 ${balance.overDays}일 넘겨 처방했어요. 추가 결제를 확인해 주세요` };
+  if (balance.remainingDays === 0) return { level: 'warn', text: `${head} — 패키지를 모두 사용했어요. 다음 처방은 추가 결제가 필요해요` };
+  return { level: 'ok', text: head };
+}
+
+export interface PackageRecord {
+  patientName: string;
+  chartNo: string;
+  totalDays: number;
+  startDate: string;
+}
+
+export interface PackageOrderRecord {
+  patientName: string;
+  chartNo: string;
+  orderDate: string;
+  daysSupply?: number | null;
+  packetCount?: number | null;
+}
+
+export interface PackageOverviewRow extends PackageBalance {
+  patientName: string;
+  chartNo: string;
+  /** 첫 결제일 */
+  firstPaidDate: string;
+  /** 마지막 결제일 */
+  lastPaidDate: string;
+  /** 패키지 결제 횟수 */
+  packageCount: number;
+  /** 마지막 처방일(출력한 처방전 기준, 없으면 null) */
+  lastOrderDate: string | null;
+}
+
+function patientKey(p: { patientName: string; chartNo: string }): string {
+  return p.chartNo.trim() ? `c:${p.chartNo.trim()}` : `n:${p.patientName.trim()}`;
+}
+
+/**
+ * 한약 패키지 현황 — 환자별로 결제 일수, 처방한 일수, 남은 일수를 모은다. 차트번호가 있으면 차트번호로, 없으면 이름으로 환자를 묶고
+ * 처방전은 차트번호가 같거나(차트번호가 비어 있는 처방전은) 이름이 같으면 그 환자의 것으로 본다. 남은 일수가 적은 환자가 위, 다 쓴 환자는 아래.
+ */
+export function buildPackageOverview(packages: PackageRecord[], printedOrders: PackageOrderRecord[]): PackageOverviewRow[] {
+  const groups = new Map<string, PackageRecord[]>();
+  for (const p of packages) {
+    const key = patientKey(p);
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const rows: PackageOverviewRow[] = [];
+  for (const list of groups.values()) {
+    const chartNo = list[0].chartNo.trim();
+    const name = list[0].patientName.trim();
+    const mine = printedOrders.filter((o) => (chartNo ? o.chartNo.trim() === chartNo || (!o.chartNo.trim() && o.patientName.trim() === name) : o.patientName.trim() === name));
+    const balance = packageBalance(list.map((p) => ({ totalDays: p.totalDays, startDate: p.startDate })), mine) as PackageBalance;
+    const starts = list.map((p) => p.startDate).sort();
+    const counted = mine.filter((o) => o.orderDate >= starts[0]).map((o) => o.orderDate).sort();
+    rows.push({
+      ...balance,
+      patientName: list[0].patientName,
+      chartNo: list[0].chartNo,
+      firstPaidDate: starts[0],
+      lastPaidDate: starts[starts.length - 1],
+      packageCount: list.length,
+      lastOrderDate: counted.length > 0 ? counted[counted.length - 1] : null,
+    });
+  }
+  return rows.sort((a, b) => Number(a.remainingDays === 0) - Number(b.remainingDays === 0) || a.remainingDays - b.remainingDays || a.patientName.localeCompare(b.patientName, 'ko'));
+}

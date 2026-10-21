@@ -63,7 +63,7 @@ export function defaultHappyCallDate(purchaseDate: string): string {
   return addDays(purchaseDate, 1);
 }
 
-export const DURATION_PRESETS = [15, 30, 60, 120];
+export const DURATION_PRESETS = [15, 30, 60, 90, 120];
 
 // 상품을 고르면 "목표 반영"을 자동으로 채우는 규칙은 lib/nonCoveredGoal.ts, lib/purchaseFilter.ts(defaultGoalFor)에 있다.
 export { SPECIAL_HERB_PRODUCTS, suggestGoalCategory } from '@/lib/nonCoveredGoal';

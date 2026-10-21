@@ -192,7 +192,7 @@ export function CareBoard() {
 
       <h2 style={{ fontSize: 17, margin: '20px 0 8px' }}>🌿 한약 환자 ({patients.length}명)</h2>
       <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 12 }}>
-        챙기고 싶은 환자를 직접 등록하면 처방전·한약 패키지 기준으로 복용 현황과 패키지 잔여를 보여 드려요. 자동으로 올라가지는 않아요.
+        챙기고 싶은 환자를 직접 등록하면 처방전·한약 패키지 기준으로 복용 현황과 패키지 잔여를 보여 드려요. 자동으로 올라가지는 않아요. 패키지를 결제한 환자 전체는 <Link href="/herb-packages" style={{ textDecoration: 'underline' }}>한약 패키지 현황</Link>에서 볼 수 있어요.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
         <label style={{ fontSize: 12 }}>

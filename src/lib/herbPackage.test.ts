@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { packageBalance, packageDaysFromPurchase, packageNote } from './herbPackage';
+import { buildPackageOverview, packageAfterPrintText, packageBalance, packageDaysFromPurchase, packageNote } from './herbPackage';
 
 // 환자·상품 이름은 시험용 값이다(공개 저장소).
 describe('packageDaysFromPurchase — 비급여 결제에서 패키지 일수', () => {
@@ -82,5 +82,57 @@ describe('packageNote — 처방전 화면 안내', () => {
 
   it('패키지가 없으면 안내 없음', () => {
     expect(packageNote(null, 30)).toBeNull();
+  });
+});
+
+describe('packageAfterPrintText — 출력 뒤 잔여 안내', () => {
+  it('30일 결제에서 15일이 나가면 15일 남은 것을 알려 준다', () => {
+    const balance = packageBalance([{ totalDays: 30, startDate: '2026-10-21' }], [{ orderDate: '2026-10-21', daysSupply: 15 }]);
+    expect(packageAfterPrintText('가나다', balance)).toEqual({ level: 'ok', text: '가나다님 한약 패키지 잔여 15일 (총 30일 중 15일 사용)' });
+  });
+
+  it('다 썼거나 넘겼으면 경고', () => {
+    const used = packageBalance([{ totalDays: 30, startDate: '2026-10-21' }], [{ orderDate: '2026-10-21', daysSupply: 30 }]);
+    expect(packageAfterPrintText('가나다', used)?.level).toBe('warn');
+    const over = packageBalance([{ totalDays: 30, startDate: '2026-10-21' }], [{ orderDate: '2026-10-21', daysSupply: 40 }]);
+    expect(packageAfterPrintText('가나다', over)?.text).toContain('10일 넘겨');
+  });
+
+  it('패키지가 없으면 안내 없음', () => {
+    expect(packageAfterPrintText('가나다', null)).toBeNull();
+  });
+});
+
+describe('buildPackageOverview — 환자별 패키지 현황', () => {
+  const pkgs = [
+    { patientName: '가', chartNo: '100', totalDays: 90, startDate: '2026-10-21' },
+    { patientName: '나', chartNo: '200', totalDays: 30, startDate: '2026-10-22' },
+    { patientName: '다', chartNo: '', totalDays: 30, startDate: '2026-10-23' },
+  ];
+  const orders = [
+    { patientName: '가', chartNo: '100', orderDate: '2026-10-21', daysSupply: 30 },
+    { patientName: '가', chartNo: '', orderDate: '2026-11-20', daysSupply: 15 }, // 차트번호를 비운 처방전도 이름이 같으면 그 환자의 것
+    { patientName: '나', chartNo: '200', orderDate: '2026-10-22', daysSupply: 30 },
+    { patientName: '라', chartNo: '300', orderDate: '2026-10-22', daysSupply: 30 }, // 패키지 없는 환자
+  ];
+
+  it('결제·처방·남은 일수와 마지막 처방일', () => {
+    const rows = buildPackageOverview(pkgs, orders);
+    const a = rows.find((r) => r.patientName === '가');
+    expect(a).toMatchObject({ totalDays: 90, usedDays: 45, remainingDays: 45, lastOrderDate: '2026-11-20', firstPaidDate: '2026-10-21', packageCount: 1 });
+  });
+
+  it('남은 일수가 적은 환자가 위, 다 쓴 환자는 맨 아래', () => {
+    const rows = buildPackageOverview(pkgs, orders);
+    expect(rows.map((r) => r.patientName)).toEqual(['다', '가', '나']); // 다 30일 → 가 45일 → 나(다 씀)
+  });
+
+  it('처방이 없는 환자는 마지막 처방일이 null', () => {
+    expect(buildPackageOverview(pkgs, orders).find((r) => r.patientName === '다')?.lastOrderDate).toBeNull();
+  });
+
+  it('같은 환자가 추가 결제하면 합산한다', () => {
+    const rows = buildPackageOverview([...pkgs, { patientName: '나', chartNo: '200', totalDays: 30, startDate: '2026-12-01' }], orders);
+    expect(rows.find((r) => r.patientName === '나')).toMatchObject({ totalDays: 60, remainingDays: 30, packageCount: 2, lastPaidDate: '2026-12-01' });
   });
 });
