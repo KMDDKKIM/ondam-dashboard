@@ -8,6 +8,7 @@ import {
   updateUntouchedManualEntry,
 } from './happyCallQueue';
 import { addDays } from '@/lib/happyCallStats';
+import { syncPackageForPurchase } from './herbPackages';
 import { CALL_SLOTS, callTypeForPurchase, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
 
 const TABLE = 'non_covered_purchases';
@@ -161,6 +162,8 @@ export async function createNonCoveredPurchase(
     .single();
   if (error) throw error;
   const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
+  // 한약 3개월·1개월 결제면 한약 패키지(잔여 일수)를 만든다. 패키지 표 문제가 결제 등록을 막지 않게 오류는 삼킨다.
+  await syncPackageForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory, durationDays: input.durationDays, purchaseDate: input.purchaseDate }, input.createdBy).catch(() => {});
 
   const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays, input.goalCategory);
   if (calls.length === 0) return purchase;
@@ -295,6 +298,7 @@ export async function updateNonCoveredPurchase(
     await removeOpenManualEntries(supabase, createdIds).catch(() => {});
     throw err;
   }
+  await syncPackageForPurchase(supabase, { id: existing.id, patientName: patch.patientName, chartNo: patch.chartNo, productName: patch.productName, goalCategory: patch.goalCategory, durationDays: patch.durationDays, purchaseDate: patch.purchaseDate }, existing.createdBy).catch(() => {});
 
   try {
     for (const op of ops) {

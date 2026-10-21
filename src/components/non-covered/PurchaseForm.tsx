@@ -1,5 +1,6 @@
 'use client';
 
+import { packageDaysFromPurchase } from '@/lib/herbPackage';
 import { useEffect, useState, type FormEvent } from 'react';
 import { DURATION_PRESETS, defaultHappyCallDate, type KnownPatient } from '@/lib/supabase/nonCoveredPurchases';
 import { suggestGoalCategory } from '@/lib/nonCoveredGoal';
@@ -113,6 +114,7 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
     });
   }
 
+  const packageDays = packageDaysFromPurchase({ productName, goalCategory, durationDays: durationDays ? Number(durationDays) : null });
   const callHint = !createsCallsFromPurchase(productName, goalCategory)
     ? goalCategory === 'herb'
       ? '한약 해피콜은 처방전을 출력한 뒤 한약 대기방에서 수령예정일을 넣으면 만들어져요 (여기서는 만들지 않아요)'
@@ -293,6 +295,11 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
         </Field>
       </div>
       <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-teal-deep)', margin: '-4px 0 16px' }}>📞 {callHint}</p>
+      {packageDays != null && (
+        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-teal-deep)', margin: '-8px 0 16px' }}>
+          📦 한약 패키지 {packageDays}일분으로 등록돼요 — 처방전이 나갈 때마다 며칠분이 차감돼요
+        </p>
+      )}
 
       <h3 style={sectionTitle}>④ 메모</h3>
       <div style={{ marginBottom: 18 }}>

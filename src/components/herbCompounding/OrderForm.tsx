@@ -5,6 +5,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, duplicateHerbNames, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
+import { HerbPackageNote } from './HerbPackageNote';
 import { PatientSearch } from './PatientSearch';
 
 interface OrderFormProps {
@@ -174,6 +175,8 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
           />
         </div>
       </div>
+
+      <HerbPackageNote patientName={value.patientName} chartNo={value.chartNo} orderId={value.id} thisDays={value.daysSupply > 0 ? value.daysSupply : value.packetCount} />
 
       {/* 팩용량·며칠분·팩수·총물량은 부가 정보라, 환자·첩수 칸보다 눈에 덜 띄게 한 줄로
           압축했다(원장 요청, 2026-09-29 — 위쪽에 두되 칸을 작게). */}
