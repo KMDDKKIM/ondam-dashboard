@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DietProgram } from '@/lib/dietProgram';
+import { samePatient } from '@/lib/dietReminders';
 import { buildHerbCare, summarizeCalls, type CallSummary, type HerbCareEntry, type HerbCareOrder } from '@/lib/herbCare';
 import { isCountedOrder, packageBalance, type PackageBalance } from '@/lib/herbPackage';
 import { addDaysKst, kstDateOf } from '@/lib/kst';
@@ -8,6 +10,8 @@ import type { PatientPackage } from './herbPackages';
 // 자동으로 환자를 올리지 않고 원장이 하나하나 등록한 환자만 보여 준다(원장 요청, 2026-10-21).
 
 export type CareStatus = 'active' | 'ended';
+/** 케어 보드 환자 종류 — 한약 환자 / 린다이어트 환자 */
+export type CareKind = 'herb' | 'diet';
 
 export interface CarePatient {
   id: string;
@@ -17,6 +21,7 @@ export interface CarePatient {
   memo: string;
   status: CareStatus;
   endedAt: string | null;
+  kind: CareKind;
   /** 원장이 정한 다음 해피콜 날짜 — 그날 "오늘 연락할 분"에 뜬다 */
   nextCallDate: string | null;
   /** 원장이 해피콜을 마친 마지막 날짜 */
@@ -32,6 +37,8 @@ export interface CarePatientStatus extends CarePatient {
   balance: PackageBalance | null;
   /** 이 환자의 패키지 결제 기록 */
   packages: PatientPackage[];
+  /** 린다이어트 환자의 프로그램(비급여에서 디톡스 시작일을 등록했으면) */
+  program: DietProgram | null;
 }
 
 interface PatientRow {
@@ -41,6 +48,7 @@ interface PatientRow {
   memo: string | null;
   status?: CareStatus | null;
   ended_at?: string | null;
+  kind?: CareKind | null;
   next_call_date?: string | null;
   last_call_date?: string | null;
 }
@@ -57,7 +65,7 @@ interface OrderRow {
   herbs: { herbName?: string }[] | null;
 }
 
-const FULL_COLUMNS = 'id, patient_name, chart_no, memo, status, ended_at, next_call_date, last_call_date';
+const FULL_COLUMNS = 'id, patient_name, chart_no, memo, status, ended_at, kind, next_call_date, last_call_date';
 const BASIC_COLUMNS = 'id, patient_name, chart_no, memo';
 
 function rowToPatient(r: PatientRow): CarePatient {
@@ -68,6 +76,7 @@ function rowToPatient(r: PatientRow): CarePatient {
     memo: r.memo ?? '',
     status: r.status === 'ended' ? 'ended' : 'active',
     endedAt: r.ended_at ?? null,
+    kind: r.kind === 'diet' ? 'diet' : 'herb',
     nextCallDate: r.next_call_date ?? null,
     lastCallDate: r.last_call_date ?? null,
   };
@@ -77,7 +86,7 @@ export async function listCarePatients(supabase: SupabaseClient): Promise<CarePa
   // 종료·해피콜 날짜 칸을 만드는 SQL을 아직 실행하지 않았어도 목록은 보이게 한다(모두 진행 중으로 본다).
   const read = (columns: string) => supabase.from('care_board_patients').select(columns).order('created_at', { ascending: false }).limit(300);
   let result = await read(FULL_COLUMNS);
-  if (result.error && /status|ended_at|next_call_date|last_call_date/.test(result.error.message)) result = await read(BASIC_COLUMNS);
+  if (result.error && /status|ended_at|kind|next_call_date|last_call_date/.test(result.error.message)) result = await read(BASIC_COLUMNS);
   if (result.error) throw result.error;
   return ((result.data ?? []) as unknown as PatientRow[]).map(rowToPatient);
 }
@@ -96,10 +105,11 @@ export async function listCareDue(supabase: SupabaseClient, today: string): Prom
   return ((data ?? []) as unknown as PatientRow[]).map(rowToPatient);
 }
 
-export async function addCarePatient(supabase: SupabaseClient, input: { patientName: string; chartNo: string; memo?: string }): Promise<string> {
+export async function addCarePatient(supabase: SupabaseClient, input: { patientName: string; chartNo: string; memo?: string; kind?: CareKind }): Promise<string> {
   const { data, error } = await supabase
     .from('care_board_patients')
-    .insert({ patient_name: input.patientName.trim(), chart_no: input.chartNo.trim() || null, memo: input.memo?.trim() || null })
+    // 한약 환자는 기본값(herb)이라 종류 칸을 안 보낸다(종류 칸을 만드는 SQL 전에도 한약 환자 등록은 된다).
+    .insert({ patient_name: input.patientName.trim(), chart_no: input.chartNo.trim() || null, memo: input.memo?.trim() || null, ...(input.kind === 'diet' ? { kind: 'diet' } : {}) })
     .select('id')
     .single();
   if (error) throw error;
@@ -128,7 +138,7 @@ export async function updateCarePatient(supabase: SupabaseClient, id: string, pa
 }
 
 /** 등록한 환자들의 한약 복용 현황·패키지·해피콜 현황을 한꺼번에 읽는다. 일부 조회가 실패해도 나머지는 보여 준다. */
-export async function loadCarePatientStatus(supabase: SupabaseClient, patients: CarePatient[], today: string): Promise<CarePatientStatus[]> {
+export async function loadCarePatientStatus(supabase: SupabaseClient, patients: CarePatient[], today: string, programs: DietProgram[] = []): Promise<CarePatientStatus[]> {
   if (patients.length === 0) return [];
 
   let orders: (HerbCareOrder & { printedAt: string | null })[] = [];
@@ -188,6 +198,24 @@ export async function loadCarePatientStatus(supabase: SupabaseClient, patients: 
       packages.map((k) => ({ totalDays: k.totalDays, startDate: k.startDate })),
       mine.filter((o) => isCountedOrder({ orderDate: o.orderDate, printedAt: o.printedAt }))
     );
-    return { ...p, herb, balance, packages, desk: summarizeCalls(callsByName.get(p.patientName) ?? [], kstDateOf) };
+    const program = p.kind === 'diet' ? (programs.find((g) => g.status === 'active' && samePatient(g, p)) ?? null) : null;
+    return { ...p, herb, balance, packages, program, desk: summarizeCalls(callsByName.get(p.patientName) ?? [], kstDateOf) };
   });
+}
+
+/** 린다이어트 환자를 등록할 때 이름을 치면 고를 수 있는 후보 — 비급여 현황에서 린다이어트(목표 반영: 다이어트)를 결제한 환자. */
+export async function listKnownDietPatients(supabase: SupabaseClient): Promise<{ patientName: string; chartNo: string }[]> {
+  const { data, error } = await supabase
+    .from('non_covered_purchases')
+    .select('patient_name, chart_no')
+    .eq('goal_category', 'diet')
+    .order('purchase_date', { ascending: false })
+    .limit(1500);
+  if (error) throw error;
+  const seen = new Map<string, { patientName: string; chartNo: string }>();
+  for (const r of data as { patient_name: string; chart_no: string | null }[]) {
+    const key = `${r.patient_name}\u0000${r.chart_no ?? ''}`;
+    if (!seen.has(key)) seen.set(key, { patientName: r.patient_name, chartNo: r.chart_no ?? '' });
+  }
+  return [...seen.values()];
 }

@@ -24,18 +24,23 @@ function normalizeChart(chartNo: string): string {
 }
 
 /**
+ * 같은 환자인가 — 양쪽에 차트번호가 있으면 차트번호가 같아야 하고(동명이인을 가린다), 어느 한쪽에 차트번호가 없으면 이름이 같으면 된다.
+ */
+export function samePatient(a: { patientName: string; chartNo: string }, b: { patientName: string; chartNo: string }): boolean {
+  const ac = normalizeChart(a.chartNo);
+  const bc = normalizeChart(b.chartNo);
+  return ac && bc ? ac === bc : a.patientName.trim() === b.patientName.trim();
+}
+
+/**
  * 진행 중인 프로그램과 그 날의 예약을 맞춘다. 양쪽에 차트번호가 있으면 차트번호가 같아야 하고(동명이인을 가린다),
  * 어느 한쪽에 차트번호가 없으면 이름이 같으면 된다. 한 프로그램에 예약이 여러 개면 가장 이른 시간 하나만.
  */
 export function matchReminders(programs: ReminderProgram[], reservations: ReminderReservation[]): ReminderMatch[] {
   const matches: ReminderMatch[] = [];
   for (const p of programs) {
-    const pc = normalizeChart(p.chartNo);
     const found = reservations
-      .filter((r) => {
-        const rc = normalizeChart(r.chartNo);
-        return pc && rc ? pc === rc : r.patientName.trim() === p.patientName.trim();
-      })
+      .filter((r) => samePatient(p, r))
       .sort((a, b) => a.timeLabel.localeCompare(b.timeLabel))[0];
     if (found) matches.push({ programId: p.id, timeLabel: found.timeLabel });
   }

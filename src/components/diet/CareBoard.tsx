@@ -88,13 +88,13 @@ function CareCallCard({ patient, today, onDone }: { patient: CarePatient; today:
     <div className="card" style={{ padding: 12, marginBottom: 10, borderLeft: '4px solid var(--color-teal)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
         <span style={{ fontWeight: 800, fontSize: 16 }}>{patient.patientName}</span>
-        <span style={{ fontWeight: 700, color: 'var(--color-teal-deep)' }}>🌿 한약 해피콜</span>
+        <span style={{ fontWeight: 700, color: 'var(--color-teal-deep)' }}>{patient.kind === 'diet' ? '🥗 린다이어트 해피콜' : '🌿 한약 해피콜'}</span>
         {patient.chartNo && <span className="muted-text" style={{ fontSize: 12 }}>차트 {patient.chartNo}</span>}
         {overdue > 0 && <span style={{ fontSize: 12, color: 'var(--color-error)', fontWeight: 700 }}>{overdue}일 지남</span>}
         {patient.lastCallDate && <span className="muted-text" style={{ fontSize: 12 }}>마지막 해피콜 {koDate(patient.lastCallDate)}</span>}
       </div>
       <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, background: 'var(--color-surface-2)', borderRadius: 8, padding: '8px 10px' }}>
-        {patient.memo || <span className="muted-text">메모가 없어요. 아래 한약 환자 카드에서 중점 사항을 적어 두세요.</span>}
+        {patient.memo || <span className="muted-text">메모가 없어요. 아래 환자 카드에서 중점 사항을 적어 두세요.</span>}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <button type="button" className="btn-primary" disabled={busy} onClick={() => finish('done')} style={{ fontSize: 13, padding: '4px 12px' }}>
@@ -209,7 +209,8 @@ export function CareBoard() {
         </div>
       )}
 
-      <CareHerbPatients reloadKey={careVersion} onCallsChanged={() => void load()} />
+      <CareHerbPatients kind="diet" reloadKey={careVersion} onCallsChanged={() => void load()} />
+      <CareHerbPatients kind="herb" reloadKey={careVersion} onCallsChanged={() => void load()} />
     </div>
   );
 }

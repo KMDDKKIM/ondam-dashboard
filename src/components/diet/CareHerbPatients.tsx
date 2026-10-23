@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PatientSearch } from '@/components/herbCompounding/PatientSearch';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { medicineEndDate, phaseLabel } from '@/lib/dietProgram';
 import { koDate } from '@/lib/dietScripts';
 import { herbCareStatus, prescriptionLabel } from '@/lib/herbCare';
 import { diffDaysKst, todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
 import { listKnownHerbCompoundingPatients, type KnownHerbPatient } from '@/lib/supabase/herbCompounding';
-import { addCarePatient, listCarePatients, loadCarePatientStatus, updateCarePatient, type CarePatientPatch, type CarePatientStatus } from '@/lib/supabase/herbCare';
+import { listDietPrograms } from '@/lib/supabase/dietPrograms';
+import { addCarePatient, listCarePatients, listKnownDietPatients, loadCarePatientStatus, updateCarePatient, type CareKind, type CarePatientPatch, type CarePatientStatus } from '@/lib/supabase/herbCare';
 import { addManualPackage, deleteManualPackage } from '@/lib/supabase/herbPackages';
 
 const labelStyle = { fontSize: 11, color: 'var(--color-muted)', marginBottom: 1 } as const;
@@ -42,7 +44,9 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
   const [pkgDate, setPkgDate] = useState(today);
   const [pkgBusy, setPkgBusy] = useState(false);
   const ended = p.status === 'ended';
-  const { herb, balance, desk } = p;
+  const { herb, balance, desk, program } = p;
+  const isDiet = p.kind === 'diet';
+  const programEnd = program ? medicineEndDate(program) : null;
 
   // 마지막 해피콜은 데스크 해피콜 목록과 원장이 직접 마친 해피콜 중 더 늦은 날
   const lastCall = [desk.lastCallDate, p.lastCallDate].filter((d): d is string => !!d).sort().pop() ?? null;
@@ -82,8 +86,10 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
           <span style={{ fontWeight: 800, fontSize: 15 }}>{p.patientName}</span>
           {p.chartNo && <span className="muted-text" style={{ fontSize: 11 }}>차트 {p.chartNo}</span>}
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-teal-deep)' }}>{label || (herb ? '처방명 없음' : '처방전 없음')}</span>
-          {herb && (
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-teal-deep)' }}>
+            {isDiet ? (program ? phaseLabel(program, today) : '프로그램 없음') : label || (herb ? '처방명 없음' : '처방전 없음')}
+          </span>
+          {!isDiet && herb && (
             <span className="muted-text" style={{ fontSize: 11 }}>
               {koDate(herb.orderDate)}
               {herb.days > 0 ? ` · ${herb.days}일분` : ''}
@@ -103,6 +109,13 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
         </div>
 
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', rowGap: 6, alignItems: 'flex-start' }}>
+          {isDiet ? (
+            <>
+              <Stat label="약 소진 예정">{programEnd ? `${koDate(programEnd)} (D-${Math.max(0, diffDaysKst(today, programEnd))})` : '-'}</Stat>
+              {!program && <span className="muted-text" style={{ fontSize: 11, alignSelf: 'center' }}>비급여 현황에서 린다이어트 디톡스 시작일을 등록하면 단계가 연결돼요</span>}
+            </>
+          ) : (
+            <>
           <Stat label="복용">
             {herb ? herbCareStatus(herb) : '-'}
             {herb?.pickupMissing && <span className="muted-text" style={{ fontSize: 10, fontWeight: 400 }}> (수령일 미입력)</span>}
@@ -112,6 +125,8 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
           <Stat label="잔여 일수" warn={!!balance && balance.remainingDays <= 14}>
             {balance ? (balance.overDays > 0 ? `${balance.overDays}일 초과` : `${balance.remainingDays}일`) : '-'}
           </Stat>
+            </>
+          )}
           <Stat label="마지막 해피콜">
             {lastCall ? (
               <>
@@ -151,7 +166,7 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
           </div>
         </div>
 
-        {!ended && (
+        {!ended && !isDiet && (
           <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             {p.packages.map((k) => (
               <span key={k.id} className="muted-text" style={{ fontSize: 11 }}>
@@ -209,7 +224,7 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onPackagesChanged }: 
 // 케어 보드의 "한약 환자" — 원장이 직접 고른 환자의 처방명·한약 패키지(결제·처방·잔여 일수)·해피콜 현황과 메모를 한 카드에서 본다
 // (원장 요청, 2026-10-21). 환자명을 치면 처방전에 있는 환자가 떠서 차트번호까지 한 번에 고를 수 있고, 다음 해피콜 날짜를 정하면
 // 그날 "오늘 연락할 분"에 올라간다(onCallsChanged로 위쪽 목록을 다시 읽는다).
-export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: number; onCallsChanged: () => void }) {
+export function CareHerbPatients({ kind = 'herb', reloadKey, onCallsChanged }: { kind?: CareKind; reloadKey: number; onCallsChanged: () => void }) {
   const supabase = useMemo(() => createClient(), []);
   const today = todayKst();
   const [patients, setPatients] = useState<CarePatientStatus[]>([]);
@@ -225,32 +240,37 @@ export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: num
 
   const reload = useCallback(async () => {
     try {
-      setPatients(await loadCarePatientStatus(supabase, await listCarePatients(supabase), today));
+      const all = await listCarePatients(supabase);
+      const mine = all.filter((p) => p.kind === kind);
+      // 린다이어트 환자는 비급여에서 만든 프로그램과 이름·차트번호로 연결해 단계를 보여 준다.
+      const programs = kind === 'diet' ? await listDietPrograms(supabase).catch(() => []) : [];
+      setPatients(await loadCarePatientStatus(supabase, mine, today, programs));
       setError('');
     } catch {
       setError('등록한 환자를 불러오지 못했어요. (케어 보드 SQL을 아직 실행하지 않았다면 먼저 실행해 주세요)');
     } finally {
       setLoading(false);
     }
-  }, [supabase, today]);
+  }, [supabase, today, kind]);
 
   useEffect(() => {
     void reload();
   }, [reload, reloadKey]);
 
   useEffect(() => {
-    listKnownHerbCompoundingPatients(supabase, 3000).then(setKnown, () => setKnown([]));
-  }, [supabase]);
+    const load = kind === 'diet' ? listKnownDietPatients(supabase) : listKnownHerbCompoundingPatients(supabase, 3000);
+    load.then(setKnown, () => setKnown([]));
+  }, [supabase, kind]);
 
   async function add() {
     if (!name.trim() || adding) return;
     setAdding(true);
     setError('');
     try {
-      await addCarePatient(supabase, { patientName: name, chartNo: chart });
+      await addCarePatient(supabase, { patientName: name, chartNo: chart, kind });
       const d = Number(days);
-      // 이미 결제한 환자는 결제 일수를 같이 넣을 수 있다 — 결제일 이후의 처방전이 차감돼 처방한 일수·잔여 일수가 자동으로 나온다.
-      if (d > 0) await addManualPackage(supabase, { patientName: name, chartNo: chart, totalDays: d, startDate: paidDate || today });
+      // 이미 결제한 한약 환자는 결제 일수를 같이 넣을 수 있다 — 결제일 이후의 처방전이 차감돼 처방한 일수·잔여 일수가 자동으로 나온다.
+      if (kind === 'herb' && d > 0) await addManualPackage(supabase, { patientName: name, chartNo: chart, totalDays: d, startDate: paidDate || today });
       setName('');
       setChart('');
       setDays('');
@@ -300,13 +320,21 @@ export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: num
 
   return (
     <div>
-      <h2 style={{ fontSize: 17, margin: '20px 0 8px' }}>🌿 한약 환자 ({active.length}명)</h2>
+      <h2 style={{ fontSize: 17, margin: '20px 0 8px' }}>
+        {kind === 'diet' ? '🥗 린다이어트 환자' : '🌿 한약 환자'} ({active.length}명)
+      </h2>
       <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 12 }}>
-        챙기고 싶은 환자를 직접 등록하세요. 환자명을 치면 처방전에 있는 환자가 떠서 차트번호까지 한 번에 고를 수 있어요. 비급여 현황에서 한약 결제 일수를 넣은 환자는 결제·처방·잔여 일수가 자동으로 나와요(이전에 결제한 환자는 아래 &quot;결제 일수&quot;에 넣어 주세요). 패키지 전체는{' '}
-        <Link href="/herb-packages" style={{ textDecoration: 'underline' }}>
-          한약 패키지 현황
-        </Link>
-        에서 볼 수 있어요.
+        {kind === 'diet' ? (
+          <>챙기고 싶은 린다이어트 환자를 직접 등록하세요. 이름을 치면 비급여 현황에서 린다이어트를 결제한 환자가 떠서 차트번호까지 한 번에 고를 수 있어요. 다음 해피콜 날짜를 정하면 그날 &quot;오늘 연락할 분&quot;에 떠요.</>
+        ) : (
+          <>
+            챙기고 싶은 환자를 직접 등록하세요. 환자명을 치면 처방전에 있는 환자가 떠서 차트번호까지 한 번에 고를 수 있어요. 비급여 현황에서 한약 결제 일수를 넣은 환자는 결제·처방·잔여 일수가 자동으로 나와요(이전에 결제한 환자는 아래 &quot;결제 일수&quot;에 넣어 주세요). 패키지 전체는{' '}
+            <Link href="/herb-packages" style={{ textDecoration: 'underline' }}>
+              한약 패키지 현황
+            </Link>
+            에서 볼 수 있어요.
+          </>
+        )}
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
         <label style={{ fontSize: 12, width: 180 }}>
@@ -325,6 +353,7 @@ export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: num
           차트번호
           <input className="input-field" value={chart} onChange={(e) => setChart(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} placeholder="고르면 채워져요" style={{ display: 'block', width: 120, fontSize: 13 }} />
         </label>
+        {kind === 'herb' && (
         <label style={{ fontSize: 12 }}>
           결제 일수(선택)
           <select value={days} onChange={(e) => setDays(e.target.value)} style={{ display: 'block', fontSize: 13, padding: 4 }}>
@@ -336,7 +365,8 @@ export function CareHerbPatients({ reloadKey, onCallsChanged }: { reloadKey: num
             ))}
           </select>
         </label>
-        {days && (
+        )}
+        {kind === 'herb' && days && (
           <label style={{ fontSize: 12 }}>
             결제일
             <input type="date" className="input-field" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} style={{ display: 'block', fontSize: 13 }} />
