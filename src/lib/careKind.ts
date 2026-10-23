@@ -2,6 +2,7 @@
 // 한약·공진단·경옥고·린다이어트를 결제하고 가면 자동으로 케어 보드에 올라가고, 종류마다 해피콜이 달라서 구역을 나눈다.
 
 import { isDietProgramPurchase } from './dietProgram';
+import { addDaysKst } from './kst';
 
 export type CareKind = 'herb' | 'diet' | 'special';
 
@@ -25,4 +26,18 @@ export function careKindForPurchase(productName: string, goalCategory: string | 
   if (goalCategory === 'special_herb') return 'special';
   if (goalCategory === 'herb') return 'herb';
   return null;
+}
+
+/** 린다이어트 환자의 메모 기본 문구 — 다이어트환 시작일부터 3일은 매일, 그 뒤로는 주 1회 해피콜(원장 요청, 2026-10-23). */
+export const DIET_CARE_MEMO = '다이어트환 시작일부터 3일 매일, 이후 주1회 해피콜 해주세요';
+
+/** 디톡스를 하는 일수 — 다이어트환은 디톡스 시작일 + 이 일수째에 시작한다. */
+export const DETOX_DAYS = 3;
+
+/**
+ * 린다이어트 환자가 케어 보드에 새로 올라올 때의 기본값: 다음 해피콜 날짜는 디톡스 시작일 + 3일(다이어트환 시작일), 메모는 해피콜 안내.
+ * 디톡스 시작일을 모르면 날짜는 비워 두고 메모만 넣는다.
+ */
+export function dietCareDefaults(detoxStartDate: string | null | undefined): { nextCallDate: string | null; memo: string } {
+  return { nextCallDate: detoxStartDate ? addDaysKst(detoxStartDate, DETOX_DAYS) : null, memo: DIET_CARE_MEMO };
 }

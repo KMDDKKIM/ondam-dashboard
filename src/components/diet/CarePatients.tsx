@@ -21,10 +21,12 @@ const KIND_EMOJI: Record<CareKind, string> = { herb: '🌿', diet: '🥗', speci
 
 function Stat({ label, children, warn }: { label: string; children: React.ReactNode; warn?: boolean }) {
   return (
-    <div>
-      <div style={labelStyle}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: warn ? 'var(--color-error)' : undefined, whiteSpace: 'nowrap' }}>{children}</div>
-    </div>
+    <span style={{ whiteSpace: 'nowrap' }}>
+      <span className="muted-text" style={{ fontSize: 11 }}>
+        {label}{' '}
+      </span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: warn ? 'var(--color-error)' : undefined }}>{children}</span>
+    </span>
   );
 }
 
@@ -94,12 +96,14 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
           : '최근 결제 없음'
         : label || (herb ? '처방명 없음' : '처방전 없음');
 
+  const [memoFocus, setMemoFocus] = useState(false);
+
   return (
-    <div className="card" style={{ padding: 10, marginBottom: 8, opacity: ended ? 0.75 : 1, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
-      <div style={{ flex: '1 1 440px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-          <span style={{ fontWeight: 800, fontSize: 15 }}>{p.patientName}</span>
-          {p.chartNo && <span className="muted-text" style={{ fontSize: 11 }}>차트 {p.chartNo}</span>}
+    <div className="card" style={{ padding: '6px 10px', marginBottom: 6, opacity: ended ? 0.75 : 1, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 480px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 800, fontSize: 14 }}>{p.patientName}</span>
+          {p.chartNo && <span className="muted-text" style={{ fontSize: 11 }}>{p.chartNo}</span>}
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-teal-deep)' }}>{headLabel}</span>
           {p.kind === 'herb' && herb && (
             <span className="muted-text" style={{ fontSize: 11 }}>
@@ -110,7 +114,7 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
           {p.kind === 'special' && lastSpecial && <span className="muted-text" style={{ fontSize: 11 }}>{koDate(lastSpecial.purchaseDate)} 결제</span>}
           {ended && <span className="muted-text" style={{ fontSize: 11 }}>종료{p.endedAt ? ` ${koDate(p.endedAt)}` : ''}</span>}
           <span style={{ flex: 1 }} />
-          <select value={p.kind} onChange={(e) => onKind(p, e.target.value as CareKind)} title="종류를 바꾸면 그 구역으로 옮겨져요" aria-label={`${p.patientName} 종류`} style={{ fontSize: 11, padding: '1px 2px' }}>
+          <select value={p.kind} onChange={(e) => onKind(p, e.target.value as CareKind)} title="종류를 바꾸면 그 구역으로 옮겨져요" aria-label={`${p.patientName} 종류`} style={{ fontSize: 11, padding: '0 2px' }}>
             {CARE_KINDS.map((k) => (
               <option key={k} value={k}>
                 {CARE_KIND_SHORT[k]}
@@ -118,24 +122,24 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
             ))}
           </select>
           {ended ? (
-            <button type="button" onClick={() => onResume(p)} style={{ fontSize: 11, padding: '2px 8px' }}>
+            <button type="button" onClick={() => onResume(p)} style={{ fontSize: 11, padding: '1px 7px' }}>
               다시 진행
             </button>
           ) : (
-            <button type="button" onClick={() => onEnd(p)} style={{ fontSize: 11, padding: '2px 8px' }}>
+            <button type="button" onClick={() => onEnd(p)} style={{ fontSize: 11, padding: '1px 7px' }}>
               종료
             </button>
           )}
-          <button type="button" onClick={() => onDelete(p)} style={{ fontSize: 11, padding: '2px 8px', color: '#b3261e' }}>
+          <button type="button" onClick={() => onDelete(p)} style={{ fontSize: 11, padding: '1px 7px', color: '#b3261e' }}>
             삭제
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', rowGap: 6, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: '2px 14px', flexWrap: 'wrap', alignItems: 'center', marginTop: 3 }}>
           {p.kind === 'diet' && (
             <>
-              <Stat label="약 소진 예정">{programEnd ? `${koDate(programEnd)} (D-${Math.max(0, diffDaysKst(today, programEnd))})` : '-'}</Stat>
-              {!program && <span className="muted-text" style={{ fontSize: 11, alignSelf: 'center' }}>비급여 현황에서 린다이어트 디톡스 시작일을 등록하면 단계가 연결돼요</span>}
+              <Stat label="약 소진">{programEnd ? `${koDate(programEnd)} (D-${Math.max(0, diffDaysKst(today, programEnd))})` : '-'}</Stat>
+              {!program && <span className="muted-text" style={{ fontSize: 11 }}>비급여에 디톡스 시작일을 등록하면 단계가 연결돼요</span>}
             </>
           )}
           {p.kind === 'herb' && (
@@ -144,9 +148,9 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
                 {herb ? herbCareStatus(herb) : '-'}
                 {herb?.pickupMissing && <span className="muted-text" style={{ fontSize: 10, fontWeight: 400 }}> (수령일 미입력)</span>}
               </Stat>
-              <Stat label="결제 일수">{balance ? `${balance.totalDays}일` : '-'}</Stat>
-              <Stat label="처방한 일수">{balance ? `${balance.usedDays}일` : '-'}</Stat>
-              <Stat label="잔여 일수" warn={!!balance && balance.remainingDays <= 14}>
+              <Stat label="결제">{balance ? `${balance.totalDays}일` : '-'}</Stat>
+              <Stat label="처방">{balance ? `${balance.usedDays}일` : '-'}</Stat>
+              <Stat label="잔여" warn={!!balance && balance.remainingDays <= 14}>
                 {balance ? (balance.overDays > 0 ? `${balance.overDays}일 초과` : `${balance.remainingDays}일`) : '-'}
               </Stat>
             </>
@@ -158,88 +162,91 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
                 <span className="muted-text" style={{ fontSize: 10, fontWeight: 400 }}> {sinceLast === 0 ? '오늘' : `${sinceLast}일 지남`}</span>
               </>
             ) : (
-              '기록 없음'
+              '없음'
             )}
           </Stat>
-          <div>
-            <div style={labelStyle}>다음 해피콜 (정하면 그날 오늘 연락할 분에 떠요)</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
-                type="date"
-                className="input-field"
-                value={p.nextCallDate ?? ''}
-                disabled={ended}
-                onChange={(e) => void onPatch(p, { nextCallDate: e.target.value })}
-                style={{ fontSize: 12, padding: '2px 4px', width: 128 }}
-                aria-label={`${p.patientName} 다음 해피콜 날짜`}
-              />
-              {p.nextCallDate && !ended && (
-                <button type="button" onClick={() => void onPatch(p, { nextCallDate: '' })} title="날짜 지우기" style={{ fontSize: 11, padding: '1px 6px' }}>
-                  ✕
-                </button>
-              )}
-              {dueNow && !ended && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-error)' }}>
-                  {p.nextCallDate === today ? '오늘!' : `${diffDaysKst(p.nextCallDate as string, today)}일 밀림`}
-                </span>
-              )}
-            </div>
-            {!p.nextCallDate && desk.nextCallDate && (
-              <div className="muted-text" style={{ fontSize: 10 }}>데스크 해피콜 예정 {koDate(desk.nextCallDate)}</div>
+          <span style={{ whiteSpace: 'nowrap' }}>
+            <span className="muted-text" style={{ fontSize: 11 }} title="정하면 그날 오늘 연락할 분에 떠요">
+              다음 해피콜{' '}
+            </span>
+            <input
+              type="date"
+              className="input-field"
+              value={p.nextCallDate ?? ''}
+              disabled={ended}
+              onChange={(e) => void onPatch(p, { nextCallDate: e.target.value })}
+              style={{ fontSize: 12, padding: '0 3px', width: 118, height: 22 }}
+              aria-label={`${p.patientName} 다음 해피콜 날짜`}
+            />
+            {p.nextCallDate && !ended && (
+              <button type="button" onClick={() => void onPatch(p, { nextCallDate: '' })} title="날짜 지우기" style={{ fontSize: 10, padding: '0 4px', marginLeft: 3 }}>
+                ✕
+              </button>
             )}
-          </div>
+            {dueNow && !ended && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-error)', marginLeft: 4 }}>
+                {p.nextCallDate === today ? '오늘!' : `${diffDaysKst(p.nextCallDate as string, today)}일 밀림`}
+              </span>
+            )}
+            {!p.nextCallDate && desk.nextCallDate && (
+              <span className="muted-text" style={{ fontSize: 10, marginLeft: 4 }}>(데스크 {koDate(desk.nextCallDate)})</span>
+            )}
+          </span>
+          {!ended && p.kind === 'herb' && (
+            <>
+              {p.packages.map((k) => (
+                <span key={k.id} className="muted-text" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                  📦{k.totalDays}일·{koDate(k.startDate)}{k.manual ? '(직접)' : ''}
+                  {k.manual && (
+                    <button type="button" onClick={() => void removePackage(k.id)} title="지우기" style={{ fontSize: 10, padding: '0 3px', marginLeft: 2 }}>
+                      ✕
+                    </button>
+                  )}
+                </span>
+              ))}
+              <button type="button" onClick={() => setPkgOpen((v) => !v)} style={{ fontSize: 10, padding: '0 6px' }}>
+                {pkgOpen ? '닫기' : p.packages.length > 0 ? '+ 결제' : '+ 결제 일수'}
+              </button>
+            </>
+          )}
         </div>
 
-        {!ended && p.kind === 'herb' && (
-          <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {p.packages.map((k) => (
-              <span key={k.id} className="muted-text" style={{ fontSize: 11 }}>
-                📦 {k.totalDays}일 · {koDate(k.startDate)} 결제{k.manual ? ' (직접 입력)' : ''}
-                {k.manual && (
-                  <button type="button" onClick={() => void removePackage(k.id)} title="지우기" style={{ fontSize: 10, padding: '0 4px', marginLeft: 3 }}>
-                    ✕
-                  </button>
-                )}
-              </span>
-            ))}
-            <button type="button" onClick={() => setPkgOpen((v) => !v)} style={{ fontSize: 11, padding: '1px 8px' }}>
-              {pkgOpen ? '닫기' : p.packages.length > 0 ? '+ 결제 추가' : '+ 결제 일수 입력'}
+        {!ended && p.kind === 'herb' && pkgOpen && (
+          <div style={{ marginTop: 4, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={PACKAGE_PRESETS.includes(Number(pkgDays)) ? pkgDays : ''} onChange={(e) => e.target.value && setPkgDays(e.target.value)} style={{ fontSize: 12, padding: 2 }} aria-label="결제 일수">
+              {PACKAGE_PRESETS.map((d) => (
+                <option key={d} value={d}>
+                  {d}일
+                </option>
+              ))}
+              <option value="">직접</option>
+            </select>
+            <input type="number" min={1} className="input-field" value={pkgDays} onChange={(e) => setPkgDays(e.target.value)} style={{ width: 54, fontSize: 12, padding: '2px 4px' }} aria-label="결제 일수 직접 입력" />
+            <span className="muted-text" style={{ fontSize: 11 }}>일 · 결제일</span>
+            <input type="date" className="input-field" value={pkgDate} onChange={(e) => setPkgDate(e.target.value)} style={{ fontSize: 12, padding: '2px 4px', width: 128 }} aria-label="결제일" />
+            <button type="button" className="btn-primary" disabled={pkgBusy} onClick={() => void addPackage()} style={{ fontSize: 11, padding: '2px 10px' }}>
+              추가
             </button>
-            {pkgOpen && (
-              <>
-                <select value={PACKAGE_PRESETS.includes(Number(pkgDays)) ? pkgDays : ''} onChange={(e) => e.target.value && setPkgDays(e.target.value)} style={{ fontSize: 12, padding: 2 }} aria-label="결제 일수">
-                  {PACKAGE_PRESETS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}일
-                    </option>
-                  ))}
-                  <option value="">직접</option>
-                </select>
-                <input type="number" min={1} className="input-field" value={pkgDays} onChange={(e) => setPkgDays(e.target.value)} style={{ width: 54, fontSize: 12, padding: '2px 4px' }} aria-label="결제 일수 직접 입력" />
-                <span className="muted-text" style={{ fontSize: 11 }}>일 · 결제일</span>
-                <input type="date" className="input-field" value={pkgDate} onChange={(e) => setPkgDate(e.target.value)} style={{ fontSize: 12, padding: '2px 4px', width: 128 }} aria-label="결제일" />
-                <button type="button" className="btn-primary" disabled={pkgBusy} onClick={() => void addPackage()} style={{ fontSize: 11, padding: '2px 10px' }}>
-                  추가
-                </button>
-              </>
-            )}
           </div>
         )}
       </div>
 
-      <div style={{ flex: '0 1 300px', minWidth: 230, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
-          <span>메모 — 중점적으로 볼 것 · 저번 상담 내용</span>
-          {saved && <span style={{ color: 'var(--color-green)' }}>✓ 저장</span>}
-        </div>
+      <div style={{ flex: '0 1 300px', minWidth: 220, position: 'relative' }}>
         <textarea
           className="input-field"
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
-          onBlur={() => void saveMemo()}
-          placeholder={'중점: 수면·소화 확인\n저번(10/14): 속쓰림 호소, 식후 30분 복용 안내'}
-          style={{ width: '100%', flex: 1, minHeight: 78, fontSize: 12, lineHeight: 1.45, resize: 'vertical' }}
+          onFocus={() => setMemoFocus(true)}
+          onBlur={() => {
+            setMemoFocus(false);
+            void saveMemo();
+          }}
+          placeholder="메모 — 중점적으로 볼 것 · 저번 상담 내용"
+          aria-label={`${p.patientName} 메모`}
+          // 평소에는 두 줄 높이로 줄여 두고, 눌러서 쓸 때만 펼친다(환자가 쌓여도 한 화면에 많이 보이게).
+          style={{ width: '100%', height: memoFocus ? 120 : 42, fontSize: 12, lineHeight: 1.4, resize: 'vertical', transition: 'height 0.12s' }}
         />
+        {saved && <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 10, color: 'var(--color-green)' }}>✓ 저장</span>}
       </div>
     </div>
   );

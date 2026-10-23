@@ -173,7 +173,7 @@ export async function createNonCoveredPurchase(
   if (error) throw error;
   const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
   // 한약·공진단·경옥고·린다이어트 결제는 원장 케어 보드에 환자를 자동으로 올린다(원장 요청, 2026-10-23). 실패해도 결제 등록은 유지한다.
-  await autoAddCarePatient({ patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory });
+  await autoAddCarePatient({ patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory, detoxStartDate: input.detoxStartDate ?? null });
   // 린다이어트 결제에 디톡스 시작일을 적었으면 프로그램을 만들어 해피콜 목록(데스크)·케어 보드(원장)에 연락할 일을 올린다. 실패해도 결제 등록은 유지한다.
   await syncDietProgramForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, phone: input.phone, productName: input.productName, goalCategory: input.goalCategory, purchaseDate: input.purchaseDate, detoxStartDate: input.detoxStartDate ?? null, dietWeeks: input.dietWeeks ?? null }, input.createdBy).catch(() => {});
   // 한약 3개월·1개월 결제면 한약 패키지(잔여 일수)를 만든다. 패키지 표 문제가 결제 등록을 막지 않게 오류는 삼킨다.
@@ -316,6 +316,8 @@ export async function updateNonCoveredPurchase(
     await removeOpenManualEntries(supabase, createdIds).catch(() => {});
     throw err;
   }
+  // 디톡스 시작일을 나중에 적었으면 케어 보드의 비어 있는 해피콜 날짜·메모를 채운다.
+  await autoAddCarePatient({ patientName: patch.patientName, chartNo: patch.chartNo, productName: patch.productName, goalCategory: patch.goalCategory, detoxStartDate: (patch.detoxStartDate !== undefined ? patch.detoxStartDate : existing.detoxStartDate) ?? null });
   await syncDietProgramForPurchase(supabase, { id: existing.id, patientName: patch.patientName, chartNo: patch.chartNo, phone: patch.phone, productName: patch.productName, goalCategory: patch.goalCategory, purchaseDate: patch.purchaseDate, detoxStartDate: (patch.detoxStartDate !== undefined ? patch.detoxStartDate : existing.detoxStartDate) ?? null, dietWeeks: (patch.dietWeeks !== undefined ? patch.dietWeeks : existing.dietWeeks) ?? null }, existing.createdBy).catch(() => {});
   await syncPackageForPurchase(supabase, { id: existing.id, patientName: patch.patientName, chartNo: patch.chartNo, productName: patch.productName, goalCategory: patch.goalCategory, durationDays: patch.durationDays, purchaseDate: patch.purchaseDate }, existing.createdBy).catch(() => {});
 
