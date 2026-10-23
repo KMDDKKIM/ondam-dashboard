@@ -9,7 +9,12 @@ export interface SidebarBadges {
   missingFirstVisits: number | null;
   /** 안읽은 네이버톡톡 메시지 수(못 읽으면 null) */
   naverTalkTalkUnread: number | null;
+  /** 오늘 연락할 환자 수 — 원장에게만 읽어 준다(그 밖의 사람·못 읽으면 null/생략) */
+  careDue?: number | null;
 }
+
+/** 케어 보드에서 날짜·종료·완료를 바꾸면 왼쪽 메뉴 숫자를 바로 다시 읽으라고 알리는 창 이벤트 이름 */
+export const BADGES_CHANGED_EVENT = 'ondam:badges-changed';
 
 /** 마지막으로 읽은 뒤 minGapMs 가 지났으면(또는 아직 읽은 적 없으면) 다시 읽는다. */
 export function shouldRefreshBadges(lastFetchedAt: number | null, now: number, minGapMs: number = SIDEBAR_BADGE_REFRESH_MS): boolean {

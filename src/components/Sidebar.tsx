@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { isActivePath, visibleGroups } from '@/lib/navItems';
 import type { StaffGrade } from '@/lib/staffGrade';
 import { openChatWindow } from '@/lib/openChatWindow';
-import { shouldRefreshBadges, type SidebarBadges } from '@/lib/sidebarBadges';
+import { BADGES_CHANGED_EVENT, shouldRefreshBadges, type SidebarBadges } from '@/lib/sidebarBadges';
 
 interface SidebarProps {
   isOwner: boolean;
@@ -55,18 +55,21 @@ export function Sidebar({
   hasIncentiveProfile = false,
 }: SidebarProps) {
   const pathname = usePathname();
-  const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null, naverTalkTalkUnread: null });
+  const [badges, setBadges] = useState<SidebarBadges>({ openCalls: null, missingFirstVisits: null, naverTalkTalkUnread: null, careDue: null });
   const inFlight = useRef(false);
   const openCallCount = badges.openCalls ?? 0;
   const firstVisitMissingCount = badges.missingFirstVisits ?? 0;
+  // 케어 보드 숫자: 읽어 온 값이 있으면 그것(화면을 옮길 때마다 갱신), 없으면 페이지를 열 때 서버에서 계산해 내려온 값.
+  const careDue = badges.careDue ?? careDueCount;
   // 원장님에게는 "주문해야 할 신청"을, 데스크 직원에게는 "도착 확인해야 할 신청"을 보여준다(supplyOpenCount는 layout.tsx에서 이미 역할별로 골라서 내려온다).
   const supplyBadgeLabel = isOwner ? '주문 대기 물품신청' : '도착 확인 대기 물품신청';
 
-  const refreshBadges = useCallback(async () => {
-    if (inFlight.current || !shouldRefreshBadges(lastBadgeFetchAt, Date.now())) return;
+  const refreshBadges = useCallback(async (force = false) => {
+    if (inFlight.current || (!force && !shouldRefreshBadges(lastBadgeFetchAt, Date.now()))) return;
     inFlight.current = true;
     try {
-      const response = await fetch('/api/sidebar-badges');
+      // 바로 다시 읽을 때는 브라우저가 1분간 들고 있는 이전 응답을 쓰지 않는다.
+      const response = await fetch('/api/sidebar-badges', force ? { cache: 'no-store' } : undefined);
       if (!response.ok) return;
       const body = (await response.json()) as SidebarBadges;
       lastBadgeFetchAt = Date.now();
@@ -75,6 +78,7 @@ export function Sidebar({
         openCalls: body.openCalls ?? prev.openCalls,
         missingFirstVisits: body.missingFirstVisits ?? prev.missingFirstVisits,
         naverTalkTalkUnread: body.naverTalkTalkUnread ?? prev.naverTalkTalkUnread,
+        careDue: body.careDue ?? prev.careDue,
       }));
     } catch {
       // 배지를 못 읽어도 메뉴는 정상 동작한다.
@@ -89,8 +93,14 @@ export function Sidebar({
   }, [pathname, refreshBadges]);
   useEffect(() => {
     const onFocus = () => void refreshBadges();
+    // 케어 보드에서 해피콜 날짜·완료·종료를 바꾸면 숫자를 바로 다시 읽는다.
+    const onChanged = () => void refreshBadges(true);
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    window.addEventListener(BADGES_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener(BADGES_CHANGED_EVENT, onChanged);
+    };
   }, [refreshBadges]);
   const [pref, setPref] = useState<'open' | 'collapsed' | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -229,6 +239,9 @@ export function Sidebar({
                     {item.href === '/supply-requests' && supplyOpenCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`${supplyBadgeLabel} ${supplyOpenCount}건`} />
                     )}
+                    {item.href === '/care-board' && careDue > 0 && collapsed && (
+                      <span className="side-dot" aria-label={`오늘 연락할 환자 ${careDue}명`} />
+                    )}
                     {item.href === '/leave' && pendingLeaveCount > 0 && collapsed && (
                       <span className="side-dot" aria-label={`승인 대기 중인 연차 신청 ${pendingLeaveCount}건`} />
                     )}
@@ -268,9 +281,9 @@ export function Sidebar({
                           {supplyOpenCount > 99 ? '99+' : supplyOpenCount}
                         </span>
                       )}
-                      {item.href === '/care-board' && careDueCount > 0 && (
+                      {item.href === '/care-board' && careDue > 0 && (
                         <span className="side-badge" title="오늘 연락할 환자">
-                          {careDueCount > 99 ? '99+' : careDueCount}
+                          {careDue > 99 ? '99+' : careDue}
                         </span>
                       )}
                       {item.href === '/leave' && pendingLeaveCount > 0 && (

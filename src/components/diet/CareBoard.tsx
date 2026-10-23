@@ -9,7 +9,13 @@ import { createClient } from '@/lib/supabase/client';
 import { loadOwnerDue, recordOwnerSend } from '@/lib/supabase/dietPrograms';
 import { listCareDue, updateCarePatient, type CarePatient } from '@/lib/supabase/herbCare';
 import { currentStaff } from '@/lib/supabase/herbQueue';
+import { BADGES_CHANGED_EVENT } from '@/lib/sidebarBadges';
 import { CarePatients } from './CarePatients';
+
+// 왼쪽 메뉴의 숫자를 바로 다시 읽게 알린다.
+function notifyBadgesChanged() {
+  window.dispatchEvent(new Event(BADGES_CHANGED_EVENT));
+}
 
 
 function DueCard({ program, item, doctorName, onDone }: { program: DietProgram; item: DueMessage; doctorName: string; onDone: (item: DueMessage, action: 'sent' | 'skipped') => Promise<void> }) {
@@ -147,6 +153,7 @@ export function CareBoard() {
   async function onDone(item: DueMessage, action: 'sent' | 'skipped') {
     await recordOwnerSend(supabase, { programId: item.programId, code: item.code, dueDate: item.dueDate }, action, staffId, today);
     setDue((prev) => prev.filter((d) => !(d.programId === item.programId && d.code === item.code && d.dueDate === item.dueDate)));
+    notifyBadgesChanged(); // 왼쪽 메뉴의 "오늘 연락할 환자" 숫자도 바로 줄인다
     if (action === 'sent') setPrograms((prev) => prev.map((p) => (p.id === item.programId ? { ...p, lastDoctorContactDate: today } : p)));
   }
 
@@ -155,6 +162,7 @@ export function CareBoard() {
     else await updateCarePatient(supabase, p.id, { nextCallDate: addDaysKst(today, 1) });
     setCareDue((prev) => prev.filter((x) => x.id !== p.id));
     setCareVersion((v) => v + 1);
+    notifyBadgesChanged(); // 왼쪽 메뉴의 "오늘 연락할 환자" 숫자도 바로 줄인다
   }
 
   const byId = new Map(programs.map((p) => [p.id, p]));
@@ -177,7 +185,13 @@ export function CareBoard() {
         return program ? <DueCard key={`${item.programId}|${item.code}|${item.dueDate}`} program={program} item={item} doctorName={doctorName} onDone={onDone} /> : null;
       })}
 
-      <CarePatients reloadKey={careVersion} onCallsChanged={() => void load()} />
+      <CarePatients
+        reloadKey={careVersion}
+        onCallsChanged={() => {
+          void load();
+          notifyBadgesChanged(); // 날짜·종료를 바꾸면 왼쪽 메뉴 숫자도 다시 읽는다
+        }}
+      />
     </div>
   );
 }

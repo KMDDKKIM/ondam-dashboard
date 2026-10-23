@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { requireApprovedStaff } from '@/lib/supabase/requireStaff';
+import { getCurrentApprovedStaff, requireApprovedStaff } from '@/lib/supabase/requireStaff';
+import { countOwnerDue } from '@/lib/supabase/dietPrograms';
 import { createClient } from '@/lib/supabase/server';
 import { todayKst } from '@/lib/kst';
 import { withTimeout } from '@/lib/withTimeout';
@@ -17,7 +18,8 @@ export async function GET() {
   if (denied) return denied;
   const today = todayKst();
   const supabase = await createClient();
-  const [openCalls, missingFirstVisits, naverTalkTalkUnread] = await Promise.all([
+  const me = await getCurrentApprovedStaff();
+  const [openCalls, missingFirstVisits, naverTalkTalkUnread, careDue] = await Promise.all([
     withTimeout(
       getOpenCallCounts(today).then((c) => c.open),
       LOOKUP_TIMEOUT_MS
@@ -27,7 +29,9 @@ export async function GET() {
       LOOKUP_TIMEOUT_MS
     ),
     withTimeout(countUnreadNaverTalkTalk(supabase), LOOKUP_TIMEOUT_MS),
+    // 케어 보드(원장 전용)의 "오늘 연락할 환자" 수. 원장이 아니면 읽지 않는다.
+    me?.isOwner ? withTimeout(countOwnerDue(supabase, today), LOOKUP_TIMEOUT_MS) : Promise.resolve(null),
   ]);
-  const body: SidebarBadges = { openCalls, missingFirstVisits, naverTalkTalkUnread };
+  const body: SidebarBadges = { openCalls, missingFirstVisits, naverTalkTalkUnread, careDue };
   return NextResponse.json(body, { headers: { 'Cache-Control': 'private, max-age=60' } });
 }
