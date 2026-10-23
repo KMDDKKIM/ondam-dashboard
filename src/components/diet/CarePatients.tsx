@@ -11,7 +11,7 @@ import { herbCareStatus, prescriptionLabel } from '@/lib/herbCare';
 import { diffDaysKst, todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
 import { listDietPrograms } from '@/lib/supabase/dietPrograms';
-import { addCarePatient, deleteCarePatient, listCarePatients, listKnownPurchasePatients, loadCarePatientStatus, updateCarePatient, type CarePatientPatch, type CarePatientStatus } from '@/lib/supabase/herbCare';
+import { addCarePatient, listCarePatients, listKnownPurchasePatients, loadCarePatientStatus, updateCarePatient, type CarePatientPatch, type CarePatientStatus } from '@/lib/supabase/herbCare';
 import { listKnownHerbCompoundingPatients, type KnownHerbPatient } from '@/lib/supabase/herbCompounding';
 import { addManualPackage, deleteManualPackage } from '@/lib/supabase/herbPackages';
 
@@ -36,12 +36,11 @@ interface CardProps {
   onPatch: (p: CarePatientStatus, patch: CarePatientPatch) => Promise<void>;
   onEnd: (p: CarePatientStatus) => void;
   onResume: (p: CarePatientStatus) => void;
-  onDelete: (p: CarePatientStatus) => void;
   onKind: (p: CarePatientStatus, kind: CareKind) => void;
   onPackagesChanged: () => Promise<void>;
 }
 
-function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onPackagesChanged }: CardProps) {
+function PatientCard({ p, today, onPatch, onEnd, onResume, onKind, onPackagesChanged }: CardProps) {
   const supabase = useMemo(() => createClient(), []);
   const [memo, setMemo] = useState(p.memo);
   const [saved, setSaved] = useState(false);
@@ -121,18 +120,6 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
               </option>
             ))}
           </select>
-          {ended ? (
-            <button type="button" onClick={() => onResume(p)} style={{ fontSize: 11, padding: '1px 7px' }}>
-              다시 진행
-            </button>
-          ) : (
-            <button type="button" onClick={() => onEnd(p)} style={{ fontSize: 11, padding: '1px 7px' }}>
-              종료
-            </button>
-          )}
-          <button type="button" onClick={() => onDelete(p)} style={{ fontSize: 11, padding: '1px 7px', color: '#b3261e' }}>
-            삭제
-          </button>
         </div>
 
         <div style={{ display: 'flex', gap: '2px 14px', flexWrap: 'wrap', alignItems: 'center', marginTop: 3 }}>
@@ -248,11 +235,24 @@ function PatientCard({ p, today, onPatch, onEnd, onResume, onDelete, onKind, onP
         />
         {saved && <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 10, color: 'var(--color-green)' }}>✓ 저장</span>}
       </div>
+
+      {/* 종료(또는 다시 진행)는 카드 맨 오른쪽에 둔다 */}
+      <div style={{ alignSelf: 'center', marginLeft: 'auto' }}>
+        {ended ? (
+          <button type="button" onClick={() => onResume(p)} style={{ fontSize: 12, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+            다시 진행
+          </button>
+        ) : (
+          <button type="button" onClick={() => onEnd(p)} style={{ fontSize: 12, padding: '3px 10px' }}>
+            종료
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-// 케어 보드의 환자 목록 — 한약·린다이어트·특수한약(공진단·경옥고 등)으로 나뉜 구역에서 원장이 환자를 추가·삭제하고, 다음 해피콜 날짜와 메모를 관리한다
+// 케어 보드의 환자 목록 — 한약·린다이어트·특수한약(공진단·경옥고 등)으로 나뉜 구역에서 원장이 환자를 추가·종료하고, 다음 해피콜 날짜와 메모를 관리한다
 // (원장 요청, 2026-10-23). 한약·공진단·경옥고·린다이어트를 결제하면 자동으로 올라오고, 직접 추가할 때는 종류를 골라 그 구역으로 넣는다.
 export function CarePatients({ reloadKey, onCallsChanged }: { reloadKey: number; onCallsChanged: () => void }) {
   const supabase = useMemo(() => createClient(), []);
@@ -356,25 +356,14 @@ export function CarePatients({ reloadKey, onCallsChanged }: { reloadKey: number;
     }
   }
 
-  async function remove(p: CarePatientStatus) {
-    if (!(await confirmDialog(`${p.patientName}님을 케어 보드에서 삭제할까요? (메모와 해피콜 날짜도 함께 사라지고 되돌릴 수 없어요. 나중에 다시 보려면 "종료"를 쓰세요)`, { confirmLabel: '삭제' }))) return;
-    try {
-      await deleteCarePatient(supabase, p.id);
-      setPatients((prev) => prev.filter((x) => x.id !== p.id));
-      onCallsChanged();
-    } catch {
-      setError('삭제하지 못했어요.');
-    }
-  }
-
-  const cardProps = { today, onPatch: patch, onEnd: end, onResume: resume, onDelete: remove, onKind: changeKind, onPackagesChanged: reload };
+  const cardProps = { today, onPatch: patch, onEnd: end, onResume: resume, onKind: changeKind, onPackagesChanged: reload };
   const ended = patients.filter((p) => p.status === 'ended');
 
   return (
     <div>
       <h2 style={{ fontSize: 17, margin: '0 0 6px' }}>👥 환자 추가</h2>
       <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 12 }}>
-        한약·공진단·경옥고·린다이어트를 결제하면 자동으로 올라와요. 직접 추가할 때는 종류를 고르면 그 구역으로 들어가요(종류는 카드에서도 바꿀 수 있어요). 이름을 치면 그 종류로 결제·처방한 환자가 후보로 떠요.
+        한약·공진단·경옥고·린다이어트를 결제하면 자동으로 올라와요. 직접 추가할 때는 종류를 고르면 그 구역으로 들어가요(종류는 카드에서도 바꿀 수 있어요). 빼고 싶은 환자는 카드 오른쪽 끝의 "종료"를 누르면 돼요. 이름을 치면 그 종류로 결제·처방한 환자가 후보로 떠요.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
         <label style={{ fontSize: 12 }}>

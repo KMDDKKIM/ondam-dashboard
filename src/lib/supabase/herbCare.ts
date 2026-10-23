@@ -142,13 +142,6 @@ export async function updateCarePatient(supabase: SupabaseClient, id: string, pa
   if (!data || data.length === 0) throw new Error('저장하지 못했어요.');
 }
 
-/** 케어 보드에서 환자를 완전히 지운다(메모·해피콜 날짜도 함께 사라진다). 종료와 달리 되돌릴 수 없다. */
-export async function deleteCarePatient(supabase: SupabaseClient, id: string): Promise<void> {
-  const { data, error } = await supabase.from('care_board_patients').delete().eq('id', id).select('id');
-  if (error) throw error;
-  if (!data || data.length === 0) throw new Error('삭제하지 못했어요.');
-}
-
 /** 등록한 환자들의 한약 복용 현황·패키지·해피콜 현황을 한꺼번에 읽는다. 일부 조회가 실패해도 나머지는 보여 준다. */
 export async function loadCarePatientStatus(supabase: SupabaseClient, patients: CarePatient[], today: string, programs: DietProgram[] = []): Promise<CarePatientStatus[]> {
   if (patients.length === 0) return [];
