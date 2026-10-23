@@ -2,17 +2,15 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { medicineEndDate, OWNER_MESSAGE_LABEL, phaseLabel, TRACK_LABEL, type DietProgram, type DueMessage } from '@/lib/dietProgram';
+import { OWNER_MESSAGE_LABEL, phaseLabel, TRACK_LABEL, type DietProgram, type DueMessage } from '@/lib/dietProgram';
 import { fillScript, koDate, OWNER_SCRIPTS, scriptValues } from '@/lib/dietScripts';
 import { addDaysKst, diffDaysKst, todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
 import { loadOwnerDue, recordOwnerSend } from '@/lib/supabase/dietPrograms';
 import { listCareDue, updateCarePatient, type CarePatient } from '@/lib/supabase/herbCare';
 import { currentStaff } from '@/lib/supabase/herbQueue';
-import { CareHerbPatients } from './CareHerbPatients';
+import { CarePatients } from './CarePatients';
 
-const th = { padding: '4px 8px', fontSize: 12, textAlign: 'left', color: 'var(--color-muted)', whiteSpace: 'nowrap' } as const;
-const td = { padding: '5px 8px', fontSize: 13, whiteSpace: 'nowrap' } as const;
 
 function DueCard({ program, item, doctorName, onDone }: { program: DietProgram; item: DueMessage; doctorName: string; onDone: (item: DueMessage, action: 'sent' | 'skipped') => Promise<void> }) {
   const initial = useMemo(() => fillScript(OWNER_SCRIPTS[item.code], scriptValues(program, item.code, doctorName, item.dueDate)), [program, item, doctorName]);
@@ -88,7 +86,7 @@ function CareCallCard({ patient, today, onDone }: { patient: CarePatient; today:
     <div className="card" style={{ padding: 12, marginBottom: 10, borderLeft: '4px solid var(--color-teal)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
         <span style={{ fontWeight: 800, fontSize: 16 }}>{patient.patientName}</span>
-        <span style={{ fontWeight: 700, color: 'var(--color-teal-deep)' }}>{patient.kind === 'diet' ? '🥗 린다이어트 해피콜' : '🌿 한약 해피콜'}</span>
+        <span style={{ fontWeight: 700, color: 'var(--color-teal-deep)' }}>{patient.kind === 'diet' ? '🥗 린다이어트 해피콜' : patient.kind === 'special' ? '💎 특수한약 해피콜' : '🌿 한약 해피콜'}</span>
         {patient.chartNo && <span className="muted-text" style={{ fontSize: 12 }}>차트 {patient.chartNo}</span>}
         {overdue > 0 && <span style={{ fontSize: 12, color: 'var(--color-error)', fontWeight: 700 }}>{overdue}일 지남</span>}
         {patient.lastCallDate && <span className="muted-text" style={{ fontSize: 12 }}>마지막 해피콜 {koDate(patient.lastCallDate)}</span>}
@@ -165,7 +163,7 @@ export function CareBoard() {
   return (
     <div>
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>케어 보드</h1>
-      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. 린다이어트는 <Link href="/non-covered-patients" style={{ textDecoration: 'underline' }}>비급여 현황</Link>에서 결제를 등록할 때 디톡스 시작일·주수를 적으면 자동으로 올라와요(디톡스 3일은 데스크 해피콜, 다이어트환 시작일은 여기서 원장님이 연락). 기록이 끊긴 분이나 이상 증상은 <a href="https://chart.leandiet.co.kr/briefing" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>린다이어트 차트 브리핑</a>의 "연락 필요 환자"에서 확인하세요.</p>
+      <p className="muted-text" style={{ margin: '0 0 14px', fontSize: 13 }}>원장님만 보이는 화면이에요. <Link href="/non-covered-patients" style={{ textDecoration: 'underline' }}>비급여 현황</Link>에서 한약·공진단·경옥고·린다이어트를 결제하면 환자가 자동으로 올라와요(린다이어트는 디톡스 시작일·주수를 적으면 디톡스 3일은 데스크 해피콜, 다이어트환 시작일은 여기서 원장님이 연락). 기록이 끊긴 분이나 이상 증상은 <a href="https://chart.leandiet.co.kr/briefing" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>린다이어트 차트 브리핑</a>의 "연락 필요 환자"에서 확인하세요.</p>
 
       <h2 style={{ fontSize: 17, margin: '0 0 8px' }}>📨 오늘 연락할 분 {dueTotal > 0 && <span style={{ color: 'var(--color-error)' }}>{dueTotal}건</span>}</h2>
       {loading && <p className="muted-text">불러오는 중…</p>}
@@ -179,38 +177,7 @@ export function CareBoard() {
         return program ? <DueCard key={`${item.programId}|${item.code}|${item.dueDate}`} program={program} item={item} doctorName={doctorName} onDone={onDone} /> : null;
       })}
 
-      <h2 style={{ fontSize: 17, margin: '20px 0 8px' }}>🥗 린다이어트 진행 중 ({programs.length}명)</h2>
-      {programs.length === 0 && !dietError && !loading && <p className="muted-text">진행 중인 환자가 없어요.</p>}
-      {programs.length > 0 && (
-        <div className="card" style={{ padding: 8, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
-                {['환자', '방식', '단계', '약 소진 예정', '마지막 원장 연락'].map((h) => (
-                  <th key={h} style={th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {programs.map((p) => {
-                const end = medicineEndDate(p);
-                return (
-                  <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
-                    <td style={{ ...td, fontWeight: 700 }}>{p.patientName}</td>
-                    <td style={td}>{TRACK_LABEL[p.track]}</td>
-                    <td style={td}>{phaseLabel(p, today)}</td>
-                    <td style={td}>{end ? `${koDate(end)} (D-${Math.max(0, diffDaysKst(today, end))})` : '-'}</td>
-                    <td style={td}>{p.lastDoctorContactDate ? koDate(p.lastDoctorContactDate) : '-'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <CareHerbPatients kind="diet" reloadKey={careVersion} onCallsChanged={() => void load()} />
-      <CareHerbPatients kind="herb" reloadKey={careVersion} onCallsChanged={() => void load()} />
+      <CarePatients reloadKey={careVersion} onCallsChanged={() => void load()} />
     </div>
   );
 }

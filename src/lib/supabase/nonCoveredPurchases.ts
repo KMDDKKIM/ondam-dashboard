@@ -9,6 +9,7 @@ import {
 } from './happyCallQueue';
 import { addDays } from '@/lib/happyCallStats';
 import { syncPackageForPurchase } from './herbPackages';
+import { autoAddCarePatient } from './careAutoAdd';
 import { deleteDietProgramForPurchase, syncDietProgramForPurchase } from './dietPrograms';
 import { CALL_SLOTS, callTypeForPurchase, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
 
@@ -171,6 +172,8 @@ export async function createNonCoveredPurchase(
     .single();
   if (error) throw error;
   const purchase = rowToPurchase(data as NonCoveredPurchaseRow);
+  // 한약·공진단·경옥고·린다이어트 결제는 원장 케어 보드에 환자를 자동으로 올린다(원장 요청, 2026-10-23). 실패해도 결제 등록은 유지한다.
+  await autoAddCarePatient({ patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory });
   // 린다이어트 결제에 디톡스 시작일을 적었으면 프로그램을 만들어 해피콜 목록(데스크)·케어 보드(원장)에 연락할 일을 올린다. 실패해도 결제 등록은 유지한다.
   await syncDietProgramForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, phone: input.phone, productName: input.productName, goalCategory: input.goalCategory, purchaseDate: input.purchaseDate, detoxStartDate: input.detoxStartDate ?? null, dietWeeks: input.dietWeeks ?? null }, input.createdBy).catch(() => {});
   // 한약 3개월·1개월 결제면 한약 패키지(잔여 일수)를 만든다. 패키지 표 문제가 결제 등록을 막지 않게 오류는 삼킨다.

@@ -3,6 +3,7 @@ import type { DietProgram } from '@/lib/dietProgram';
 import { samePatient } from '@/lib/dietReminders';
 import { buildHerbCare, summarizeCalls, type CallSummary, type HerbCareEntry, type HerbCareOrder } from '@/lib/herbCare';
 import { isCountedOrder, packageBalance, type PackageBalance } from '@/lib/herbPackage';
+import type { CareKind } from '@/lib/careKind';
 import { addDaysKst, kstDateOf } from '@/lib/kst';
 import type { PatientPackage } from './herbPackages';
 
@@ -10,8 +11,7 @@ import type { PatientPackage } from './herbPackages';
 // 자동으로 환자를 올리지 않고 원장이 하나하나 등록한 환자만 보여 준다(원장 요청, 2026-10-21).
 
 export type CareStatus = 'active' | 'ended';
-/** 케어 보드 환자 종류 — 한약 환자 / 린다이어트 환자 */
-export type CareKind = 'herb' | 'diet';
+export type { CareKind };
 
 export interface CarePatient {
   id: string;
@@ -39,6 +39,8 @@ export interface CarePatientStatus extends CarePatient {
   packages: PatientPackage[];
   /** 린다이어트 환자의 프로그램(비급여에서 디톡스 시작일을 등록했으면) */
   program: DietProgram | null;
+  /** 특수한약 환자의 가장 최근 결제(공진단·경옥고 등) */
+  lastSpecial: { productName: string; purchaseDate: string } | null;
 }
 
 interface PatientRow {
@@ -76,7 +78,7 @@ function rowToPatient(r: PatientRow): CarePatient {
     memo: r.memo ?? '',
     status: r.status === 'ended' ? 'ended' : 'active',
     endedAt: r.ended_at ?? null,
-    kind: r.kind === 'diet' ? 'diet' : 'herb',
+    kind: r.kind === 'diet' || r.kind === 'special' ? r.kind : 'herb',
     nextCallDate: r.next_call_date ?? null,
     lastCallDate: r.last_call_date ?? null,
   };
@@ -109,7 +111,7 @@ export async function addCarePatient(supabase: SupabaseClient, input: { patientN
   const { data, error } = await supabase
     .from('care_board_patients')
     // 한약 환자는 기본값(herb)이라 종류 칸을 안 보낸다(종류 칸을 만드는 SQL 전에도 한약 환자 등록은 된다).
-    .insert({ patient_name: input.patientName.trim(), chart_no: input.chartNo.trim() || null, memo: input.memo?.trim() || null, ...(input.kind === 'diet' ? { kind: 'diet' } : {}) })
+    .insert({ patient_name: input.patientName.trim(), chart_no: input.chartNo.trim() || null, memo: input.memo?.trim() || null, ...(input.kind && input.kind !== 'herb' ? { kind: input.kind } : {}) })
     .select('id')
     .single();
   if (error) throw error;
@@ -118,6 +120,8 @@ export async function addCarePatient(supabase: SupabaseClient, input: { patientN
 
 export interface CarePatientPatch {
   memo?: string;
+  /** 종류를 바꾸면 그 구역으로 옮겨진다 */
+  kind?: CareKind;
   status?: CareStatus;
   endedAt?: string | null;
   nextCallDate?: string | null;
@@ -128,6 +132,7 @@ export interface CarePatientPatch {
 export async function updateCarePatient(supabase: SupabaseClient, id: string, patch: CarePatientPatch): Promise<void> {
   const row: Record<string, unknown> = {};
   if (patch.memo !== undefined) row.memo = patch.memo.trim() || null;
+  if (patch.kind !== undefined) row.kind = patch.kind;
   if (patch.status !== undefined) row.status = patch.status;
   if (patch.endedAt !== undefined) row.ended_at = patch.endedAt || null;
   if (patch.nextCallDate !== undefined) row.next_call_date = patch.nextCallDate || null;
@@ -135,6 +140,13 @@ export async function updateCarePatient(supabase: SupabaseClient, id: string, pa
   const { data, error } = await supabase.from('care_board_patients').update(row).eq('id', id).select('id');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('저장하지 못했어요.');
+}
+
+/** 케어 보드에서 환자를 완전히 지운다(메모·해피콜 날짜도 함께 사라진다). 종료와 달리 되돌릴 수 없다. */
+export async function deleteCarePatient(supabase: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase.from('care_board_patients').delete().eq('id', id).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('삭제하지 못했어요.');
 }
 
 /** 등록한 환자들의 한약 복용 현황·패키지·해피콜 현황을 한꺼번에 읽는다. 일부 조회가 실패해도 나머지는 보여 준다. */
@@ -187,6 +199,22 @@ export async function loadCarePatientStatus(supabase: SupabaseClient, patients: 
     // 해피콜 일정 없이 보여 준다.
   }
 
+  // 특수한약(공진단·경옥고 등) 환자는 가장 최근 결제를 보여 준다.
+  const specials: { patient_name: string; chart_no: string | null; product_name: string; purchase_date: string }[] = [];
+  if (patients.some((p) => p.kind === 'special')) {
+    try {
+      const { data } = await supabase
+        .from('non_covered_purchases')
+        .select('patient_name, chart_no, product_name, purchase_date')
+        .eq('goal_category', 'special_herb')
+        .order('purchase_date', { ascending: false })
+        .limit(2000);
+      specials.push(...((data ?? []) as typeof specials));
+    } catch {
+      // 최근 결제 없이 보여 준다.
+    }
+  }
+
   return patients.map((p) => {
     // 차트번호가 있으면 차트번호로, 없으면 이름으로 환자의 처방전·패키지를 찾는다(처방전 쪽 차트번호가 비어 있으면 이름이 같을 때 그 환자의 것으로 본다).
     const orderMatches = (chartNo: string, name: string) => (p.chartNo ? chartNo === p.chartNo || (!chartNo && name === p.patientName) : name === p.patientName);
@@ -199,16 +227,18 @@ export async function loadCarePatientStatus(supabase: SupabaseClient, patients: 
       mine.filter((o) => isCountedOrder({ orderDate: o.orderDate, printedAt: o.printedAt }))
     );
     const program = p.kind === 'diet' ? (programs.find((g) => g.status === 'active' && samePatient(g, p)) ?? null) : null;
-    return { ...p, herb, balance, packages, program, desk: summarizeCalls(callsByName.get(p.patientName) ?? [], kstDateOf) };
+    const lastSpecialRow = p.kind === 'special' ? specials.find((x) => samePatient({ patientName: x.patient_name, chartNo: x.chart_no ?? '' }, p)) : undefined;
+    const lastSpecial = lastSpecialRow ? { productName: lastSpecialRow.product_name, purchaseDate: lastSpecialRow.purchase_date } : null;
+    return { ...p, herb, balance, packages, program, lastSpecial, desk: summarizeCalls(callsByName.get(p.patientName) ?? [], kstDateOf) };
   });
 }
 
-/** 린다이어트 환자를 등록할 때 이름을 치면 고를 수 있는 후보 — 비급여 현황에서 린다이어트(목표 반영: 다이어트)를 결제한 환자. */
-export async function listKnownDietPatients(supabase: SupabaseClient): Promise<{ patientName: string; chartNo: string }[]> {
+/** 린다이어트·특수한약 환자를 등록할 때 이름을 치면 고를 수 있는 후보 — 비급여 현황에서 그 목표(다이어트/특수한약)로 결제한 환자. */
+export async function listKnownPurchasePatients(supabase: SupabaseClient, goal: 'diet' | 'special_herb'): Promise<{ patientName: string; chartNo: string }[]> {
   const { data, error } = await supabase
     .from('non_covered_purchases')
     .select('patient_name, chart_no')
-    .eq('goal_category', 'diet')
+    .eq('goal_category', goal)
     .order('purchase_date', { ascending: false })
     .limit(1500);
   if (error) throw error;
