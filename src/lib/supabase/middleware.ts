@@ -33,7 +33,7 @@ export async function updateSession(request: NextRequest) {
   // 라우트 안에서 공유 비밀값(x-ingest-secret)으로 막는다.
   // /api/naver-talktalk-webhook 은 네이버 톡톡 파트너센터가 부르는 곳이라 세션이 없다(2026-09-23).
   // 다른 API는 여기 넣지 않는다(기본은 로그인 필요).
-  const publicPaths = ['/login', '/signup', '/api/signup', '/api/remote-consult/ingest', '/api/naver-talktalk-webhook'];
+  const publicPaths = ['/login', '/signup', '/api/signup', '/api/remote-consult/ingest', '/api/naver-talktalk-webhook', '/api/leandiet/report'];
 
   if (!user) {
     if (!publicPaths.includes(pathname)) {

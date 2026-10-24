@@ -36,6 +36,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/happy-call-list', label: '해피콜 목록', icon: '📋' },
       // 원장 전용 — 오늘 카톡 보낼 환자, 린다이어트·한약 복용 현황(원장 요청, 2026-10-20).
       { href: '/care-board', label: '케어 보드', icon: '💌', ownerOnly: true },
+      // 모든 직원 — 아침 리포트로 기록이 끊기거나 불편을 적은 린다이어트 환자를 해피콜/케어 보드로 보낸다(2026-10-24).
+      { href: '/leandiet-report', label: '린다이어트 기록 체크', icon: '🥗' },
       { href: '/remote-consult-alerts', label: '비대면진료 신청', icon: '📨' },
       { href: '/consult-summary', label: '상담 녹음 차팅', icon: '🩺', doctorsOnly: true },
     ],
