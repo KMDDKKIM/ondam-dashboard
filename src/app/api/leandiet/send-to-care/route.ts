@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { DIET_CARE_MEMO } from '@/lib/careKind';
 import { samePatient } from '@/lib/dietReminders';
 import { todayKst } from '@/lib/kst';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -64,7 +63,7 @@ export async function POST(request: Request) {
   } else {
     const { data: inserted, error: insertError } = await admin
       .from('care_board_patients')
-      .insert({ patient_name: patientName, kind: 'diet', memo: `${stamp}\n${DIET_CARE_MEMO}`, next_call_date: today })
+      .insert({ patient_name: patientName, kind: 'diet', memo: stamp, next_call_date: today })
       .select('id')
       .single();
     if (insertError || !inserted) return NextResponse.json({ error: '케어 보드에 올리지 못했어요.' }, { status: 500 });
