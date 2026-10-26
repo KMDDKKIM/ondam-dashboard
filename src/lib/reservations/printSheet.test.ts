@@ -98,11 +98,13 @@ describe('flattenForPrint / countByDoctor / printFontPt (가로 A4 한 장 시�
     ]);
   });
 
-  it('인원이 많을수록 글자가 작아지고 50명은 7pt', () => {
+  it('인원이 많을수록 글자가 작아지고 한 장에 들어가는 최대 인원(41명)까지는 7pt', () => {
     expect(printFontPt(10)).toBe(11);
+    expect(printFontPt(28)).toBe(11);
     expect(printFontPt(30)).toBe(10);
-    expect(printFontPt(36)).toBe(9);
-    expect(printFontPt(44)).toBe(8);
+    expect(printFontPt(33)).toBe(9);
+    expect(printFontPt(37)).toBe(8);
+    expect(printFontPt(41)).toBe(7);
     expect(printFontPt(50)).toBe(7);
   });
 });

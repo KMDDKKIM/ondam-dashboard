@@ -175,7 +175,7 @@ export function DayDetail({ date, onSaved }: DayDetailProps) {
         />
       </div>
 
-      {/* 인쇄용 예약 시트 — 가로 A4 한 장에 전체 예약을 시간순 한 표로(50명까지 한 장). 화면에는 안 보인다. */}
+      {/* 인쇄용 예약 시트 — 가로 A4 한 장에 전체 예약을 시간순 한 표로(41명까지 한 장). 화면에는 안 보인다. */}
       <div className="print-only print-sheet" style={{ ['--print-pt' as string]: `${printFontPt(printRows.length)}pt` }}>
         <h3>
           {date} 예약 ({printRows.length}명)

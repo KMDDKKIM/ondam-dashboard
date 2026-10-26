@@ -94,13 +94,17 @@ export function countByDoctor(rows: { printDoctor: string }[]): { doctorName: st
     });
 }
 
-/** 가로 A4 한 장(위아래 여백 6mm)에 들어가도록 인원수에 따라 글자 크기(pt)를 정한다. 50명은 7pt. */
-export const PRINT_MAX_ONE_PAGE = 50;
+/**
+ * 가로 A4 한 장(위아래 여백 6mm)에 들어가도록 인원수에 따라 글자 크기(pt)를 정한다. 위쪽에 현황 패널·주별 현황 표가 같이 찍혀서(약 45mm)
+ * 예전보다 한 장에 들어가는 인원이 줄었다 — 7pt 로 41명까지 한 장이고, 더 많으면 다음 장으로 이어진다(표 머리글은 장마다 반복).
+ * 기준은 실제 인쇄 레이아웃에서 잰 줄 높이다(11pt 약 5.2mm … 7pt 약 3.5mm).
+ */
+export const PRINT_MAX_ONE_PAGE = 41;
 
 export function printFontPt(count: number): number {
-  if (count <= 25) return 11;
-  if (count <= 32) return 10;
-  if (count <= 38) return 9;
-  if (count <= 44) return 8;
+  if (count <= 28) return 11;
+  if (count <= 30) return 10;
+  if (count <= 33) return 9;
+  if (count <= 37) return 8;
   return 7;
 }
