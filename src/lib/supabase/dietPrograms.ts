@@ -16,7 +16,8 @@ import {
 } from '@/lib/dietProgram';
 import { addDaysKst, todayKst } from '@/lib/kst';
 import { reminderDetail } from '@/lib/dietReminders';
-import { listCareDue } from './herbCare';
+import { groupTodayContacts } from '@/lib/careToday';
+import { listCareDue, type CarePatient } from './herbCare';
 import { createManualEntry, getManualEntryStates, removeOpenManualEntries, renameOpenManualEntries } from './happyCallQueue';
 
 // 린다이어트 프로그램(diet_programs), 원장 카톡 보냄 기록(diet_program_sends), 데스크 해피콜 연결(diet_program_calls).
@@ -289,22 +290,23 @@ export async function loadOwnerDue(supabase: SupabaseClient, today: string): Pro
  * 둘 다 읽지 못하면(표가 아직 없는 등) null(알림을 숨긴다). 하나만 못 읽으면 읽은 것만 센다.
  */
 export async function countOwnerDue(supabase: SupabaseClient, today: string): Promise<number | null> {
-  let total = 0;
+  let owner: { programs: DietProgram[]; due: DueMessage[] } = { programs: [], due: [] };
+  let careDue: CarePatient[] = [];
   let readSomething = false;
   try {
-    const { due } = await loadOwnerDue(supabase, today);
-    total += new Set(due.map((d) => d.programId)).size;
+    owner = await loadOwnerDue(supabase, today);
     readSomething = true;
   } catch {
     // 린다이어트 표가 없으면 이 부분은 건너뛴다.
   }
   try {
-    total += (await listCareDue(supabase, today)).length;
+    careDue = await listCareDue(supabase, today);
     readSomething = true;
   } catch {
     // 해피콜 날짜 칸이 없으면 이 부분은 건너뛴다.
   }
-  return readSomething ? total : null;
+  // 케어 보드와 같은 방식으로 센다 — 한 환자에게 해피콜과 카톡이 겹쳐도 한 명.
+  return readSomething ? groupTodayContacts(careDue, owner.due, owner.programs, today).length : null;
 }
 
 let lastReminderRun = 0;
