@@ -145,8 +145,3 @@ export function orderEdited(current: HerbCompoundingOrder, saved: HerbCompoundin
   const fields = (o: HerbCompoundingOrder) => [o.patientName.trim(), o.chartNo.trim(), o.prescriptionName.trim(), o.orderDate, o.packetCount, o.packVolumeMl, o.daysSupply, o.dosesPerDay, o.packCount, o.totalLiquidMl, o.memo.trim()];
   return JSON.stringify([fields(current), lines(current)]) !== JSON.stringify([fields(saved), lines(saved)]);
 }
-
-/** 불러온 처방전으로 다시 처방한다 — 내용은 그대로 복사하고 새 처방전(저장 전, 처방일은 오늘)으로 만든다. 원래 기록은 건드리지 않는다. */
-export function asReprescription(order: HerbCompoundingOrder, today: string): HerbCompoundingOrder {
-  return { ...order, id: '', orderDate: today, herbs: order.herbs.map((h) => ({ ...h })), createdAt: '', updatedAt: '' };
-}

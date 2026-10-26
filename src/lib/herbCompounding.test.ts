@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  asReprescription,
   canSaveOrder,
   computePackCount,
   herbLineTotal,
@@ -212,7 +211,7 @@ describe('duplicateHerbNames', () => {
   });
 });
 
-describe('orderEdited / asReprescription', () => {
+describe('orderEdited', () => {
   const base: HerbCompoundingOrder = {
     id: 'x', patientName: '가나다', chartNo: '1', prescriptionName: '시험탕', orderDate: '2026-10-01', packetCount: 15, packVolumeMl: 0, daysSupply: 15, dosesPerDay: 2, packCount: 30, totalLiquidMl: 0,
     herbs: [{ herbName: '당귀', prepMethod: '', gramsPerPacket: 6 }], memo: '', createdAt: 'a', updatedAt: 'b',
@@ -227,12 +226,5 @@ describe('orderEdited / asReprescription', () => {
     expect(orderEdited({ ...base, packetCount: 10 }, base)).toBe(true);
     expect(orderEdited({ ...base, memo: '메모' }, base)).toBe(true);
     expect(orderEdited({ ...base, herbs: [...base.herbs, { herbName: '천궁', prepMethod: '', gramsPerPacket: 4 }] }, base)).toBe(true);
-  });
-
-  it('재처방은 새 처방전(id 없음, 처방일 오늘)으로 복사하고 원본 약재 줄을 공유하지 않는다', () => {
-    const copy = asReprescription(base, '2026-10-26');
-    expect(copy).toMatchObject({ id: '', orderDate: '2026-10-26', createdAt: '', updatedAt: '', patientName: '가나다', packetCount: 15 });
-    copy.herbs[0].gramsPerPacket = 9;
-    expect(base.herbs[0].gramsPerPacket).toBe(6);
   });
 });

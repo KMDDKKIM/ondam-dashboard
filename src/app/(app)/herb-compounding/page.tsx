@@ -8,7 +8,7 @@ import { FormulaPicker } from '@/components/herbCompounding/FormulaPicker';
 import { PatientHistory } from '@/components/herbCompounding/PatientHistory';
 import { PrintSheet } from '@/components/herbCompounding/PrintSheet';
 import { herbPrintHref } from '@/lib/herb-print/handoff';
-import { asReprescription, canSaveOrder, incompleteHerbLines, orderEdited, type HerbCompoundingOrder } from '@/lib/herbCompounding';
+import { canSaveOrder, incompleteHerbLines, orderEdited, type HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { todayKst } from '@/lib/kst';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -126,7 +126,8 @@ export default function HerbCompoundingPage() {
   // 저장된 처방전을 고쳤는데 아직 수정하기를 누르지 않았는가
   const edited = Boolean(order.id && savedSnapshot && orderEdited(order, savedSnapshot));
 
-  async function handleSave(): Promise<boolean> {
+  // asNew: 불러온 처방전의 내용(고친 것 포함)을 새 처방전으로 저장한다 — 처방일은 오늘로 바꾸고 원래 기록은 그대로 둔다("처방하기").
+  async function handleSave(asNew = false): Promise<boolean> {
     if (!canSave) {
       setErrorMessage('환자명·첩수·약재(약재명과 그램)를 채워주세요.');
       return false;
@@ -142,7 +143,7 @@ export default function HerbCompoundingPage() {
         patientName: order.patientName,
         chartNo: order.chartNo,
         prescriptionName: order.prescriptionName,
-        orderDate: order.orderDate,
+        orderDate: asNew ? todayKst() : order.orderDate,
         packetCount: order.packetCount,
         packVolumeMl: order.packVolumeMl,
         daysSupply: order.daysSupply,
@@ -153,17 +154,18 @@ export default function HerbCompoundingPage() {
         memo: order.memo,
       };
       // 이미 저장된(불러온) 처방전이면 같은 기록을 고치고, 새 처방전이면 새로 저장한다 — 저장을 또 눌러 같은 처방전이 중복으로 쌓이지 않게.
-      const saved = order.id
+      const updating = Boolean(order.id) && !asNew;
+      const saved = updating
         ? await updateHerbCompoundingOrder(supabase, order.id, fields)
         : await createHerbCompoundingOrder(supabase, { ...fields, createdBy: user?.id ?? null });
       setOrder(saved);
       setSavedSnapshot(saved);
-      setSavedMessage(order.id ? '수정되었습니다.' : '저장되었습니다.');
+      setSavedMessage(asNew ? '새 처방전으로 저장되었어요(처방일 오늘).' : updating ? '수정되었습니다.' : '저장되었습니다.');
       setTimeout(() => setSavedMessage(''), 2000);
       refreshKnownPatients();
       return true;
     } catch {
-      setErrorMessage(order.id ? '수정에 실패했습니다. 다시 시도해 주세요.' : '저장에 실패했습니다. 다시 시도해 주세요.');
+      setErrorMessage(order.id && !asNew ? '수정에 실패했습니다. 다시 시도해 주세요.' : '저장에 실패했습니다. 다시 시도해 주세요.');
       return false;
     } finally {
       setSaving(false);
@@ -246,16 +248,6 @@ export default function HerbCompoundingPage() {
     return () => window.removeEventListener('afterprint', onAfterPrint);
   }, []);
 
-  // 불러온 처방전을 그대로 복사해 새 처방전으로 만든다(처방일은 오늘). 원래 기록은 그대로 남고, 고친 뒤 "저장하기"를 누르면 새 기록으로 저장된다.
-  function handleReprescribe() {
-    setOrder(asReprescription(order, todayKst()));
-    setSavedSnapshot(null);
-    setPrintedNotice(false);
-    setErrorMessage('');
-    setSavedMessage('재처방용으로 복사했어요. 필요한 곳을 고치고 저장하기를 눌러 주세요.');
-    setTimeout(() => setSavedMessage(''), 4000);
-  }
-
   function handleNew() {
     setOrder(makeEmptyOrder());
     setSavedSnapshot(null);
@@ -294,12 +286,12 @@ export default function HerbCompoundingPage() {
           incompleteLines={incompleteLines}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-          <button type="button" onClick={handleSave} disabled={saving} className="btn-primary">
+          <button type="button" onClick={() => void handleSave()} disabled={saving} className="btn-primary">
             {order.id ? (saving ? '수정 중...' : '수정하기') : saving ? '저장 중...' : '저장하기'}
           </button>
           {order.id && (
-            <button type="button" onClick={handleReprescribe} disabled={saving} title="이 처방전을 복사해 새 처방전(처방일 오늘)으로 만듭니다. 원래 기록은 그대로 남아요.">
-              재처방하기
+            <button type="button" onClick={() => void handleSave(true)} disabled={saving} title="지금 화면의 내용을 새 처방전으로 저장합니다(처방일은 오늘로 바뀌고, 원래 기록은 그대로 남아요).">
+              처방하기
             </button>
           )}
           <button type="button" onClick={handlePrint} disabled={!canSave || saving}>
@@ -342,7 +334,7 @@ export default function HerbCompoundingPage() {
         )}
         {order.id && (
           <p className="muted-text" style={{ fontSize: 12, marginTop: 6 }}>
-            저장된 처방전이에요. 고치면 <strong>수정하기</strong>로 같은 기록에 반영되고, 다시 처방하는 거면 <strong>재처방하기</strong>로 새 처방전을 만드세요.
+            저장된 처방전이에요. 약재를 고친 뒤 <strong>수정하기</strong>를 누르면 이 기록이 바뀌고, <strong>처방하기</strong>를 누르면 처방일이 오늘로 바뀐 새 처방전으로 저장돼요(원래 기록은 그대로).
             {edited && <span style={{ color: 'var(--color-error)', fontWeight: 700 }}> ⚠ 고친 내용이 아직 저장되지 않았어요.</span>}
           </p>
         )}
