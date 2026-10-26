@@ -412,8 +412,8 @@ export default function SupplyRequestsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                {['신청일', '분류', '품목', '신청자', '메모', '주문 링크', '주문완료', '도착완료', ''].map((h) => (
-                  <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
+                {['신청일', '분류', '품목', '신청자', '메모', '링크', '주문완료', '도착완료', ''].map((h) => (
+                  <th key={h} style={{ padding: '6px 8px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}
@@ -425,14 +425,14 @@ export default function SupplyRequestsPage() {
                 const aging = agingBadge(status, r.requestedAt, r.orderedAt, today);
                 const link = safeUrl(r.orderUrl);
                 const canDelete = me?.isOwner || (me?.id === r.requestedBy && !r.orderedAt);
-                const cell = { padding: '4px 10px', borderBottom: '1px solid var(--color-line)', verticalAlign: 'middle', whiteSpace: 'nowrap' } as const;
+                const cell = { padding: '4px 8px', borderBottom: '1px solid var(--color-line)', verticalAlign: 'middle', whiteSpace: 'nowrap' } as const;
                 // 진행 정도가 한눈에 보이게 행 배경을 살짝 물들인다(주문완료는 파랑, 도착완료는 초록).
                 const rowBg = status === 'received' ? 'rgba(47, 122, 69, 0.07)' : status === 'ordered' ? 'rgba(36, 93, 143, 0.06)' : undefined;
                 return (
                   <tr key={r.id} style={{ background: rowBg }}>
-                    <td style={cell}>{formatDate(r.requestedAt)}</td>
+                    <td style={cell} title={formatDate(r.requestedAt)}>{formatDate(r.requestedAt).slice(5).replace('-', '/')}</td>
                     <td style={cell}>{r.category}</td>
-                    <td style={{ ...cell, fontWeight: 600, whiteSpace: 'normal' }}>
+                    <td style={{ ...cell, fontWeight: 600, minWidth: 130 }}>
                       {r.itemName}
                       {aging && aging.level !== 'none' && (
                         <span
@@ -444,13 +444,13 @@ export default function SupplyRequestsPage() {
                       )}
                     </td>
                     <td style={cell}>{staffName(r.requestedBy) || '-'}</td>
-                    <td style={{ ...cell, color: 'var(--color-muted)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.memo || undefined}>
+                    <td style={{ ...cell, color: 'var(--color-muted)', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.memo || undefined}>
                       {r.memo || '-'}
                     </td>
                     <td style={cell}>
                       {link ? (
                         <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-brand-b)' }}>
-                          주문하러 가기 ↗
+                          주문 ↗
                         </a>
                       ) : (
                         '-'
