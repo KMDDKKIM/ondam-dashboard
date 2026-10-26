@@ -21,6 +21,7 @@ import {
   agingBadge,
   countOpen,
   findOpenDuplicates,
+  formatCheckTime,
   formatDate,
   matchesFilter,
   normalizeItemName,
@@ -47,12 +48,6 @@ const AGING_COLOR: Record<AgingLevel, { bg: string; fg: string }> = {
   yellow: { bg: '#fdf0c8', fg: '#7a5a00' },
   red: { bg: '#fbe0dd', fg: '#b3261e' },
 };
-
-const STATUS_COLOR = {
-  requested: { bg: '#faf1de', fg: '#8a6a1f' },
-  ordered: { bg: '#e0eefa', fg: '#245d8f' },
-  received: { bg: '#e6f3e4', fg: '#2f7a45' },
-} as const;
 
 export default function SupplyRequestsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -414,11 +409,11 @@ export default function SupplyRequestsPage() {
         <p className="muted-text">해당하는 신청이 없어요.</p>
       ) : (
         <div className="card" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--color-muted)', fontSize: 12 }}>
-                {['신청일', '분류', '품목', '신청자', '메모', '주문 링크', '진행 상태', ''].map((h) => (
-                  <th key={h} style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
+                {['신청일', '분류', '품목', '신청자', '메모', '주문 링크', '주문완료', '도착완료', ''].map((h) => (
+                  <th key={h} style={{ padding: '6px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}
@@ -430,17 +425,31 @@ export default function SupplyRequestsPage() {
                 const aging = agingBadge(status, r.requestedAt, r.orderedAt, today);
                 const link = safeUrl(r.orderUrl);
                 const canDelete = me?.isOwner || (me?.id === r.requestedBy && !r.orderedAt);
-                const cell = { padding: '10px 12px', borderBottom: '1px solid var(--color-line)', verticalAlign: 'top' } as const;
+                const cell = { padding: '4px 10px', borderBottom: '1px solid var(--color-line)', verticalAlign: 'middle', whiteSpace: 'nowrap' } as const;
+                // 진행 정도가 한눈에 보이게 행 배경을 살짝 물들인다(주문완료는 파랑, 도착완료는 초록).
+                const rowBg = status === 'received' ? 'rgba(47, 122, 69, 0.07)' : status === 'ordered' ? 'rgba(36, 93, 143, 0.06)' : undefined;
                 return (
-                  <tr key={r.id}>
-                    <td style={{ ...cell, whiteSpace: 'nowrap' }}>{formatDate(r.requestedAt)}</td>
-                    <td style={{ ...cell, whiteSpace: 'nowrap' }}>{r.category}</td>
-                    <td style={{ ...cell, fontWeight: 600 }}>{r.itemName}</td>
-                    <td style={{ ...cell, whiteSpace: 'nowrap' }}>{staffName(r.requestedBy) || '-'}</td>
-                    <td style={{ ...cell, color: 'var(--color-muted)' }}>{r.memo || '-'}</td>
+                  <tr key={r.id} style={{ background: rowBg }}>
+                    <td style={cell}>{formatDate(r.requestedAt)}</td>
+                    <td style={cell}>{r.category}</td>
+                    <td style={{ ...cell, fontWeight: 600, whiteSpace: 'normal' }}>
+                      {r.itemName}
+                      {aging && aging.level !== 'none' && (
+                        <span
+                          title={aging.label}
+                          style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: AGING_COLOR[aging.level].bg, color: AGING_COLOR[aging.level].fg }}
+                        >
+                          {aging.label}
+                        </span>
+                      )}
+                    </td>
+                    <td style={cell}>{staffName(r.requestedBy) || '-'}</td>
+                    <td style={{ ...cell, color: 'var(--color-muted)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.memo || undefined}>
+                      {r.memo || '-'}
+                    </td>
                     <td style={cell}>
                       {link ? (
-                        <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-brand-b)', whiteSpace: 'nowrap' }}>
+                        <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-brand-b)' }}>
                           주문하러 가기 ↗
                         </a>
                       ) : (
@@ -448,88 +457,28 @@ export default function SupplyRequestsPage() {
                       )}
                     </td>
                     <td style={cell}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '2px 10px',
-                          borderRadius: 999,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          background: STATUS_COLOR[status].bg,
-                          color: STATUS_COLOR[status].fg,
-                          marginBottom: 6,
-                        }}
-                      >
-                        {STATUS_LABEL[status]}
-                      </span>
-                      {aging && (
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            marginLeft: 6,
-                            padding: '2px 8px',
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            background: AGING_COLOR[aging.level].bg,
-                            color: AGING_COLOR[aging.level].fg,
-                            marginBottom: 6,
-                          }}
-                        >
-                          {aging.label}
-                        </span>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                        <div>
-                          {r.orderedAt ? (
-                            <span>
-                              주문 {formatDate(r.orderedAt)} ({staffName(r.orderedBy) || '-'}){' '}
-                              {me?.isOwner && (
-                                <LinkButton onClick={() => toggleOrdered(r)}>취소</LinkButton>
-                              )}
-                            </span>
-                          ) : me?.isOwner ? (
-                            <button onClick={() => toggleOrdered(r)} className="btn-primary" style={{ padding: '4px 10px', fontSize: 12 }}>
-                              주문완료 체크
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled
-                              title="대표원장이 주문 체크해요"
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: 12,
-                                borderRadius: 8,
-                                border: '1px solid var(--color-line)',
-                                background: 'var(--color-surface)',
-                                color: 'var(--color-muted)',
-                                cursor: 'not-allowed',
-                              }}
-                            >
-                              대표원장이 주문 체크해요
-                            </button>
-                          )}
-                        </div>
-                        {r.orderedAt && (
-                          <div>
-                            {r.receivedAt ? (
-                              <span>
-                                도착 {formatDate(r.receivedAt)} ({staffName(r.receivedBy) || '-'}){' '}
-                                <LinkButton onClick={() => toggleReceived(r)}>취소</LinkButton>
-                              </span>
-                            ) : (
-                              <button onClick={() => toggleReceived(r)} className="btn-primary" style={{ padding: '4px 10px', fontSize: 12 }}>
-                                도착 체크
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <CheckCell
+                        label="주문완료"
+                        checked={Boolean(r.orderedAt)}
+                        disabled={!me?.isOwner}
+                        disabledTitle="대표원장이 주문 체크해요"
+                        by={staffName(r.orderedBy)}
+                        at={r.orderedAt}
+                        onToggle={() => toggleOrdered(r)}
+                      />
                     </td>
                     <td style={cell}>
-                      {canDelete && <LinkButton onClick={() => handleDelete(r)}>삭제</LinkButton>}
+                      <CheckCell
+                        label="도착완료"
+                        checked={Boolean(r.receivedAt)}
+                        disabled={!r.orderedAt}
+                        disabledTitle="주문완료 후에 체크할 수 있어요"
+                        by={staffName(r.receivedBy)}
+                        at={r.receivedAt}
+                        onToggle={() => toggleReceived(r)}
+                      />
                     </td>
+                    <td style={cell}>{canDelete && <LinkButton onClick={() => handleDelete(r)}>삭제</LinkButton>}</td>
                   </tr>
                 );
               })}
@@ -538,6 +487,46 @@ export default function SupplyRequestsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// 주문완료·도착완료 칸 — 체크박스 하나와, 체크했다면 누가 언제 체크했는지(예: "김동규 10/26 14:30").
+function CheckCell({
+  label,
+  checked,
+  disabled,
+  disabledTitle,
+  by,
+  at,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  disabledTitle: string;
+  by: string;
+  at: string | null;
+  onToggle: () => void;
+}) {
+  return (
+    <label
+      title={disabled && !checked ? disabledTitle : undefined}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled && !checked ? 0.55 : 1 }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={onToggle}
+        aria-label={label}
+        style={{ width: 18, height: 18, margin: 0, padding: 0, accentColor: 'var(--color-green, #2f7a45)' }}
+      />
+      {checked && (
+        <span style={{ fontSize: 12, color: 'var(--color-ink)' }}>
+          {by || '-'} <span className="muted-text" style={{ fontSize: 12 }}>{formatCheckTime(at)}</span>
+        </span>
+      )}
+    </label>
   );
 }
 

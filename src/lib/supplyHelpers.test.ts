@@ -3,6 +3,7 @@ import {
   agingBadge,
   countOpen,
   findOpenDuplicates,
+  formatCheckTime,
   matchesFilter,
   normalizeItemName,
   safeUrl,
@@ -135,3 +136,14 @@ describe('supplyAlertFor — 홈 알람 역할 분리', () => {
   });
 });
 
+
+describe('formatCheckTime', () => {
+  it('한국 시각 M/D HH:mm', () => {
+    expect(formatCheckTime('2026-10-26T05:30:00Z')).toBe('10/26 14:30'); // UTC 05:30 = KST 14:30
+    expect(formatCheckTime('2026-10-26T16:05:00Z')).toBe('10/27 01:05'); // 날짜가 넘어가는 경우
+  });
+  it('값이 없거나 이상하면 빈 문자열', () => {
+    expect(formatCheckTime(null)).toBe('');
+    expect(formatCheckTime('못 읽는 값')).toBe('');
+  });
+});

@@ -139,3 +139,13 @@ export function countOpen(requests: Pick<SupplyRequest, 'orderedAt' | 'receivedA
   }
   return { waitingOrder, waitingArrival };
 }
+
+/** 체크한 때를 "10/26 14:30"(한국 시각)로 보여 준다. 누가 언제 체크했는지 표시하는 데 쓴다. */
+export function formatCheckTime(iso: string | null): string {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const kst = new Date(t + 9 * 3600 * 1000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${kst.getUTCMonth() + 1}/${kst.getUTCDate()} ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`;
+}
