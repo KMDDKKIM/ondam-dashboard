@@ -16,6 +16,36 @@ export interface WeekRow {
   cancelCount: number | null;
 }
 
+/** 주간 비급여 현황 재료 — 목표 반영으로 표시한 비급여 결제(날짜·분류)와 날짜별 추나 횟수. */
+export interface NonCoveredInput {
+  /** 날짜별 추나 횟수(일일 결산 우선, 없으면 예약 명단 값 — 이번달 현황과 같은 규칙) */
+  chunaByDate: Record<string, number>;
+  purchases: { date: string; category: string }[];
+}
+
+/** 한 주의 비급여 건수(이번달 현황 목표 칸과 같은 분류: 한약·다이어트·특수한약·추나) */
+export interface WeekNonCovered {
+  herb: number;
+  diet: number;
+  specialHerb: number;
+  chuna: number;
+}
+
+export function countNonCovered(input: NonCoveredInput, from: string, to: string): WeekNonCovered {
+  const result: WeekNonCovered = { herb: 0, diet: 0, specialHerb: 0, chuna: 0 };
+  for (const p of input.purchases) {
+    if (p.date < from || p.date > to) continue;
+    if (p.category === 'herb') result.herb += 1;
+    else if (p.category === 'diet') result.diet += 1;
+    else if (p.category === 'special_herb') result.specialHerb += 1;
+    else if (p.category === 'chuna') result.chuna += 1;
+  }
+  for (const [date, count] of Object.entries(input.chunaByDate)) {
+    if (date >= from && date <= to) result.chuna += count;
+  }
+  return result;
+}
+
 export interface WeekTrend {
   /** 그 주 월요일 */
   weekStart: string;
@@ -32,11 +62,13 @@ export interface WeekTrend {
   avgDailyVisits: number | null;
   /** 객단가 = 주간매출 ÷ 총 내원 인원(원). 내원 수를 아는 날만 센다. */
   averageTicket: number | null;
+  /** 주간 비급여 현황(재료를 못 읽었으면 null) */
+  nonCovered: WeekNonCovered | null;
 }
 
 const WEEK_LABELS = ['이번 주', '지난주', '지지난주'];
 
-export function buildWeekTrends(rows: WeekRow[], today: string, weeks = 3): WeekTrend[] {
+export function buildWeekTrends(rows: WeekRow[], today: string, weeks = 3, nonCovered: NonCoveredInput | null = null): WeekTrend[] {
   const thisMonday = weekStartKst(today);
   const result: WeekTrend[] = [];
   for (let i = 0; i < weeks; i++) {
@@ -57,6 +89,8 @@ export function buildWeekTrends(rows: WeekRow[], today: string, weeks = 3): Week
       totalRevenue: inWeek.length > 0 ? inWeek.reduce((acc, r) => acc + (r.totalRevenue ?? 0), 0) : null,
       avgDailyVisits: averageVisitsPerDay(inWeek.map((r) => ({ totalRevenue: r.totalRevenue ?? 0, visitCount: r.visitCount }))),
       averageTicket: visitTotal > 0 ? Math.round(ticketRevenue / visitTotal) : null,
+      // 이번 주는 오늘까지만 센다.
+      nonCovered: nonCovered ? countNonCovered(nonCovered, weekStart, weekEnd < today ? weekEnd : today) : null,
     });
   }
   return result;

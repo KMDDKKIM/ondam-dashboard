@@ -54,3 +54,28 @@ describe('buildWeekTrends', () => {
     expect(w.daysEntered).toBe(1);
   });
 });
+
+describe('주간 비급여 현황(nonCovered)', () => {
+  const today = '2026-10-21'; // 수요일
+  const input = {
+    chunaByDate: { '2026-10-19': 3, '2026-10-20': 2, '2026-10-22': 9, '2026-10-13': 4 },
+    purchases: [
+      { date: '2026-10-19', category: 'herb' },
+      { date: '2026-10-21', category: 'herb' },
+      { date: '2026-10-21', category: 'diet' },
+      { date: '2026-10-20', category: 'chuna' },
+      { date: '2026-10-22', category: 'special_herb' }, // 오늘 이후라 이번 주에 안 센다
+      { date: '2026-10-13', category: 'special_herb' },
+    ],
+  };
+
+  it('이번 주는 오늘까지, 추나는 일일 결산 횟수 + 추나 결제를 더한다', () => {
+    const [thisWeek, lastWeek] = buildWeekTrends([], today, 3, input);
+    expect(thisWeek.nonCovered).toEqual({ herb: 2, diet: 1, specialHerb: 0, chuna: 6 }); // 추나 3+2 + 결제 1, 22일의 9는 제외
+    expect(lastWeek.nonCovered).toEqual({ herb: 0, diet: 0, specialHerb: 1, chuna: 4 });
+  });
+
+  it('재료가 없으면 null', () => {
+    expect(buildWeekTrends([], today)[0].nonCovered).toBeNull();
+  });
+});

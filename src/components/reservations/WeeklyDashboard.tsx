@@ -1,13 +1,11 @@
 'use client';
 
-import { computeWeeklyStats } from '@/lib/reservations/dashboardStats';
+import { printSummaryLines } from '@/lib/reservations/printSummary';
 import { MonthlyStatsPanel, StatTile } from '@/components/MonthlyStatsPanel';
-import type { DailyRecordSummary } from '@/lib/reservations/types';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 import type { WeekTrend } from '@/lib/weeklyTrend';
 
 interface WeeklyDashboardProps {
-  records: DailyRecordSummary[];
   // 이번달 현황을 못 불러왔으면 null — 패널 대신 오류 문구를 보여 준다.
   summary: MonthlySummary | null;
   isOwner: boolean;
@@ -17,18 +15,12 @@ interface WeeklyDashboardProps {
   weeklyTrend?: WeekTrend[] | null;
 }
 
-const GOAL_LABELS = [
-  ['herb', '한약'],
-  ['diet', '다이어트'],
-  ['specialHerb', '특수한약'],
-  ['chuna', '추나'],
-] as const;
-
 // 맨 위 "이번달 현황"은 홈 대시보드와 같은 패널(MonthlyStatsPanel)을 작게 줄여서
 // 그대로 얹는다 — 목표 입력(대표원장 전용)도 여기서 똑같이 된다. 예약률/부도취소율은
 // 이 화면에서만 쓰는 지표라 같은 줄에 카드로 덧붙였다.
-export function WeeklyDashboard({ records, summary, isOwner, rates, weeklyTrend = null }: WeeklyDashboardProps) {
-  const stats = computeWeeklyStats(records, new Date());
+export function WeeklyDashboard({ summary, isOwner, rates, weeklyTrend = null }: WeeklyDashboardProps) {
+  // 인쇄할 때 위쪽에 같이 찍히는 이번달 현황 + 주별 현황 줄
+  const printLines = printSummaryLines(summary, weeklyTrend);
 
   return (
     <section className="weekly-dashboard" style={{ marginBottom: 12 }}>
@@ -60,29 +52,11 @@ export function WeeklyDashboard({ records, summary, isOwner, rates, weeklyTrend 
         {weeklyTrend && weeklyTrend.length > 0 && <WeeklyTrendTable weeks={weeklyTrend} />}
       </div>
 
-      {/* 인쇄용 — 아침 브리핑 출력지에 그대로 남는 한 줄 요약(화면에는 안 보임). */}
+      {/* 인쇄용 — 예약 시트 위에 이번달 현황 한 줄과 주별 현황(이번 주·지난주·지지난주)이 같이 찍힌다(화면에는 안 보임). */}
       <div className="print-only" style={{ padding: '6px 12px', fontWeight: 600, fontSize: 12 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
-          <div>이번 주 예약률: {rates.reservationRate != null ? `${rates.reservationRate}%` : '-'}</div>
-          <div>이번 주 부도취소율: {rates.noShowRate != null ? `${rates.noShowRate}%` : '-'}</div>
-          {/* 예전에는 여기서 한약·다이어트를 옛 컬럼(녹용/일반/다이어트 수)으로 합산해 찍었는데, 화면 패널
-              (비급여 등록분 + 조정값 포함)과 숫자가 달랐다. 주간 값을 패널 기준으로 구할 재료가
-              없어서 뺐다 — 한약·다이어트는 아래 "이번달 목표" 줄이 패널과 같은 숫자를 보여 준다. */}
-          <div>이번 주 추나(예약 명단 기준): {stats.chunaTotal}건</div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginTop: 4 }}>
-          <span>이번달 현황/목표</span>
-          {!summary && <span>불러오지 못했습니다</span>}
-          {summary &&
-            GOAL_LABELS.map(([key, label]) => {
-            const item = summary.goals[key];
-            return (
-              <span key={key}>
-                {label}: {item.goal != null ? `${item.achieved}/${item.goal}` : `${item.achieved}건`}
-              </span>
-            );
-          })}
-        </div>
+        {printLines.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
       </div>
     </section>
   );
@@ -93,15 +67,17 @@ function monthDay(date: string): string {
   return `${m}/${d}`;
 }
 
-// 주별 동향 — 이번 주만이 아니라 지난주·지지난주까지 같이 보여 줘서 흐름을 본다. 이번 주는 오늘까지만 센 값이다.
+// 주별 현황 — 이번 주만이 아니라 지난주·지지난주까지 같이 보여 줘서 흐름을 본다. 이번 주는 오늘까지만 센 값이다.
 function WeeklyTrendTable({ weeks }: { weeks: WeekTrend[] }) {
   const cell = { padding: '4px 10px', textAlign: 'right', whiteSpace: 'nowrap' } as const;
   const pct = (v: number | null) => (v != null ? `${v}%` : '-');
+  // 비급여를 못 읽은 주만 있으면 열 자체를 숨긴다.
+  const hasNonCovered = weeks.some((w) => w.nonCovered != null);
   return (
     <div className="card" style={{ marginTop: 8, padding: '6px 10px', overflowX: 'auto' }}>
       <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
         <caption className="muted-text" style={{ textAlign: 'left', fontSize: 11, paddingBottom: 2 }}>
-          주별 동향 (월~일, 이번 주는 오늘까지) · 평환수는 진료한 날의 하루 평균 · 객단가는 주간매출 ÷ 내원 인원
+          주별 현황 (월~일, 이번 주는 오늘까지) · 평환수는 진료한 날의 하루 평균 · 객단가는 주간매출 ÷ 내원 인원 · 비급여는 목표 반영으로 표시한 결제 건수(추나는 일일결산 횟수 포함)
         </caption>
         <thead>
           <tr className="muted-text" style={{ fontSize: 11 }}>
@@ -111,6 +87,14 @@ function WeeklyTrendTable({ weeks }: { weeks: WeekTrend[] }) {
             <th style={cell}>주간매출</th>
             <th style={cell}>평환수</th>
             <th style={cell}>객단가</th>
+            {hasNonCovered && (
+              <>
+                <th style={cell}>한약</th>
+                <th style={cell}>다이어트</th>
+                <th style={cell}>특수한약</th>
+                <th style={cell}>추나</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -124,6 +108,14 @@ function WeeklyTrendTable({ weeks }: { weeks: WeekTrend[] }) {
               <td style={cell}>{w.totalRevenue != null ? `${w.totalRevenue.toLocaleString()}원` : '-'}</td>
               <td style={cell}>{w.avgDailyVisits != null ? `${w.avgDailyVisits}명` : '-'}</td>
               <td style={cell}>{w.averageTicket != null ? `${w.averageTicket.toLocaleString()}원` : '-'}</td>
+              {hasNonCovered && (
+                <>
+                  <td style={cell}>{w.nonCovered ? `${w.nonCovered.herb}건` : '-'}</td>
+                  <td style={cell}>{w.nonCovered ? `${w.nonCovered.diet}건` : '-'}</td>
+                  <td style={cell}>{w.nonCovered ? `${w.nonCovered.specialHerb}건` : '-'}</td>
+                  <td style={cell}>{w.nonCovered ? `${w.nonCovered.chuna}건` : '-'}</td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

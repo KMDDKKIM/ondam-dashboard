@@ -65,22 +65,6 @@ export function visitMarkerFor(
   return null;
 }
 
-/** "내일 예약 시트 인쇄" 요청 — 대상 날짜에 묶여 있고, 한 번 처리하면(id 기록) 다시 열리지 않는다. */
-export interface PrintRequest {
-  date: string;
-  id: number;
-}
-
-/** 이 날짜 화면이 지금 인쇄를 시작해야 하는가: 요청이 이 날짜 것이고, 불러오기가 끝났고, 아직 처리하지 않은 요청일 때만. */
-export function shouldStartPrint(
-  request: PrintRequest | null,
-  date: string,
-  loading: boolean,
-  handledId: number
-): boolean {
-  return request !== null && request.date === date && !loading && request.id !== handledId;
-}
-
 /** 인쇄 시트 한 줄(주치의 이름을 칸으로 붙인다). */
 export interface PrintRow extends Reservation {
   printDoctor: string;

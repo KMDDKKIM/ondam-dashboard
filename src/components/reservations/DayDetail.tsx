@@ -3,19 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReservationTable } from './ReservationTable';
 import { ensureDailyRecord, getDailyRecordByDate, replaceReservations } from '@/lib/reservations/dailyRecords';
-import { countByDoctor, flattenForPrint, printFontPt, shouldStartPrint, visitMarkerFor, type PrintRequest } from '@/lib/reservations/printSheet';
+import { countByDoctor, flattenForPrint, printFontPt, visitMarkerFor } from '@/lib/reservations/printSheet';
 import type { FirstVisitCandidateDto, FirstVisitCandidatesResult } from '@/lib/firstVisit';
 import type { Reservation } from '@/lib/reservations/types';
 
 interface DayDetailProps {
   date: string;
   onSaved: () => void | Promise<void>;
-  /** "내일 예약 시트 인쇄" 요청. 이 날짜 것일 때만 불러오기 후 한 번 인쇄하고, onPrintHandled 로 요청을 소진시킨다. */
-  printRequest?: PrintRequest | null;
-  onPrintHandled?: () => void;
 }
 
-export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }: DayDetailProps) {
+export function DayDetail({ date, onSaved }: DayDetailProps) {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [dailyRecordId, setDailyRecordId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,7 +24,6 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
   const [printing, setPrinting] = useState(false);
   const [pendingPrint, setPendingPrint] = useState(false);
   const [syncingGrowthMate, setSyncingGrowthMate] = useState(false);
-  const handledRequestId = useRef(0);
   // 예약자 명단은 저장 버튼이 없다 — 칸을 벗어나거나 결과·삭제·행 추가를 하면 그 자리에서
   // 바로 저장된다. 여러 칸을 빠르게 옮겨 다녀도 저장 응답이 요청 순서와 다르게 돌아올 수
   // 있어, 앞 저장이 끝난 뒤에만 다음 저장을 보낸다(먼저 누른 게 나중에 도착해 최신 값을
@@ -140,18 +136,6 @@ export function DayDetail({ date, onSaved, printRequest = null, onPrintHandled }
     setPendingPrint(false);
     window.print();
   }, [pendingPrint]);
-
-  // "내일 예약 시트 인쇄" — 그 날짜의 불러오기가 끝나면 한 번만 자동으로 인쇄하고 요청을 소진시킨다.
-  useEffect(() => {
-    if (!shouldStartPrint(printRequest, date, loading, handledRequestId.current)) return;
-    handledRequestId.current = printRequest!.id;
-    onPrintHandled?.();
-    if (reservations.filter((r) => r.visitStatus !== '취소').length === 0) {
-      setStatusMessage({ type: 'error', text: `${date} 예약 명단이 아직 없어요. 예약 명단을 먼저 입력해 주세요.` });
-      return;
-    }
-    void startPrint();
-  }, [printRequest, loading, reservations, date, startPrint, onPrintHandled]);
 
   const printRows = useMemo(() => flattenForPrint(reservations), [reservations]);
   const doctorCounts = useMemo(() => countByDoctor(printRows), [printRows]);

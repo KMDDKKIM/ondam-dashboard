@@ -2,7 +2,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { computeMonthFigures, revenueMotivation, type DailyFigure, type MonthlyOverrideFigure } from '@/lib/monthlyFigures';
 import { addDaysKst, currentMonthKst, todayKst, weekStartKst } from '@/lib/kst';
-import { buildWeekTrends, type WeekTrend } from '@/lib/weeklyTrend';
+import { buildWeekTrends, type NonCoveredInput, type WeekTrend } from '@/lib/weeklyTrend';
 import { computeReservationRates } from '@/lib/reservationRates';
 
 export interface MonthlySummary {
@@ -257,11 +257,31 @@ export async function getWeeklyTrend(today: Date = new Date()): Promise<WeekTren
   const from = addDaysKst(weekStartKst(todayStr), -14);
   const { data, error } = await admin
     .from('daily_revenue')
-    .select('date, total_revenue, visit_count, excluded_count, reservation_count, kept_count, noshow_count, cancel_count')
+    .select('date, total_revenue, visit_count, chuna_count, excluded_count, reservation_count, kept_count, noshow_count, cancel_count')
     .gte('date', from)
     .lte('date', todayStr);
   if (error) throw error;
   const n = (v: unknown) => (v != null ? Number(v) : null);
+
+  // 주간 비급여 현황 — 이번달 현황과 같은 규칙: 비급여 현황에서 "목표 반영"으로 표시한 결제 건수 + 추나(일일 결산 값 우선, 없으면 예약 명단 값).
+  // 못 읽어도 주별 동향 표 자체는 나와야 하므로 비급여 부분만 null 로 둔다.
+  let nonCovered: NonCoveredInput | null = null;
+  try {
+    const [purchases, records] = await Promise.all([
+      admin.from('non_covered_purchases').select('purchase_date, goal_category').gte('purchase_date', from).lte('purchase_date', todayStr).not('goal_category', 'is', null),
+      admin.from('daily_records').select('date, chuna_count').is('deleted_at', null).gte('date', from).lte('date', todayStr),
+    ]);
+    if (purchases.error) throw purchases.error;
+    if (records.error) throw records.error;
+    const chunaByDate: Record<string, number> = {};
+    for (const r of records.data ?? []) chunaByDate[String(r.date)] = Number(r.chuna_count) || 0;
+    for (const r of data ?? []) {
+      if (r.chuna_count != null) chunaByDate[String(r.date)] = Number(r.chuna_count);
+    }
+    nonCovered = { chunaByDate, purchases: (purchases.data ?? []).map((p) => ({ date: String(p.purchase_date), category: String(p.goal_category) })) };
+  } catch {
+    nonCovered = null;
+  }
   return buildWeekTrends(
     (data ?? []).map((r) => ({
       date: String(r.date),
@@ -273,6 +293,8 @@ export async function getWeeklyTrend(today: Date = new Date()): Promise<WeekTren
       noshowCount: n(r.noshow_count),
       cancelCount: n(r.cancel_count),
     })),
-    todayStr
+    todayStr,
+    3,
+    nonCovered
   );
 }
