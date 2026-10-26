@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildPackageOverview, isCountedOrder, packageBalance, packageDaysFromPurchase, type PackageBalance, type PackageOverviewRow, type PackageRow, type PrintedOrder } from '@/lib/herbPackage';
+import { isCountedOrder, packageBalance, packageDaysFromPurchase, type PackageBalance, type PackageRow, type PrintedOrder } from '@/lib/herbPackage';
 
 // 한약 패키지(herb_packages) — 비급여 결제(한약)에서 자동으로 만들고, 처방전 출력분의 며칠분을 차감해 잔여를 계산한다(원장 요청, 2026-10-21).
 
@@ -79,36 +79,6 @@ export async function loadPackageBalance(supabase: SupabaseClient, patient: Pati
     .filter((o) => o.id !== excludeOrderId && isCountedOrder({ orderDate: o.order_date, printedAt: o.printed_at }))
     .map((o) => ({ orderDate: o.order_date, daysSupply: o.days_supply == null ? null : Number(o.days_supply), packetCount: o.packet_count == null ? null : Number(o.packet_count) }));
   return packageBalance(packages, printed);
-}
-
-/** 한약 패키지 현황 — 모든 환자의 결제 일수·처방 일수·남은 일수. 읽기에 실패하면 던진다. */
-export async function loadPackageOverview(supabase: SupabaseClient): Promise<PackageOverviewRow[]> {
-  const { data, error } = await supabase.from(TABLE).select('patient_name, chart_no, total_days, start_date').limit(2000);
-  if (error) throw error;
-  const packages = (data as { patient_name: string; chart_no: string | null; total_days: number; start_date: string }[]).map((p) => ({
-    patientName: p.patient_name,
-    chartNo: p.chart_no ?? '',
-    totalDays: p.total_days,
-    startDate: p.start_date,
-  }));
-  if (packages.length === 0) return [];
-  const start = packages.map((p) => p.startDate).sort()[0];
-  const { data: orders, error: orderError } = await supabase
-    .from('herb_compounding_orders')
-    .select('patient_name, chart_no, order_date, days_supply, packet_count, printed_at')
-    .gte('order_date', start)
-    .limit(5000);
-  if (orderError) throw orderError;
-  const printed = (orders as { patient_name: string; chart_no: string | null; order_date: string; days_supply: number | string | null; packet_count: number | string | null; printed_at: string | null }[])
-    .filter((o) => isCountedOrder({ orderDate: o.order_date, printedAt: o.printed_at }))
-    .map((o) => ({
-    patientName: o.patient_name,
-    chartNo: o.chart_no ?? '',
-    orderDate: o.order_date,
-    daysSupply: o.days_supply == null ? null : Number(o.days_supply),
-    packetCount: o.packet_count == null ? null : Number(o.packet_count),
-  }));
-  return buildPackageOverview(packages, printed);
 }
 
 export interface PatientPackage {

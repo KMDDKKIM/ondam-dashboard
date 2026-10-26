@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PatientSearch } from '@/components/herbCompounding/PatientSearch';
 import { CARE_KINDS, CARE_KIND_LABEL, CARE_KIND_SHORT, type CareKind } from '@/lib/careKind';
@@ -424,11 +423,6 @@ export function CarePatients({ reloadKey, onCallsChanged }: { reloadKey: number;
           <div key={k}>
             <h2 style={{ fontSize: 17, margin: '18px 0 8px' }}>
               {KIND_EMOJI[k]} {CARE_KIND_SHORT[k]} 환자 ({list.length}명)
-              {k === 'herb' && (
-                <Link href="/herb-packages" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400, textDecoration: 'underline', color: 'var(--color-muted)' }}>
-                  한약 패키지 현황
-                </Link>
-              )}
             </h2>
             {!loading && !error && list.length === 0 && <p className="muted-text" style={{ margin: '0 0 6px', fontSize: 13 }}>등록한 환자가 없어요.</p>}
             {list.map((p) => (
