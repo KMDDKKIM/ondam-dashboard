@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/confirmDialog';
+import { gridArrowMove } from '@/lib/gridNav';
 import type { HerbCompoundingOrder } from '@/lib/herbCompounding';
 import { computePackCount, duplicateHerbNames, herbLineTotal, mergeHerbLines, parseHerbGramsEntry, sortHerbLinesByGrams, totalHerbWeight } from '@/lib/herbCompounding';
 import type { KnownHerbPatient } from '@/lib/supabase/herbCompounding';
@@ -49,6 +50,25 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
     const target = herbCellRefs.current[r]?.[c];
     target?.focus();
     target?.select();
+  }
+
+  // Tab 은 아래 칸으로, 방향키는 위·아래·옆 칸으로 옮긴다(원장 요청, 2026-10-26). 숫자칸에서 위아래로 값이 0.1씩 바뀌던 기능은 없앴다.
+  function handleHerbCellKey(e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
+    if (e.key === 'Tab') {
+      handleHerbCellTab(e, row, col);
+      return;
+    }
+    if (e.nativeEvent.isComposing) return;
+    const input = e.currentTarget;
+    // 숫자칸은 글자 커서 위치를 알 수 없어(null) 늘 칸 끝으로 본다.
+    const caret = { atStart: input.selectionStart === null || input.selectionStart === 0, atEnd: input.selectionEnd === null || input.selectionEnd === input.value.length };
+    const move = gridArrowMove(e.key, { row, col }, value.herbs.length, HERB_ROW_COLS, caret);
+    if (!move) return;
+    if (move.preventDefault) e.preventDefault();
+    if (!move.target) return;
+    const el = herbCellRefs.current[move.target.row]?.[move.target.col];
+    el?.focus();
+    el?.select();
   }
 
   // 약재명에서 엔터 → 다음 줄의 약재명으로 간다. 마지막 줄이면 새 줄을 더해서 간다(원장 요청, 2026-10-16).
@@ -337,7 +357,7 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
                   onChange={(e) => updateHerb(i, { herbName: e.target.value })}
                   onKeyDown={(e) => {
                     handleHerbNameEnter(e, i);
-                    handleHerbCellTab(e, i, 0);
+                    handleHerbCellKey(e, i, 0);
                   }}
                   placeholder="당귀"
                   style={isDuplicate(herb.herbName) ? { color: 'var(--color-error)', fontWeight: 700, borderColor: 'var(--color-error)' } : undefined}
@@ -350,19 +370,20 @@ export function OrderForm({ value, onChange, herbNameOptions, knownPatients, inc
                   className="input-field"
                   value={herb.prepMethod}
                   onChange={(e) => updateHerb(i, { prepMethod: e.target.value })}
-                  onKeyDown={(e) => handleHerbCellTab(e, i, 1)}
+                  onKeyDown={(e) => handleHerbCellKey(e, i, 1)}
                 />
               </td>
               <td style={{ padding: '2px 4px' }}>
                 <input
                   ref={(el) => setHerbCellRef(i, 2, el)}
-                  className="input-field"
+                  className="input-field no-spin"
                   type="number"
                   min={0}
-                  step={0.1}
+                  step="any"
                   value={herb.gramsPerPacket || ''}
                   onChange={(e) => updateHerb(i, { gramsPerPacket: Number(e.target.value) || 0 })}
-                  onKeyDown={(e) => handleHerbCellTab(e, i, 2)}
+                  onKeyDown={(e) => handleHerbCellKey(e, i, 2)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="6"
                 />
               </td>

@@ -514,3 +514,14 @@ a.card:hover {
     animation: none;
   }
 }
+
+/* 숫자 입력칸의 위아래 증감 화살표를 숨긴다(한약 처방전 1첩당 그램 — 방향키는 칸 이동에 쓴다) */
+input.no-spin::-webkit-outer-spin-button,
+input.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
