@@ -144,6 +144,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
           <span style={{ marginRight: 4 }}>📊</span>
           <button
+            className="no-print"
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             aria-label="이전 달"
             style={{ border: 'none', background: 'transparent', fontSize: 16, padding: '0 6px', color: 'var(--color-ink)' }}
@@ -172,6 +173,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
             </button>
           )}
           <button
+            className="no-print"
             onClick={() => setMonth((m) => shiftMonth(m, 1))}
             disabled={isCurrentMonth}
             aria-label="다음 달"
@@ -187,7 +189,7 @@ export function MonthlyStatsPanel({ initial, isOwner, compact = false, large = f
             ▶
           </button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {isOwner && (
             <button
               onClick={() => (showGoalForm ? setShowGoalForm(false) : openGoalForm())}

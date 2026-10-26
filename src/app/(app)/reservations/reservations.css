@@ -88,7 +88,7 @@
     max-width: none !important;
   }
 
-  .reservation-app * {
+  .reservation-app *:not(.weekly-dashboard *) {
     background: transparent !important;
     color: #000 !important;
     box-shadow: none !important;
@@ -129,17 +129,15 @@
     border-bottom: 0.4pt solid #000 !important;
   }
 
-  /* 예약 시트가 가로 A4 한 장에 50명까지 들어가도록 머리쪽 요약은 작게(2줄, 8pt) 줄인다. */
-  .reservation-app .weekly-dashboard .print-only {
-    padding: 0.3mm 0 0.6mm !important;
-    font-size: 8pt !important;
-    line-height: 1.15 !important;
-    font-weight: 600;
+  /* 화면의 이번달 현황 패널과 주별 현황 표를 그대로 인쇄한다. 예약 시트가 가로 A4 한 장에 50명까지 들어가도록 통째로 줄여(zoom)
+     두면, 줄인 만큼 가로로 더 넓게 펼쳐져 높이가 작아진다. */
+  .reservation-app .weekly-dashboard .print-dashboard {
+    zoom: 0.6;
   }
 
-  .reservation-app .weekly-dashboard .print-only > div {
-    gap: 4mm !important;
-    margin-top: 0 !important;
+  .reservation-app .weekly-dashboard .print-dashboard .card {
+    border: 0.4pt solid #999 !important;
+    border-radius: 2mm !important;
   }
 
   /* 인쇄용 예약 시트(DayDetail.tsx의 .print-sheet) — 가로 A4 한 장에 전체 예약을 시간순 한 표로 담는다(50명까지 한 장).
@@ -188,20 +186,28 @@
     display: table-header-group;
   }
 
+  /* 열 너비는 글자 크기(em)에 비례 — 글자가 작아지는 많은 인원일 때도 같은 비율로 줄어든다. 고정 열(예약시간·성함·차트번호·휴대전화·주치의)은
+     내용에 딱 맞게 잡고, 남는 너비는 치료부위·치료·특이사항이 나눠 쓴다(특이사항이 가장 넓다). */
   .reservation-app table.print-sheet-table .col-time {
-    width: 13mm;
+    width: 5.2em;
   }
   .reservation-app table.print-sheet-table .col-name {
-    width: 32mm;
+    width: 6.6em;
   }
   .reservation-app table.print-sheet-table .col-chart {
-    width: 17mm;
+    width: 5.6em;
   }
   .reservation-app table.print-sheet-table .col-phone {
-    width: 25mm;
+    width: 8.4em;
   }
   .reservation-app table.print-sheet-table .col-doctor {
-    width: 15mm;
+    width: 4.2em;
+  }
+  .reservation-app table.print-sheet-table .col-area {
+    width: 14%;
+  }
+  .reservation-app table.print-sheet-table .col-treat {
+    width: 18%;
   }
 
   /* 색이 빠져도(흑백 인쇄) 눈에 띄도록 테두리+굵은 글씨. */

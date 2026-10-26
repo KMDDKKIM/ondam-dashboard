@@ -1,6 +1,5 @@
 'use client';
 
-import { printSummaryLines } from '@/lib/reservations/printSummary';
 import { MonthlyStatsPanel, StatTile } from '@/components/MonthlyStatsPanel';
 import type { MonthlySummary } from '@/lib/monthlySummary';
 import type { WeekTrend } from '@/lib/weeklyTrend';
@@ -19,12 +18,10 @@ interface WeeklyDashboardProps {
 // 그대로 얹는다 — 목표 입력(대표원장 전용)도 여기서 똑같이 된다. 예약률/부도취소율은
 // 이 화면에서만 쓰는 지표라 같은 줄에 카드로 덧붙였다.
 export function WeeklyDashboard({ summary, isOwner, rates, weeklyTrend = null }: WeeklyDashboardProps) {
-  // 인쇄할 때 위쪽에 같이 찍히는 이번달 현황 + 주별 현황 줄
-  const printLines = printSummaryLines(summary, weeklyTrend);
-
   return (
     <section className="weekly-dashboard" style={{ marginBottom: 12 }}>
-      <div className="no-print">
+      {/* 화면의 이번달 현황 패널과 주별 현황 표를 인쇄에도 그대로 넣는다(원장 요청, 2026-10-26) — 인쇄에서는 reservations.css 가 작게 줄인다. */}
+      <div className="print-dashboard">
         {summary ? (
           <MonthlyStatsPanel
             initial={summary}
@@ -52,12 +49,6 @@ export function WeeklyDashboard({ summary, isOwner, rates, weeklyTrend = null }:
         {weeklyTrend && weeklyTrend.length > 0 && <WeeklyTrendTable weeks={weeklyTrend} />}
       </div>
 
-      {/* 인쇄용 — 예약 시트 위에 이번달 현황 한 줄과 주별 현황(이번 주·지난주·지지난주)이 같이 찍힌다(화면에는 안 보임). */}
-      <div className="print-only" style={{ padding: '6px 12px', fontWeight: 600, fontSize: 12 }}>
-        {printLines.map((line, i) => (
-          <div key={i}>{line}</div>
-        ))}
-      </div>
     </section>
   );
 }

@@ -191,8 +191,8 @@ export function DayDetail({ date, onSaved }: DayDetailProps) {
               <th className="col-chart">차트번호</th>
               <th className="col-phone">휴대전화</th>
               <th className="col-doctor">주치의</th>
-              <th>치료부위</th>
-              <th>치료</th>
+              <th className="col-area">치료부위</th>
+              <th className="col-treat">치료</th>
               <th>특이사항</th>
             </tr>
           </thead>
