@@ -18,6 +18,7 @@ export interface TodayContact {
 
 /** 다음 해피콜 날짜를 바로 고르는 빠른 선택(해피콜 완료를 누르면 보인다). */
 export const NEXT_CALL_PRESETS = [
+  { label: '내일', days: 1 },
   { label: '3일 후', days: 3 },
   { label: '1주 후', days: 7 },
   { label: '2주 후', days: 14 },

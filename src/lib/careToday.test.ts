@@ -53,6 +53,6 @@ describe('groupTodayContacts', () => {
 
 describe('NEXT_CALL_PRESETS', () => {
   it('빠른 선택 날짜', () => {
-    expect(NEXT_CALL_PRESETS.map((p) => addDaysKst('2026-10-26', p.days))).toEqual(['2026-10-29', '2026-11-02', '2026-11-09', '2026-11-25']);
+    expect(NEXT_CALL_PRESETS.map((p) => addDaysKst('2026-10-26', p.days))).toEqual(['2026-10-27', '2026-10-29', '2026-11-02', '2026-11-09', '2026-11-25']);
   });
 });
