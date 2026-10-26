@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  asReprescription,
   canSaveOrder,
   computePackCount,
   herbLineTotal,
   incompleteHerbLines,
   duplicateHerbNames,
   mergeHerbLines,
+  orderEdited,
   parseHerbGramsEntry,
   sortHerbLinesByGrams,
   totalHerbWeight,
+  type HerbCompoundingOrder,
 } from './herbCompounding';
 
 describe('herbLineTotal', () => {
@@ -206,5 +209,30 @@ describe('duplicateHerbNames', () => {
 
   it('겹치는 게 없으면 빈 배열', () => {
     expect(duplicateHerbNames([{ herbName: '당귀' }, { herbName: '천궁' }])).toEqual([]);
+  });
+});
+
+describe('orderEdited / asReprescription', () => {
+  const base: HerbCompoundingOrder = {
+    id: 'x', patientName: '가나다', chartNo: '1', prescriptionName: '시험탕', orderDate: '2026-10-01', packetCount: 15, packVolumeMl: 0, daysSupply: 15, dosesPerDay: 2, packCount: 30, totalLiquidMl: 0,
+    herbs: [{ herbName: '당귀', prepMethod: '', gramsPerPacket: 6 }], memo: '', createdAt: 'a', updatedAt: 'b',
+  };
+
+  it('같으면 수정 안 한 것으로 본다(빈 약재 줄·앞뒤 공백은 무시)', () => {
+    expect(orderEdited({ ...base, herbs: [...base.herbs, { herbName: '', prepMethod: '', gramsPerPacket: 0 }], patientName: ' 가나다 ' }, base)).toBe(false);
+  });
+
+  it('용량·약재·첩수·메모를 바꾸면 수정한 것이다', () => {
+    expect(orderEdited({ ...base, herbs: [{ herbName: '당귀', prepMethod: '', gramsPerPacket: 6.5 }] }, base)).toBe(true);
+    expect(orderEdited({ ...base, packetCount: 10 }, base)).toBe(true);
+    expect(orderEdited({ ...base, memo: '메모' }, base)).toBe(true);
+    expect(orderEdited({ ...base, herbs: [...base.herbs, { herbName: '천궁', prepMethod: '', gramsPerPacket: 4 }] }, base)).toBe(true);
+  });
+
+  it('재처방은 새 처방전(id 없음, 처방일 오늘)으로 복사하고 원본 약재 줄을 공유하지 않는다', () => {
+    const copy = asReprescription(base, '2026-10-26');
+    expect(copy).toMatchObject({ id: '', orderDate: '2026-10-26', createdAt: '', updatedAt: '', patientName: '가나다', packetCount: 15 });
+    copy.herbs[0].gramsPerPacket = 9;
+    expect(base.herbs[0].gramsPerPacket).toBe(6);
   });
 });

@@ -82,6 +82,36 @@ export async function createHerbCompoundingOrder(
   return fromRow(data as HerbCompoundingRow);
 }
 
+/** 저장된 처방전을 고친다(같은 기록에 덮어쓴다). 인쇄·수령 표시는 그대로 두고, 막혀서 0행이 고쳐졌으면 실패로 본다. */
+export async function updateHerbCompoundingOrder(
+  supabase: SupabaseClient,
+  id: string,
+  input: Omit<NewHerbCompoundingOrder, 'createdBy'>
+): Promise<HerbCompoundingOrder> {
+  const { data, error } = await supabase
+    .from('herb_compounding_orders')
+    .update({
+      patient_name: input.patientName,
+      chart_no: input.chartNo || null,
+      prescription_name: input.prescriptionName || null,
+      order_date: input.orderDate,
+      packet_count: input.packetCount,
+      pack_volume_ml: input.packVolumeMl || null,
+      days_supply: input.daysSupply || null,
+      doses_per_day: input.dosesPerDay || null,
+      pack_count: input.packCount || null,
+      total_liquid_ml: input.totalLiquidMl || null,
+      herbs: input.herbs,
+      memo: input.memo || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('수정하지 못했습니다.');
+  return fromRow(data[0] as HerbCompoundingRow);
+}
+
 export async function getHerbCompoundingOrder(supabase: SupabaseClient, id: string): Promise<HerbCompoundingOrder | null> {
   const { data, error } = await supabase.from('herb_compounding_orders').select('*').eq('id', id).maybeSingle();
   if (error) throw error;

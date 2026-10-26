@@ -138,3 +138,15 @@ export function duplicateHerbNames(herbs: Pick<HerbLine, 'herbName'>[]): string[
   }
   return [...count].filter(([, n]) => n > 1).map(([name]) => name);
 }
+
+/** 저장된 처방전과 지금 화면의 내용이 다른가 — 빈 약재 줄은 무시한다(수정하기를 눌러야 하는지 알리는 데 쓴다). */
+export function orderEdited(current: HerbCompoundingOrder, saved: HerbCompoundingOrder): boolean {
+  const lines = (o: HerbCompoundingOrder) => o.herbs.filter((h) => h.herbName.trim() !== '').map((h) => [h.herbName.trim(), h.prepMethod.trim(), h.gramsPerPacket]);
+  const fields = (o: HerbCompoundingOrder) => [o.patientName.trim(), o.chartNo.trim(), o.prescriptionName.trim(), o.orderDate, o.packetCount, o.packVolumeMl, o.daysSupply, o.dosesPerDay, o.packCount, o.totalLiquidMl, o.memo.trim()];
+  return JSON.stringify([fields(current), lines(current)]) !== JSON.stringify([fields(saved), lines(saved)]);
+}
+
+/** 불러온 처방전으로 다시 처방한다 — 내용은 그대로 복사하고 새 처방전(저장 전, 처방일은 오늘)으로 만든다. 원래 기록은 건드리지 않는다. */
+export function asReprescription(order: HerbCompoundingOrder, today: string): HerbCompoundingOrder {
+  return { ...order, id: '', orderDate: today, herbs: order.herbs.map((h) => ({ ...h })), createdAt: '', updatedAt: '' };
+}
