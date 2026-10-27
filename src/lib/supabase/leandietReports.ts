@@ -99,3 +99,32 @@ export async function sendToOwnerBoard(patient: LeanPatient, reportDate: string)
   const body = (await res.json()) as { action?: string };
   return body.action !== 'exists';
 }
+
+export interface ExcludedPatient {
+  leanPatientId: string;
+  patientName: string;
+  reason: string;
+  createdAt: string;
+}
+
+/** 더 이상 연락 안 하기로 제외한 환자들(리포트에 있든 없든 전부). */
+export async function listExcluded(supabase: SupabaseClient): Promise<ExcludedPatient[]> {
+  const { data, error } = await supabase.from('leandiet_excluded_patients').select('lean_patient_id, patient_name, reason, created_at').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ leanPatientId: r.lean_patient_id as string, patientName: r.patient_name as string, reason: r.reason as string, createdAt: r.created_at as string }));
+}
+
+/** 환자를 제외한다 — 이후 아침 리포트에서 목록에 나오지 않는다. 이미 제외돼 있으면 사유만 새로 고친다. */
+export async function excludePatient(supabase: SupabaseClient, patient: LeanPatient, reason: string, by: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('leandiet_excluded_patients')
+    .upsert({ lean_patient_id: patient.leanPatientId, patient_name: patient.name, reason, excluded_by: by }, { onConflict: 'lean_patient_id' });
+  if (error) throw error;
+}
+
+/** 제외를 되돌린다 — 다시 리포트 목록에 나온다. */
+export async function restoreExcluded(supabase: SupabaseClient, leanPatientId: string): Promise<void> {
+  const { data, error } = await supabase.from('leandiet_excluded_patients').delete().eq('lean_patient_id', leanPatientId).select('lean_patient_id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('되돌리지 못했어요.');
+}

@@ -197,3 +197,57 @@ export function followUpReason(p: LeanPatient): string {
 export function isReportFresh(reportDate: string | null, today: string): boolean {
   return reportDate === today;
 }
+
+/** 직원 해피콜·원장 케어 보드로 보낸 환자는 보낸 날부터 이 일수 동안 목록에서 뺀다(그 뒤에도 조건에 맞으면 다시 나온다). */
+export const SENT_HIDE_DAYS = 7;
+
+/** 제외할 때 고르는 사유 */
+export const EXCLUDE_REASONS = ['기록 안 하기로 함', '종료한 환자', '기타'] as const;
+
+export interface SentRef {
+  leanPatientId: string;
+  reportDate: string;
+  target: 'desk' | 'owner';
+}
+
+export interface SentPatient {
+  patient: LeanPatient;
+  /** 어디로 보냈는지 */
+  targets: ('desk' | 'owner')[];
+  /** 가장 최근에 보낸 리포트 날짜 */
+  sentDate: string;
+}
+
+/**
+ * 리포트의 환자를 셋으로 나눈다 — 제외한 환자(다시 안 나온다), 최근 보낸 환자(보낸 날부터 SENT_HIDE_DAYS 일 동안 숨김), 지금 연락을 검토할 환자.
+ * 제외가 보낸 것보다 우선한다. addDays 는 날짜 계산 함수(YYYY-MM-DD, 일수).
+ */
+export function partitionPatients(
+  patients: LeanPatient[],
+  followups: SentRef[],
+  excludedIds: Set<string>,
+  reportDate: string,
+  addDays: (date: string, days: number) => string
+): { active: LeanPatient[]; sent: SentPatient[]; excluded: LeanPatient[] } {
+  const windowStart = addDays(reportDate, -(SENT_HIDE_DAYS - 1));
+  const active: LeanPatient[] = [];
+  const sent: SentPatient[] = [];
+  const excluded: LeanPatient[] = [];
+  for (const p of patients) {
+    if (excludedIds.has(p.leanPatientId)) {
+      excluded.push(p);
+      continue;
+    }
+    const mine = followups.filter((f) => f.leanPatientId === p.leanPatientId && f.reportDate >= windowStart && f.reportDate <= reportDate);
+    if (mine.length === 0) {
+      active.push(p);
+      continue;
+    }
+    sent.push({
+      patient: p,
+      targets: [...new Set(mine.map((f) => f.target))],
+      sentDate: mine.map((f) => f.reportDate).sort().slice(-1)[0],
+    });
+  }
+  return { active, sent, excluded };
+}

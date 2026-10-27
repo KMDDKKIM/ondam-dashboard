@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { discomfortTexts, followUpReason, groupReportPatients, isReportFresh, parseReport, summarize, type LeanPatient } from './leandietReport';
+import { discomfortTexts, followUpReason, groupReportPatients, isReportFresh, parseReport, partitionPatients, summarize, type LeanPatient } from './leandietReport';
 
 // 환자 이름·번호는 시험용 값이다(공개 저장소).
 function patient(p: Partial<LeanPatient> = {}): LeanPatient {
@@ -105,5 +105,37 @@ describe('summarize / isReportFresh', () => {
     expect(isReportFresh('2026-10-24', '2026-10-24')).toBe(true);
     expect(isReportFresh('2026-10-23', '2026-10-24')).toBe(false);
     expect(isReportFresh(null, '2026-10-24')).toBe(false);
+  });
+});
+
+describe('partitionPatients', () => {
+  const add = (date: string, days: number) => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const list = [patient({ leanPatientId: 'a', name: '가' }), patient({ leanPatientId: 'b', name: '나' }), patient({ leanPatientId: 'c', name: '다' }), patient({ leanPatientId: 'd', name: '라' })];
+
+  it('보낸 환자는 목록에서 빼고, 제외한 환자는 따로 모은다', () => {
+    const r = partitionPatients(list, [{ leanPatientId: 'a', reportDate: '2026-10-27', target: 'owner' }], new Set(['c']), '2026-10-27', add);
+    expect(r.active.map((p) => p.leanPatientId)).toEqual(['b', 'd']);
+    expect(r.sent.map((s) => [s.patient.leanPatientId, s.targets])).toEqual([['a', ['owner']]]);
+    expect(r.excluded.map((p) => p.leanPatientId)).toEqual(['c']);
+  });
+
+  it('보낸 지 7일이 지나면 조건에 맞는 한 다시 나온다(6일 전까지는 숨김)', () => {
+    const f = (reportDate: string) => [{ leanPatientId: 'a', reportDate, target: 'desk' as const }];
+    expect(partitionPatients(list, f('2026-10-21'), new Set(), '2026-10-27', add).sent).toHaveLength(1); // 6일 전
+    expect(partitionPatients(list, f('2026-10-20'), new Set(), '2026-10-27', add).sent).toHaveLength(0); // 7일 전
+  });
+
+  it('제외가 보낸 것보다 우선하고, 직원·원장 둘 다 보냈으면 둘 다 표시', () => {
+    const both = [
+      { leanPatientId: 'a', reportDate: '2026-10-26', target: 'desk' as const },
+      { leanPatientId: 'a', reportDate: '2026-10-27', target: 'owner' as const },
+    ];
+    expect(partitionPatients(list, both, new Set(['a']), '2026-10-27', add).sent).toHaveLength(0);
+    const r = partitionPatients(list, both, new Set(), '2026-10-27', add);
+    expect(r.sent[0]).toMatchObject({ targets: ['desk', 'owner'], sentDate: '2026-10-27' });
   });
 });
