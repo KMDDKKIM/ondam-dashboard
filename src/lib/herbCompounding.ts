@@ -145,3 +145,8 @@ export function orderEdited(current: HerbCompoundingOrder, saved: HerbCompoundin
   const fields = (o: HerbCompoundingOrder) => [o.patientName.trim(), o.chartNo.trim(), o.prescriptionName.trim(), o.orderDate, o.packetCount, o.packVolumeMl, o.daysSupply, o.dosesPerDay, o.packCount, o.totalLiquidMl, o.memo.trim()];
   return JSON.stringify([fields(current), lines(current)]) !== JSON.stringify([fields(saved), lines(saved)]);
 }
+
+/** "오늘 날짜로 처방하기"를 보여 줄 때인가 — 저장된 처방전이고 처방일이 오늘이 아닐 때만(오늘 처방한 것은 그냥 저장하면 된다). */
+export function canPrescribeToday(order: Pick<HerbCompoundingOrder, 'id' | 'orderDate'>, today: string): boolean {
+  return Boolean(order.id) && order.orderDate !== today;
+}

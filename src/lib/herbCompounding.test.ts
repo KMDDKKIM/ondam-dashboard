@@ -4,6 +4,7 @@ import {
   computePackCount,
   herbLineTotal,
   incompleteHerbLines,
+  canPrescribeToday,
   duplicateHerbNames,
   mergeHerbLines,
   orderEdited,
@@ -226,5 +227,13 @@ describe('orderEdited', () => {
     expect(orderEdited({ ...base, packetCount: 10 }, base)).toBe(true);
     expect(orderEdited({ ...base, memo: '메모' }, base)).toBe(true);
     expect(orderEdited({ ...base, herbs: [...base.herbs, { herbName: '천궁', prepMethod: '', gramsPerPacket: 4 }] }, base)).toBe(true);
+  });
+});
+
+describe('canPrescribeToday', () => {
+  it('저장된 처방전이고 처방일이 오늘이 아닐 때만', () => {
+    expect(canPrescribeToday({ id: 'x', orderDate: '2026-10-01' }, '2026-10-27')).toBe(true);
+    expect(canPrescribeToday({ id: 'x', orderDate: '2026-10-27' }, '2026-10-27')).toBe(false);
+    expect(canPrescribeToday({ id: '', orderDate: '2026-10-01' }, '2026-10-27')).toBe(false);
   });
 });
