@@ -30,16 +30,16 @@ describe('orderDays — 첩수가 아니라 며칠분', () => {
 });
 
 describe('prescriptionCalls', () => {
-  it('첫 처방전: 수령예정일+2일 수령확인, 며칠분에 맞춘 중간상담', () => {
+  it('첫 처방전: 수령예정일+1일 수령확인, 며칠분에 맞춘 중간상담', () => {
     expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 15, firstOfCourse: true })).toEqual([
-      { slot: 1, callDate: '2026-10-21', note: '한약 수령확인' },
+      { slot: 1, callDate: '2026-10-20', note: '한약 수령확인' },
       { slot: 2, callDate: '2026-10-31', note: '한약 중간상담 (15일분)' },
     ]);
   });
 
   it('금요일에 출력하고 월요일에 달여 수령예정일이 월요일이면 그날 기준이다(출력일 기준이 아니다)', () => {
-    // 출력 2026-10-16(금), 수령예정일 2026-10-20(화) → 수령확인 10/22
-    expect(prescriptionCalls({ pickupDate: '2026-10-20', days: 10, firstOfCourse: true })[0].callDate).toBe('2026-10-22');
+    // 출력 2026-10-16(금), 수령예정일 2026-10-20(화) → 수령확인 10/21
+    expect(prescriptionCalls({ pickupDate: '2026-10-20', days: 10, firstOfCourse: true })[0].callDate).toBe('2026-10-21');
   });
 
   it('재처방(첫 처방전이 아님)은 중간상담만', () => {
@@ -48,7 +48,7 @@ describe('prescriptionCalls', () => {
   });
 
   it('며칠분을 모르면 수령확인만(첫 처방전일 때)', () => {
-    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 0, firstOfCourse: true })).toEqual([{ slot: 1, callDate: '2026-10-21', note: '한약 수령확인' }]);
+    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 0, firstOfCourse: true })).toEqual([{ slot: 1, callDate: '2026-10-20', note: '한약 수령확인' }]);
     expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 0, firstOfCourse: false })).toEqual([]);
   });
 

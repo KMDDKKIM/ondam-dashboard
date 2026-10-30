@@ -95,7 +95,7 @@ export function PickupPending() {
         {orders.length > 0 && <span style={{ fontWeight: 700, color: 'var(--color-error)' }}>{orders.length}건</span>}
       </div>
       <p className="muted-text" style={{ margin: '0 0 8px', fontSize: 13 }}>
-        처방전 출력이 끝난 한약이에요. 수령예정일을 넣으면 <b>수령예정일 +2일</b>에 수령확인, <b>며칠분에 맞춰</b>(10일분 8일차 · 15일분 12일차 · 30일분 25일차) 중간상담 해피콜이 만들어져요.
+        처방전 출력이 끝난 한약이에요. 수령예정일을 넣으면 <b>수령예정일 +1일</b>에 수령확인, <b>며칠분에 맞춰</b>(10일분 8일차 · 15일분 12일차 · 30일분 25일차) 중간상담 해피콜이 만들어져요.
       </p>
       {notice && <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-green)', fontWeight: 600 }}>✔ {notice}</p>}
       {error && <p className="error-text" style={{ margin: '0 0 8px' }}>{error}</p>}
