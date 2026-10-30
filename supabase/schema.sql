@@ -2321,3 +2321,16 @@ create policy "owner can update happy_call_rules" on happy_call_rules
 
 -- 일반 한약 처방전에서도 내원 유도(약 소진 전 연락) 해피콜을 만들 수 있게 세 번째 연결 칸을 둔다.
 alter table herb_compounding_orders add column if not exists call_entry_id_3 uuid references happy_call_manual_entries(id) on delete set null;
+
+-- ===== 인센티브 월말 개수 (migration_incentive_counts.sql) =====
+create table if not exists incentive_counts (
+  category_id uuid not null references incentive_categories(id) on delete cascade,
+  month text not null check (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  profile_id uuid not null references incentive_profiles(id) on delete cascade,
+  count int not null default 0 check (count >= 0),
+  updated_by uuid references staff(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (category_id, month)
+);
+alter table incentive_counts enable row level security;
+-- 의도적으로 정책을 하나도 만들지 않는다(= 일반 클라이언트는 전부 거부).

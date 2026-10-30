@@ -63,3 +63,39 @@ export function nextMonthFirstDay(month: string): string {
 export function categoryNeedsAmount(category: Pick<IncentiveCategory, 'calcType'> | null | undefined): boolean {
   return (category?.calcType ?? 'percent_of_amount') === 'percent_of_amount';
 }
+
+/** 환자별로 적지 않고 월말에 개수만 세어 입력하는 항목인가 — 건당 고정 금액 항목(추나 등). */
+export function isCountCategory(category: Pick<IncentiveCategory, 'calcType'> | null | undefined): boolean {
+  return category?.calcType === 'fixed_per_entry';
+}
+
+export interface IncentiveCount {
+  categoryId: string;
+  /** YYYY-MM */
+  month: string;
+  count: number;
+}
+
+/** 월말 개수의 지급액 = 개수 × 건당 금액. 항목을 못 찾거나 건당 항목이 아니면 0. */
+export function countIncentive(
+  count: number,
+  category: Pick<IncentiveCategory, 'calcType' | 'fixedAmount'> | null | undefined
+): number {
+  if (!category || category.calcType !== 'fixed_per_entry') return 0;
+  return Math.max(0, Math.round(count)) * (category.fixedAmount ?? 0);
+}
+
+/** 여러 항목의 월말 개수 지급액 합계. */
+export function sumCountIncentive(
+  counts: Pick<IncentiveCount, 'categoryId' | 'count'>[],
+  categories: Pick<IncentiveCategory, 'id' | 'calcType' | 'fixedAmount'>[]
+): number {
+  return counts.reduce((sum, c) => sum + countIncentive(c.count, categories.find((x) => x.id === c.categoryId)), 0);
+}
+
+/** 개수 입력값을 0 이상의 정수로 정리한다. 숫자가 아니면 null. */
+export function parseCount(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 0 || n > 99999) return null;
+  return Math.round(n);
+}

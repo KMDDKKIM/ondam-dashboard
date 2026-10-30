@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { nextMonthFirstDay, type IncentiveCalcType, type IncentiveCategory, type IncentiveEntry } from '@/lib/incentive';
+import { nextMonthFirstDay, type IncentiveCalcType, type IncentiveCategory, type IncentiveCount, type IncentiveEntry } from '@/lib/incentive';
 
 // 이 파일의 함수는 전부 admin(service_role) 클라이언트로만 호출한다 — 일반 로그인
 // 클라이언트는 RLS가 막아 애초에 쓸 수 없다(migration_incentive.sql 참고). "누가 뭘
@@ -263,4 +263,42 @@ export async function getEntryProfileId(admin: SupabaseClient, entryId: string):
   const { data, error } = await admin.from('incentive_entries').select('profile_id').eq('id', entryId).maybeSingle();
   if (error) throw error;
   return data?.profile_id ?? null;
+}
+
+export async function updateEntry(
+  admin: SupabaseClient,
+  id: string,
+  patch: { categoryId: string; entryDate: string; patientName: string; amount: number; note: string }
+): Promise<void> {
+  const { data, error } = await admin
+    .from('incentive_entries')
+    .update({
+      category_id: patch.categoryId,
+      entry_date: patch.entryDate,
+      patient_name: patch.patientName,
+      amount: patch.amount,
+      note: patch.note || null,
+    })
+    .eq('id', id)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('수정할 내역을 찾지 못했습니다.');
+}
+
+// ---- 월말 개수(추나 등 건당 고정 금액 항목은 환자별로 적지 않고 한 달 개수만 입력) ----
+
+export async function listCounts(admin: SupabaseClient, profileId: string, month: string): Promise<IncentiveCount[]> {
+  const { data, error } = await admin.from('incentive_counts').select('category_id, month, count').eq('profile_id', profileId).eq('month', month);
+  if (error) throw error;
+  return ((data ?? []) as { category_id: string; month: string; count: number }[]).map((r) => ({ categoryId: r.category_id, month: r.month, count: Number(r.count) }));
+}
+
+export async function setCount(admin: SupabaseClient, input: { profileId: string; categoryId: string; month: string; count: number; by: string | null }): Promise<void> {
+  const { error } = await admin
+    .from('incentive_counts')
+    .upsert(
+      { category_id: input.categoryId, month: input.month, profile_id: input.profileId, count: input.count, updated_by: input.by, updated_at: new Date().toISOString() },
+      { onConflict: 'category_id,month' }
+    );
+  if (error) throw error;
 }

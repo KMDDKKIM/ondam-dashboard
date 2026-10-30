@@ -4,7 +4,7 @@ import { confirmDialog } from '@/lib/confirmDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { currentMonthKst, todayKst } from '@/lib/kst';
-import type { IncentiveCategory } from '@/lib/incentive';
+import { isCountCategory, parseCount, type IncentiveCategory } from '@/lib/incentive';
 import { CategoryManager } from '@/components/incentive/CategoryManager';
 
 interface Profile {
@@ -25,6 +25,18 @@ interface EntryWithIncentive {
   incentiveAmount: number;
 }
 
+/** 월말 개수로 입력하는 항목(추나 등)의 그 달 개수·지급액 */
+interface CountRow {
+  categoryId: string;
+  name: string;
+  color: string;
+  active: boolean;
+  count: number;
+  amount: number;
+  /** 건당 금액 — 원장에게만 내려온다 */
+  unitAmount: number | null;
+}
+
 interface StaffOption {
   id: string;
   name: string;
@@ -39,6 +51,19 @@ export default function IncentivePage() {
   const [categories, setCategories] = useState<IncentiveCategory[]>([]);
   const [entries, setEntries] = useState<EntryWithIncentive[]>([]);
   const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<CountRow[]>([]);
+  const [countsTotal, setCountsTotal] = useState(0);
+  // 개수 칸에 입력 중인 값(저장 전). 저장하면 지운다.
+  const [countDraft, setCountDraft] = useState<Record<string, string>>({});
+  const [savingCountId, setSavingCountId] = useState('');
+  // 내역 수정
+  const [editingId, setEditingId] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editPatient, setEditPatient] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -72,17 +97,31 @@ export default function IncentivePage() {
       setCategories([]);
       setEntries([]);
       setTotal(0);
+      setCounts([]);
+      setCountsTotal(0);
       return;
     }
-    const [catRes, entRes] = await Promise.all([
+    const [catRes, entRes, countRes] = await Promise.all([
       fetch(`/api/incentive/categories?profileId=${profileId}`),
       fetch(`/api/incentive/entries?profileId=${profileId}&month=${forMonth}`),
+      fetch(`/api/incentive/counts?profileId=${profileId}&month=${forMonth}`),
     ]);
     if (!catRes.ok || !entRes.ok) throw new Error();
     setCategories((await catRes.json()) as IncentiveCategory[]);
     const entBody = (await entRes.json()) as { entries: EntryWithIncentive[]; total: number };
     setEntries(entBody.entries);
     setTotal(entBody.total);
+    // 월말 개수 표를 아직 만들지 않았어도(SQL 실행 전) 나머지 화면은 그대로 보여 준다.
+    if (countRes.ok) {
+      const countBody = (await countRes.json()) as { counts: CountRow[]; total: number };
+      setCounts(countBody.counts);
+      setCountsTotal(countBody.total);
+    } else {
+      setCounts([]);
+      setCountsTotal(0);
+    }
+    setCountDraft({});
+    setEditingId('');
   }, []);
 
   useEffect(() => {
@@ -115,10 +154,12 @@ export default function IncentivePage() {
   const selectedProfile = profiles.find((p) => p.id === selectedId) ?? null;
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const canEditCategories = isOwner;
+  // 환자별로 적는 항목 — 추나처럼 건당 고정 금액인 항목은 아래 "월말 개수"에서 개수만 입력한다.
+  const entryCategories = categories.filter((c) => c.active && !isCountCategory(c));
 
   useEffect(() => {
-    const active = categories.filter((c) => c.active);
-    if (active.length > 0 && !active.some((c) => c.id === categoryId)) setCategoryId(active[0].id);
+    if (entryCategories.length > 0 && !entryCategories.some((c) => c.id === categoryId)) setCategoryId(entryCategories[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, categoryId]);
 
   async function refreshDetail() {
@@ -181,6 +222,70 @@ export default function IncentivePage() {
       setError('추가하지 못했습니다.');
     } finally {
       setAddingEntry(false);
+    }
+  }
+
+  function startEdit(e: EntryWithIncentive) {
+    setEditingId(e.id);
+    setEditDate(e.entryDate);
+    setEditPatient(e.patientName);
+    setEditCategoryId(e.categoryId);
+    setEditAmount(e.amount > 0 ? String(e.amount) : '');
+    setEditNote(e.note);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editPatient.trim() || !editDate || !editCategoryId) return;
+    const category = categories.find((c) => c.id === editCategoryId);
+    setSavingEdit(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/incentive/entries/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: editCategoryId,
+          entryDate: editDate,
+          patientName: editPatient.trim(),
+          amount: category?.calcType === 'percent_of_amount' ? Number(editAmount) || 0 : 0,
+          note: editNote,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      await refreshDetail();
+    } catch {
+      setError('수정하지 못했습니다.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleSaveCount(row: CountRow) {
+    const raw = countDraft[row.categoryId];
+    if (raw === undefined) return;
+    const next = parseCount(raw);
+    if (next === null) {
+      setError('개수는 0 이상의 숫자로 입력해 주세요.');
+      return;
+    }
+    if (next === row.count) {
+      setCountDraft(({ [row.categoryId]: _unused, ...rest }) => rest);
+      return;
+    }
+    setSavingCountId(row.categoryId);
+    setError('');
+    try {
+      const res = await fetch('/api/incentive/counts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: selectedId, categoryId: row.categoryId, month, count: next }),
+      });
+      if (!res.ok) throw new Error();
+      await refreshDetail();
+    } catch {
+      setError('개수를 저장하지 못했습니다.');
+    } finally {
+      setSavingCountId('');
     }
   }
 
@@ -317,7 +422,7 @@ export default function IncentivePage() {
             <div>
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>구분</label>
               <select className="input-field" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ width: 150 }}>
-                {categories.filter((c) => c.active).map((c) => (
+                {entryCategories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -334,12 +439,51 @@ export default function IncentivePage() {
               <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>메모</label>
               <input className="input-field" value={note} onChange={(e) => setNote(e.target.value)} style={{ width: 140 }} />
             </div>
-            <button type="submit" className="btn-primary" disabled={addingEntry || categories.length === 0} style={{ padding: '7px 16px' }}>
+            <button type="submit" className="btn-primary" disabled={addingEntry || entryCategories.length === 0} style={{ padding: '7px 16px' }}>
               {addingEntry ? '추가 중...' : '추가'}
             </button>
           </form>
 
-          <p style={{ fontWeight: 700, marginBottom: 10 }}>{month} 합계: {total.toLocaleString('ko-KR')}원</p>
+          {counts.length > 0 && (
+            <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+              <p style={{ fontWeight: 700, marginBottom: 2 }}>🔢 월말 개수 입력 ({month})</p>
+              <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
+                추나는 환자별로 적지 않아도 돼요. 한 달 동안 한 개수만 입력하면 지급액이 자동으로 계산돼요. 숫자를 바꾸고 칸 밖을 누르면 저장돼요.
+              </p>
+              {counts.map((row) => (
+                <div key={row.categoryId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--color-line)' }}>
+                  <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 13, fontWeight: 700, color: '#fff', background: row.color, minWidth: 80, textAlign: 'center' }}>{row.name}</span>
+                  <input
+                    className="input-field"
+                    type="number"
+                    min={0}
+                    aria-label={`${row.name} 개수`}
+                    value={countDraft[row.categoryId] ?? String(row.count)}
+                    onChange={(e) => setCountDraft((d) => ({ ...d, [row.categoryId]: e.target.value }))}
+                    onBlur={() => handleSaveCount(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    }}
+                    disabled={savingCountId === row.categoryId}
+                    style={{ width: 90 }}
+                  />
+                  <span>개</span>
+                  {row.unitAmount != null && <span className="muted-text" style={{ fontSize: 12 }}>× {row.unitAmount.toLocaleString('ko-KR')}원</span>}
+                  <span style={{ fontWeight: 700 }}>= {row.amount.toLocaleString('ko-KR')}원</span>
+                  {savingCountId === row.categoryId && <span className="muted-text" style={{ fontSize: 12 }}>저장 중...</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p style={{ fontWeight: 700, marginBottom: 10 }}>
+            {month} 합계: {(total + countsTotal).toLocaleString('ko-KR')}원
+            {countsTotal > 0 && (
+              <span className="muted-text" style={{ fontWeight: 400, fontSize: 13 }}>
+                {' '}(내역 {total.toLocaleString('ko-KR')}원 + 월말 개수 {countsTotal.toLocaleString('ko-KR')}원)
+              </span>
+            )}
+          </p>
 
           {entries.length === 0 ? (
             <p className="muted-text">이 달 입력된 내역이 없어요.</p>
@@ -358,6 +502,42 @@ export default function IncentivePage() {
                 <tbody>
                   {entries.map((e) => {
                     const category = categories.find((c) => c.id === e.categoryId);
+                    if (editingId === e.id) {
+                      // 수정 중인 줄 — 구분은 환자별로 적는 항목 + 원래 구분. 결제금액은 비율 항목일 때만.
+                      const options = categories.filter((c) => (c.active && !isCountCategory(c)) || c.id === e.categoryId);
+                      const editCategory = categories.find((c) => c.id === editCategoryId);
+                      const cellStyle = { padding: '6px 6px', borderBottom: '1px solid var(--color-line)' } as const;
+                      return (
+                        <tr key={e.id} style={{ background: 'var(--color-bg, #f6f7f4)' }}>
+                          <td style={cellStyle}><input className="input-field" type="date" value={editDate} onChange={(ev) => setEditDate(ev.target.value)} style={{ width: 140 }} /></td>
+                          <td style={cellStyle}><input className="input-field" value={editPatient} onChange={(ev) => setEditPatient(ev.target.value)} style={{ width: 110 }} /></td>
+                          <td style={cellStyle}>
+                            <select className="input-field" value={editCategoryId} onChange={(ev) => setEditCategoryId(ev.target.value)} style={{ width: 140 }}>
+                              {options.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={cellStyle}>
+                            {editCategory?.calcType === 'percent_of_amount' ? (
+                              <input className="input-field" type="number" min={0} value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)} style={{ width: 110 }} />
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td style={cellStyle} className="muted-text">저장하면 다시 계산돼요</td>
+                          <td style={cellStyle}><input className="input-field" value={editNote} onChange={(ev) => setEditNote(ev.target.value)} style={{ width: 130 }} /></td>
+                          <td style={{ ...cellStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button type="button" className="btn-primary" onClick={handleSaveEdit} disabled={savingEdit || !editPatient.trim()} style={{ padding: '4px 12px', fontSize: 12 }}>
+                              {savingEdit ? '저장 중...' : '저장'}
+                            </button>{' '}
+                            <button type="button" onClick={() => setEditingId('')} disabled={savingEdit} style={{ border: 'none', background: 'transparent', color: 'var(--color-muted)', fontSize: 12, fontWeight: 600 }}>
+                              취소
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
                     return (
                       <tr key={e.id}>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', whiteSpace: 'nowrap' }}>{e.entryDate}</td>
@@ -370,7 +550,14 @@ export default function IncentivePage() {
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)' }}>{e.amount > 0 ? `${e.amount.toLocaleString('ko-KR')}원` : '-'}</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', fontWeight: 700 }}>{e.incentiveAmount.toLocaleString('ko-KR')}원</td>
                         <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', color: 'var(--color-muted)' }}>{e.note || '-'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', textAlign: 'right' }}>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-line)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(e)}
+                            style={{ border: 'none', background: 'transparent', color: 'var(--color-brand-b)', fontSize: 12, fontWeight: 600, padding: 0, marginRight: 10 }}
+                          >
+                            수정
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteEntry(e.id)}

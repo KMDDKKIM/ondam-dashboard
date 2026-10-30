@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryNeedsAmount, computeEntryIncentive, isInMonth, nextMonthFirstDay, sumIncentive } from './incentive';
+import { categoryNeedsAmount, computeEntryIncentive, countIncentive, isCountCategory, isInMonth, nextMonthFirstDay, parseCount, sumCountIncentive, sumIncentive } from './incentive';
 
 const categories = [
   { id: 'c1', calcType: 'percent_of_amount' as const, percent: 0.1, fixedAmount: null },
@@ -79,5 +79,39 @@ describe('categoryNeedsAmount', () => {
 
   it('카테고리가 없으면(아직 안 고름) 기본은 금액 필요', () => {
     expect(categoryNeedsAmount(null)).toBe(true);
+  });
+});
+
+describe('월말 개수 입력(추나 등 건당 항목)', () => {
+  const tuna = { id: 't', calcType: 'fixed_per_entry' as const, fixedAmount: 5000 };
+  const herb = { id: 'h', calcType: 'percent_of_amount' as const, fixedAmount: null };
+
+  it('개수 × 건당 금액', () => {
+    expect(countIncentive(12, tuna)).toBe(60000);
+    expect(countIncentive(0, tuna)).toBe(0);
+  });
+
+  it('건당 항목이 아니거나 항목을 못 찾으면 0', () => {
+    expect(countIncentive(10, herb)).toBe(0);
+    expect(countIncentive(10, null)).toBe(0);
+  });
+
+  it('여러 항목 합계', () => {
+    const cats = [tuna, { id: 'u', calcType: 'fixed_per_entry' as const, fixedAmount: 7000 }, herb];
+    expect(sumCountIncentive([{ categoryId: 't', count: 3 }, { categoryId: 'u', count: 2 }, { categoryId: 'h', count: 9 }, { categoryId: 'x', count: 5 }], cats)).toBe(29000);
+  });
+
+  it('건당 항목만 월말 개수로 센다', () => {
+    expect(isCountCategory(tuna)).toBe(true);
+    expect(isCountCategory(herb)).toBe(false);
+  });
+
+  it('입력값 정리', () => {
+    expect(parseCount('12')).toBe(12);
+    expect(parseCount(3.6)).toBe(4);
+    expect(parseCount('')).toBeNull();
+    expect(parseCount('가')).toBeNull();
+    expect(parseCount(-1)).toBeNull();
+    expect(parseCount(1e9)).toBeNull();
   });
 });
