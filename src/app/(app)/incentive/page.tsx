@@ -25,7 +25,7 @@ interface EntryWithIncentive {
   incentiveAmount: number;
 }
 
-/** 월말 개수로 입력하는 항목(추나 등)의 그 달 개수·지급액 */
+/** 월말 횟수로 입력하는 항목(추나 등)의 그 달 횟수·지급액 */
 interface CountRow {
   categoryId: string;
   name: string;
@@ -53,7 +53,7 @@ export default function IncentivePage() {
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<CountRow[]>([]);
   const [countsTotal, setCountsTotal] = useState(0);
-  // 개수 칸에 입력 중인 값(저장 전). 저장하면 지운다.
+  // 횟수 칸에 입력 중인 값(저장 전). 저장하면 지운다.
   const [countDraft, setCountDraft] = useState<Record<string, string>>({});
   const [savingCountId, setSavingCountId] = useState('');
   // 내역 수정
@@ -154,7 +154,7 @@ export default function IncentivePage() {
   const selectedProfile = profiles.find((p) => p.id === selectedId) ?? null;
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const canEditCategories = isOwner;
-  // 환자별로 적는 항목 — 추나처럼 건당 고정 금액인 항목은 아래 "월말 개수"에서 개수만 입력한다.
+  // 환자별로 적는 항목 — 추나처럼 건당 고정 금액인 항목은 아래 "추나 횟수 입력"에서 횟수만 입력한다.
   const entryCategories = categories.filter((c) => c.active && !isCountCategory(c));
 
   useEffect(() => {
@@ -265,7 +265,7 @@ export default function IncentivePage() {
     if (raw === undefined) return;
     const next = parseCount(raw);
     if (next === null) {
-      setError('개수는 0 이상의 숫자로 입력해 주세요.');
+      setError('횟수는 0 이상의 숫자로 입력해 주세요.');
       return;
     }
     if (next === row.count) {
@@ -283,7 +283,7 @@ export default function IncentivePage() {
       if (!res.ok) throw new Error();
       await refreshDetail();
     } catch {
-      setError('개수를 저장하지 못했습니다.');
+      setError('횟수를 저장하지 못했습니다.');
     } finally {
       setSavingCountId('');
     }
@@ -446,9 +446,9 @@ export default function IncentivePage() {
 
           {counts.length > 0 && (
             <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-              <p style={{ fontWeight: 700, marginBottom: 2 }}>🔢 월말 개수 입력 ({month})</p>
+              <p style={{ fontWeight: 700, marginBottom: 2 }}>🔢 추나 횟수 입력 ({month})</p>
               <p className="muted-text" style={{ fontSize: 12, marginBottom: 10 }}>
-                추나는 환자별로 적지 않아도 돼요. 한 달 동안 한 개수만 입력하면 지급액이 자동으로 계산돼요. 숫자를 바꾸고 칸 밖을 누르면 저장돼요.
+                추나는 환자별로 적지 않아도 돼요. 한 달 동안 한 횟수만 입력하면 지급액이 자동으로 계산돼요. 숫자를 바꾸고 칸 밖을 누르면 저장돼요.
               </p>
               {counts.map((row) => (
                 <div key={row.categoryId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--color-line)' }}>
@@ -457,7 +457,7 @@ export default function IncentivePage() {
                     className="input-field"
                     type="number"
                     min={0}
-                    aria-label={`${row.name} 개수`}
+                    aria-label={`${row.name} 횟수`}
                     value={countDraft[row.categoryId] ?? String(row.count)}
                     onChange={(e) => setCountDraft((d) => ({ ...d, [row.categoryId]: e.target.value }))}
                     onBlur={() => handleSaveCount(row)}
@@ -467,7 +467,7 @@ export default function IncentivePage() {
                     disabled={savingCountId === row.categoryId}
                     style={{ width: 64, padding: '3px 8px', fontSize: 14 }}
                   />
-                  <span>개</span>
+                  <span>회</span>
                   {row.unitAmount != null && <span className="muted-text" style={{ fontSize: 12 }}>× {row.unitAmount.toLocaleString('ko-KR')}원</span>}
                   <span style={{ fontWeight: 700 }}>= {row.amount.toLocaleString('ko-KR')}원</span>
                   {savingCountId === row.categoryId && <span className="muted-text" style={{ fontSize: 12 }}>저장 중...</span>}
@@ -475,15 +475,6 @@ export default function IncentivePage() {
               ))}
             </div>
           )}
-
-          <p style={{ fontWeight: 700, marginBottom: 10 }}>
-            {month} 합계: {(total + countsTotal).toLocaleString('ko-KR')}원
-            {countsTotal > 0 && (
-              <span className="muted-text" style={{ fontWeight: 400, fontSize: 13 }}>
-                {' '}(내역 {total.toLocaleString('ko-KR')}원 + 월말 개수 {countsTotal.toLocaleString('ko-KR')}원)
-              </span>
-            )}
-          </p>
 
           {entries.length === 0 ? (
             <p className="muted-text">이 달 입력된 내역이 없어요.</p>
@@ -573,6 +564,15 @@ export default function IncentivePage() {
               </table>
             </div>
           )}
+
+          <p style={{ fontWeight: 700, margin: '14px 0 0', fontSize: 16 }}>
+            {month} 합계: {(total + countsTotal).toLocaleString('ko-KR')}원
+            {countsTotal > 0 && (
+              <span className="muted-text" style={{ fontWeight: 400, fontSize: 13 }}>
+                {' '}(내역 {total.toLocaleString('ko-KR')}원 + 추나 횟수 {countsTotal.toLocaleString('ko-KR')}원)
+              </span>
+            )}
+          </p>
         </>
       )}
     </div>

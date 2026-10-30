@@ -228,7 +228,7 @@ export function CategoryManager({ profileId, categories, editable, onChanged }: 
                 <label className="muted-text" style={{ display: 'block', fontSize: 11, marginBottom: 2 }}>계산 방식</label>
                 <select className="input-field" value={form.calcType} onChange={(e) => setForm((f) => ({ ...f, calcType: e.target.value as typeof f.calcType }))} style={{ width: 150 }}>
                   <option value="percent_of_amount">결제금액 × 비율</option>
-                  <option value="fixed_per_entry">건당 고정 금액 (월말에 개수만 입력)</option>
+                  <option value="fixed_per_entry">건당 고정 금액 (추나 횟수만 입력)</option>
                 </select>
               </div>
               {form.calcType === 'percent_of_amount' ? (
