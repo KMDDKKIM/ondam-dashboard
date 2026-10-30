@@ -17,14 +17,14 @@ function daysBetween(fromStr: string, toStr: string): number {
   return Math.round((b - a) / 86400000);
 }
 
-// 데스크 확인 공식(2026-09-22): 한약(공진단·경옥고 포함) 후속콜은 1차 수령확인(수령일+2일),
+// 데스크 확인 공식(2026-09-22): 한약(공진단·경옥고 포함) 후속콜은 1차 수령확인(수령일+1일 — 직원 요청으로 2026-10-30에 +2일에서 바꿈),
 // 2차 중간상담(수령일+10일 고정), 3차 연복권유(한약 종료 5일 전 = 수령일+처방일수-5). 처방일수가 아주 짧아
 // 순서가 뒤집히면(예: 15일 미만) 뒤 콜이 앞 콜보다 빨라지지 않도록 앞 콜 날짜로 맞춘다.
 export function computeHerbCallDates(
   pickupDate: string,
   durationDays: number
 ): { callDate1: string; callDate2: string; callDate3: string } {
-  const callDate1 = addDays(pickupDate, 2);
+  const callDate1 = addDays(pickupDate, 1);
   let callDate2 = addDays(pickupDate, 10);
   if (callDate2 < callDate1) {
     callDate2 = callDate1;

@@ -69,7 +69,7 @@ describe('purchaseExportRows', () => {
       [row({ happyCallDate: '2026-10-10', durationDays: 30, goalCategory: 'herb', amount: 300000 }), row({ happyCallDate: '2026-10-10' }), row()],
       name
     );
-    expect(full.slice(8, 13)).toEqual(['2026-10-10', 30, '2026-10-12', '2026-10-20', '2026-11-04']);
+    expect(full.slice(8, 13)).toEqual(['2026-10-10', 30, '2026-10-11', '2026-10-20', '2026-11-04']);
     expect(full[7]).toBe('한약');
     expect(full[5]).toBe(300000);
     expect(single.slice(10, 13)).toEqual(['2026-10-11', '', '']);
