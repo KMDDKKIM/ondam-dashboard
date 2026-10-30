@@ -465,7 +465,7 @@ export default function IncentivePage() {
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                     }}
                     disabled={savingCountId === row.categoryId}
-                    style={{ width: 90 }}
+                    style={{ width: 64, padding: '3px 8px', fontSize: 14 }}
                   />
                   <span>개</span>
                   {row.unitAmount != null && <span className="muted-text" style={{ fontSize: 12 }}>× {row.unitAmount.toLocaleString('ko-KR')}원</span>}
