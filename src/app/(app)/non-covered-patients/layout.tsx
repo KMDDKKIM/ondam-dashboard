@@ -7,9 +7,10 @@ const TABS = [
   { href: '/non-covered-patients', label: '구매 기록' },
   { href: '/non-covered-patients/monthly', label: '월별 현황' },
   { href: '/non-covered-patients/compare', label: '월별 비교' },
+  { href: '/non-covered-patients/call-rules', label: '해피콜 규칙' },
 ];
 
-// 비급여 현황의 세 화면(구매 기록 / 월별 현황 / 월별 비교) 공통 머리: 제목과 화면 이동 탭.
+// 비급여 현황의 화면(구매 기록 / 월별 현황 / 월별 비교 / 해피콜 규칙) 공통 머리: 제목과 화면 이동 탭.
 export default function NonCoveredLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname().replace(/\/$/, '');
 

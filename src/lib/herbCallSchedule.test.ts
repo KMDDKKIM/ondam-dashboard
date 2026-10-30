@@ -58,6 +58,32 @@ describe('prescriptionCalls', () => {
   });
 });
 
+describe('prescriptionCalls — 해피콜 규칙', () => {
+  const rules = {
+    pickupCheck: { enabled: true, mode: 'after-pickup' as const, days: 2 },
+    middle: { enabled: true, mode: 'after-pickup' as const, days: 10 },
+    revisit: { enabled: true, mode: 'before-end' as const, days: 5 },
+  };
+
+  it('내원 유도(약 소진 전)를 켜면 세 번째 해피콜이 생긴다', () => {
+    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 30, firstOfCourse: true }, rules)).toEqual([
+      { slot: 1, callDate: '2026-10-21', note: '한약 수령확인' },
+      { slot: 2, callDate: '2026-10-29', note: '한약 중간상담 (30일분)' },
+      { slot: 3, callDate: '2026-11-13', note: '한약 내원 유도 (30일분)' },
+    ]);
+  });
+
+  it('끈 해피콜은 만들지 않고, 며칠분을 모르면 약 소진 기준은 만들지 않는다', () => {
+    const off = { ...rules, pickupCheck: { ...rules.pickupCheck, enabled: false } };
+    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 30, firstOfCourse: true }, off).map((c) => c.slot)).toEqual([2, 3]);
+    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 0, firstOfCourse: true }, rules).map((c) => c.slot)).toEqual([1, 2]);
+  });
+
+  it('기본 규칙은 내원 유도를 만들지 않는다', () => {
+    expect(prescriptionCalls({ pickupDate: '2026-10-19', days: 30, firstOfCourse: true }).map((c) => c.slot)).toEqual([1, 2]);
+  });
+});
+
 describe('isFirstOfCourse', () => {
   it('이전 처방전이 없으면 첫 처방전', () => {
     expect(isFirstOfCourse('2026-10-19', [])).toBe(true);

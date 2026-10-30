@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isFirstOfCourse, orderDays, prescriptionCalls } from '@/lib/herbCallSchedule';
-import { planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
+import { loadRules } from './happyCallRules';
+import { opsFromToday, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
 import { createManualEntry, getManualEntryStates, removeOpenManualEntries, updateUntouchedManualEntry } from './happyCallQueue';
 
+// 해피콜 날짜는 해피콜 규칙(비급여 현황 > 해피콜 규칙)이 정한다.
 // 처방전 출력 → 한약 대기방 "수령예정일 입력 대기" → 수령예정일 입력 → 해피콜(수령확인·중간상담) 생성(원장 결정, 2026-10-14).
 // 일정 계산은 lib/herbCallSchedule.ts. 해피콜은 비급여 구매에서 만드는 것과 같은 수동 콜(happy_call_manual_entries)이다.
 
@@ -30,6 +32,7 @@ interface Row {
   pickup_date?: string | null;
   call_entry_id?: string | null;
   call_entry_id_2?: string | null;
+  call_entry_id_3?: string | null;
 }
 
 function rowToPickup(r: Row): PickupOrder {
@@ -122,7 +125,14 @@ export interface PickupResult {
  * 수령예정일을 정하고(또는 바꾸고) 그 처방전의 해피콜을 맞춘다. 이미 전화했거나 끝난 해피콜은 절대 안 건드리고, 아직 손대지 않은
  * 것만 날짜를 옮기거나 새로 만든다(비급여 구매의 해피콜을 다시 맞출 때와 같은 규칙, planCallResync).
  */
-export async function setPickupDate(supabase: SupabaseClient, orderId: string, pickupDate: string, createdBy: string | null): Promise<PickupResult> {
+export async function setPickupDate(
+  supabase: SupabaseClient,
+  orderId: string,
+  pickupDate: string,
+  createdBy: string | null,
+  /** notBefore: 해피콜 규칙을 바꾼 뒤 다시 맞출 때, 이 날짜보다 앞선 날짜로는 해피콜을 만들거나 옮기지 않는다 */
+  options: { notBefore?: string } = {}
+): Promise<PickupResult> {
   const { data: orderRow, error } = await supabase.from(TABLE).select('*').eq('id', orderId).maybeSingle();
   if (error) throw error;
   if (!orderRow) throw new Error('처방전을 찾지 못했어요.');
@@ -137,17 +147,19 @@ export async function setPickupDate(supabase: SupabaseClient, orderId: string, p
   const prior = (priorRows as Row[]).map(rowToPickup);
 
   // 같은 날·같은 수령예정일로 이미 해피콜을 만든 처방전이 있으면(같은 처방을 두 번 저장·출력한 경우) 중복 해피콜을 만들지 않는다.
-  const duplicate = (priorRows as Row[]).some((p) => p.order_date === me.orderDate && p.pickup_date === pickupDate && (p.call_entry_id || p.call_entry_id_2));
-  const desired = duplicate ? [] : prescriptionCalls({ pickupDate, days: me.days, firstOfCourse: isFirstOfCourse(me.orderDate, prior) });
+  const duplicate = (priorRows as Row[]).some((p) => p.order_date === me.orderDate && p.pickup_date === pickupDate && (p.call_entry_id || p.call_entry_id_2 || p.call_entry_id_3));
+  const rules = await loadRules(supabase);
+  const desired = duplicate ? [] : prescriptionCalls({ pickupDate, days: me.days, firstOfCourse: isFirstOfCourse(me.orderDate, prior) }, rules.herb);
 
-  const current: Record<CallSlot, string | null> = { 1: order.call_entry_id ?? null, 2: order.call_entry_id_2 ?? null, 3: null };
-  const linked = ([1, 2] as CallSlot[]).flatMap((slot) => (current[slot] ? [{ slot, id: current[slot] as string }] : []));
+  const current: Record<CallSlot, string | null> = { 1: order.call_entry_id ?? null, 2: order.call_entry_id_2 ?? null, 3: order.call_entry_id_3 ?? null };
+  const linked = ([1, 2, 3] as CallSlot[]).flatMap((slot) => (current[slot] ? [{ slot, id: current[slot] as string }] : []));
   const states = await getManualEntryStates(supabase, linked.map((l) => l.id));
   const existing: ExistingCall[] = linked.flatMap(({ slot, id }) => {
     const s = states.find((x) => x.id === id);
     return s ? [{ slot, ...s }] : [];
   });
-  const ops = planCallResync(desired, existing);
+  const planned = planCallResync(desired, existing);
+  const ops = options.notBefore ? opsFromToday(planned, options.notBefore) : planned;
 
   const phone = ops.some((o) => o.type === 'create') ? await findPhone(supabase, me.chartNo, me.patientName) : null;
   const next = { ...current };
@@ -164,7 +176,7 @@ export async function setPickupDate(supabase: SupabaseClient, orderId: string, p
     for (const op of ops) if (op.type === 'remove') next[op.slot] = null;
     const { error: saveError } = await supabase
       .from(TABLE)
-      .update({ pickup_date: pickupDate, call_entry_id: next[1], call_entry_id_2: next[2] })
+      .update({ pickup_date: pickupDate, call_entry_id: next[1], call_entry_id_2: next[2], call_entry_id_3: next[3] })
       .eq('id', orderId);
     if (saveError) throw saveError;
   } catch (err) {
@@ -183,8 +195,8 @@ export async function setPickupDate(supabase: SupabaseClient, orderId: string, p
 
 /** 처방전을 지우기 전에, 그 처방전으로 만든 해피콜 중 아직 손대지 않은 것을 지운다(끝났거나 전화한 해피콜은 기록이라 남긴다). */
 export async function removeOrderCalls(supabase: SupabaseClient, orderId: string): Promise<void> {
-  const { data } = await supabase.from(TABLE).select('call_entry_id, call_entry_id_2').eq('id', orderId).maybeSingle();
-  const row = data as { call_entry_id?: string | null; call_entry_id_2?: string | null } | null;
-  const ids = [row?.call_entry_id, row?.call_entry_id_2].filter((id): id is string => Boolean(id));
+  const { data } = await supabase.from(TABLE).select('*').eq('id', orderId).maybeSingle();
+  const row = data as { call_entry_id?: string | null; call_entry_id_2?: string | null; call_entry_id_3?: string | null } | null;
+  const ids = [row?.call_entry_id, row?.call_entry_id_2, row?.call_entry_id_3].filter((id): id is string => Boolean(id));
   if (ids.length > 0) await removeOpenManualEntries(supabase, ids, { onlyUntouched: true });
 }

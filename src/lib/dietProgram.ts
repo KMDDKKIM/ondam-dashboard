@@ -1,11 +1,12 @@
 // 린다이어트 프로그램과 해피콜 일정 계산(순수 로직) — 원장 요청 2026-10-20·21.
 // 비급여 현황에서 린다이어트 결제를 등록할 때 디톡스 시작일·주수를 적으면 프로그램이 만들어지고, 아래 규칙으로
 //  - 데스크(해피콜 목록): 디톡스 시작일·다음날·다다음날(디톡스 3일)
-//  - 원장(케어 보드): 다이어트환 시작일(디톡스가 끝난 다음 날)
-// 에 연락할 일이 자동으로 올라간다. 그 뒤(월요일 문안, 연복 권유, 연휴 공지 등)는 어떻게 할지 정해질 때까지 꺼 둔다(LATER_OWNER_MESSAGES).
+//  - 원장(케어 보드): 다이어트환 시작일(디톡스가 끝난 다음 날)부터 며칠 매일, 그 뒤 매주 한 번
+// 에 연락할 일이 자동으로 올라간다. 며칠 동안 어떻게 하는지는 해피콜 규칙(lib/happyCallRules.ts)이 정한다. 연복 권유·연휴 공지 등은 어떻게 할지 정해질 때까지 꺼 둔다(LATER_OWNER_MESSAGES).
 // 화면/DB 코드는 supabase/dietPrograms.ts.
 
 import { CLINIC_HOLIDAYS } from './clinicHolidays';
+import { DEFAULT_RULES, type DietRules } from './happyCallRules';
 import { addDaysKst, diffDaysKst, weekdayKo } from './kst';
 
 export type DietTrack = 'visit' | 'remote';
@@ -73,7 +74,8 @@ export type OwnerMessageCode =
   | 'visit-revisit'   // 대8 재진 후 단계 전환 안내
   | 'remote-second'   // 비10 2차 상담 후 재처방 안내
   | 'remote-nudge'    // 비9 2차 상담이 아직 안 잡힌 비대면 환자 안부
-  | 'pill-day1'       // 공3 다이어트환 시작 다음 날 안부
+  | 'pill-day1'       // 공3 다이어트환 시작 다음 날 안부(꺼 둔 LATER 메시지)
+  | 'pill-daily'      // 다이어트환 시작일 다음 날부터 매일 안부(해피콜 규칙의 "다이어트환 시작 후 매일" 일수까지)
   | 'weekly'          // 공5 매주 월요일 문안(다이어트환 시작 후 첫 4주)
   | 'refill'          // 공9 약 소진 4일 전 연복 권유
   | 'holiday';        // 공10 연휴 전 공지
@@ -84,6 +86,7 @@ export const OWNER_MESSAGE_LABEL: Record<OwnerMessageCode, string> = {
   'remote-second': '2차 상담 후 재처방 안내',
   'remote-nudge': '2차 상담 일정 확인 안부',
   'pill-day1': '다이어트환 첫날 안부',
+  'pill-daily': '다이어트환 복용 안부',
   weekly: '월요일 문안(첫 4주)',
   refill: '연복 권유(약 소진 임박)',
   holiday: '연휴 전 공지',
@@ -95,8 +98,8 @@ export const OWNER_MESSAGE_LABEL: Record<OwnerMessageCode, string> = {
  */
 export const LATER_OWNER_MESSAGES = false;
 
-/** 월요일 문안을 보내는 기간 — 다이어트환 시작일부터 첫 4주(원장 결정, 2026-10-21). */
-export const WEEKLY_MESSAGE_WEEKS = 4;
+/** 문안(주 1회)을 보내는 기간 기본값 — 다이어트환 시작 후 첫 4주(원장 결정, 2026-10-21). 지금은 해피콜 규칙이 정한다. */
+export const WEEKLY_MESSAGE_WEEKS = DEFAULT_RULES.diet.weeklyWeeks;
 
 export interface DueMessage {
   programId: string;
@@ -132,16 +135,22 @@ interface Candidate {
   windowDays: number;
 }
 
-function candidates(p: DietProgram, today: string, holidays: readonly string[], later: boolean): Candidate[] {
+function candidates(p: DietProgram, today: string, holidays: readonly string[], later: boolean, rules: DietRules): Candidate[] {
   const out: Candidate[] = [];
   const pillStart = dietPillStartDate(p);
 
-  // 다이어트환 시작일 — 원장이 직접 연락한다(디톡스 3일은 데스크가 연락).
-  if (pillStart) out.push({ code: 'pill-start', dueDate: pillStart, windowDays: 2 });
+  // 다이어트환 시작일부터 며칠 매일 — 원장이 직접 연락한다(디톡스 기간은 데스크가 연락). 첫날은 시작 안부·식단 안내, 그 뒤는 복용 안부.
+  if (pillStart && rules.pillDailyDays >= 1) {
+    out.push({ code: 'pill-start', dueDate: pillStart, windowDays: 2 });
+    for (let i = 1; i < rules.pillDailyDays; i++) out.push({ code: 'pill-daily', dueDate: addDaysKst(pillStart, i), windowDays: 0 });
+  }
 
-  // 월요일 문안 — 다이어트환 시작 다음 날부터 첫 4주 동안의 월요일(시작일이 월요일이면 그날은 시작 안부가 대신한다). 월요일 당일에만 보인다.
-  if (pillStart && today > pillStart && diffDaysKst(pillStart, today) < WEEKLY_MESSAGE_WEEKS * 7 && weekdayKo(today) === '월') {
-    out.push({ code: 'weekly', dueDate: today, windowDays: 0 });
+  // 문안 — 매일 연락하는 기간이 끝난 다음 날부터 정해진 주 수 동안의 정해진 요일(기본 월요일, 4주). 그날 당일에만 보인다.
+  if (pillStart && rules.weeklyEnabled) {
+    const since = diffDaysKst(pillStart, today);
+    if (since >= rules.pillDailyDays && since < rules.pillDailyDays + rules.weeklyWeeks * 7 && weekdayKo(today) === rules.weeklyWeekday) {
+      out.push({ code: 'weekly', dueDate: today, windowDays: 0 });
+    }
   }
 
   if (!later) return out;
@@ -179,14 +188,15 @@ export function ownerDueMessages(
   today: string,
   sends: SendKey[],
   holidays: readonly string[] = CLINIC_HOLIDAYS,
-  options: { later?: boolean } = {}
+  options: { later?: boolean; rules?: DietRules } = {}
 ): DueMessage[] {
   const later = options.later ?? LATER_OWNER_MESSAGES;
+  const rules = options.rules ?? DEFAULT_RULES.diet;
   const done = new Set(sends.map((s) => `${s.programId}|${s.code}|${s.dueDate}`));
   const result: DueMessage[] = [];
   for (const p of programs) {
     if (p.status !== 'active') continue;
-    for (const c of candidates(p, today, holidays, later)) {
+    for (const c of candidates(p, today, holidays, later, rules)) {
       const overdue = diffDaysKst(c.dueDate, today);
       if (overdue < 0 || overdue > c.windowDays) continue;
       if (done.has(`${p.id}|${c.code}|${c.dueDate}`)) continue;
@@ -242,10 +252,10 @@ export interface DesiredDeskCall {
   callDate: string;
 }
 
-/** 디톡스 시작일, 다음날, 다다음날에 거는 데스크 해피콜. 디톡스 시작일을 모르면 없다. */
-export function scheduledDeskCalls(p: Pick<DietProgram, 'detoxStartDate'>): DesiredDeskCall[] {
+/** 디톡스 시작일부터 규칙의 일수(기본 3일, 최대 3일)만큼 매일 거는 데스크 해피콜. 디톡스 시작일을 모르면 없다. */
+export function scheduledDeskCalls(p: Pick<DietProgram, 'detoxStartDate'>, rules: DietRules = DEFAULT_RULES.diet): DesiredDeskCall[] {
   if (!p.detoxStartDate) return [];
-  return SCHEDULED_DESK_CODES.map((code, i) => ({ code, callDate: addDaysKst(p.detoxStartDate as string, i) }));
+  return SCHEDULED_DESK_CODES.slice(0, rules.detoxCallDays).map((code, i) => ({ code, callDate: addDaysKst(p.detoxStartDate as string, i) }));
 }
 
 /** 같은 날 올라온 데스크 해피콜을 진행 순서로 정렬하는 번호. 린다이어트 해피콜이 아니면 맨 뒤. */

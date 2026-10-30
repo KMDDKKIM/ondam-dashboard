@@ -7,7 +7,8 @@ import { DURATION_PRESETS, defaultHappyCallDate, type KnownPatient } from '@/lib
 import { suggestGoalCategory } from '@/lib/nonCoveredGoal';
 import { defaultGoalFor } from '@/lib/purchaseFilter';
 import { createsCallsFromPurchase } from '@/lib/nonCoveredCalls';
-import { addDays, computeHerbCallDates } from '@/lib/happyCallStats';
+import { addDays } from '@/lib/happyCallStats';
+import { DEFAULT_RULES, specialCallDates, specialSingleCallDate, type HappyCallRules } from '@/lib/happyCallRules';
 import { todayKst } from '@/lib/kst';
 import type { GoalCategory, NonCoveredProduct } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
@@ -44,6 +45,8 @@ interface Props {
   /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
   doctorNames: string[];
   submitting: boolean;
+  /** 해피콜 규칙(비급여 현황 > 해피콜 규칙) — 아래 "해피콜 몇 회, 언제" 안내에 쓴다. */
+  rules?: HappyCallRules;
   onSubmit: (values: PurchaseFormValues) => void;
   onCancel: () => void;
 }
@@ -51,7 +54,7 @@ interface Props {
 const sectionTitle = { fontSize: 14, fontWeight: 800, margin: '0 0 10px' } as const;
 
 // 등록 폼: 환자 → 구매 내용 → 목표·한약 해피콜 → 메모를 한 화면에 모두 보여 준다("자세히"로 접지 않는다).
-export function PurchaseForm({ products, categories, defaultCategory, knownPatients, doctorNames, submitting, onSubmit, onCancel }: Props) {
+export function PurchaseForm({ products, categories, defaultCategory, knownPatients, doctorNames, submitting, rules = DEFAULT_RULES, onSubmit, onCancel }: Props) {
   const today = todayKst();
   const [name, setName] = useState('');
   const [chartNo, setChartNo] = useState('');
@@ -130,17 +133,21 @@ export function PurchaseForm({ products, categories, defaultCategory, knownPatie
       ? '한약 해피콜은 처방전을 출력한 뒤 한약 대기방에서 수령예정일을 넣으면 만들어져요 (여기서는 만들지 않아요)'
       : isDiet
         ? detoxStart
-          ? `디톡스 3일(${detoxStart} · ${addDays(detoxStart, 1)} · ${addDays(detoxStart, 2)})은 해피콜 목록(데스크), 다이어트환 시작일(${addDays(detoxStart, 3)})은 케어 보드(원장)에 올라가요`
+          ? `${rules.diet.detoxCallDays > 0 ? `디톡스 ${rules.diet.detoxCallDays}일(${Array.from({ length: rules.diet.detoxCallDays }, (_, i) => addDays(detoxStart, i)).join(' · ')})은 해피콜 목록(데스크), ` : ''}다이어트환 시작일(${addDays(detoxStart, 3)})부터는 케어 보드(원장)에 올라가요`
           : '디톡스 시작일을 적으면 해피콜 목록(데스크)과 케어 보드(원장)에 연락할 일이 올라가요'
         : '이 상품은 해피콜을 만들지 않아요'
     : !happyCallDate
     ? '해피콜 없음 (수령일이 비어 있어요)'
     : durationDays
       ? (() => {
-          const { callDate1, callDate2, callDate3 } = computeHerbCallDates(happyCallDate, Number(durationDays));
-          return `해피콜 3회: ${callDate1} · ${callDate2} · ${callDate3}`;
+          const { callDate1, callDate2, callDate3 } = specialCallDates(rules.special, happyCallDate, Number(durationDays));
+          const dates = [callDate1, callDate2, callDate3].filter((d): d is string => Boolean(d));
+          return dates.length > 0 ? `해피콜 ${dates.length}회: ${dates.join(' · ')}` : '해피콜 없음 (해피콜 규칙에서 꺼져 있어요)';
         })()
-      : `해피콜 1회: ${addDays(happyCallDate, 1)} (수령일 다음날)`;
+      : (() => {
+          const single = specialSingleCallDate(rules.special, happyCallDate);
+          return single ? `해피콜 1회: ${single} (수령일 +${rules.special.withoutSupply.days}일)` : '해피콜 없음 (해피콜 규칙에서 꺼져 있어요)';
+        })();
 
   return (
     <form onSubmit={handleSubmit} className="card" style={{ padding: 22, marginBottom: 24 }}>

@@ -1,5 +1,5 @@
 // 비급여 구매 기록 목록의 기간 검색·요약·엑셀 내보내기 준비(순수 함수). 화면/DB 코드는 따로 있다.
-import { addDays, computeHerbCallDates } from './happyCallStats';
+import { DEFAULT_RULES, specialCallDates, specialSingleCallDate, type SpecialRules } from './happyCallRules';
 import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from './types';
 import { suggestGoalCategory } from './nonCoveredGoal';
 
@@ -90,20 +90,20 @@ export const EXPORT_HEADERS = [
 ];
 
 /**
- * 엑셀에 담을 행들. 해피콜 일정은 화면의 규칙 그대로 — 처방일수가 있으면 1·2·3차(computeHerbCallDates),
- * 수령일만 있으면 수령일 다음날 1회, 수령일이 없으면 비운다. 연락처는 담지 않는다(구매 기록 화면에도 안 보이는 값).
+ * 엑셀에 담을 행들. 해피콜 일정은 해피콜 규칙(특수한약·그 밖의 비급여) 그대로 — 처방일수가 있으면 1·2·3차(specialCallDates),
+ * 수령일만 있으면 규칙의 1회, 수령일이 없으면 비운다. 연락처는 담지 않는다(구매 기록 화면에도 안 보이는 값).
  */
-export function purchaseExportRows(rows: NonCoveredPurchase[], creatorName: (createdBy: string | null) => string): (string | number | null)[][] {
+export function purchaseExportRows(rows: NonCoveredPurchase[], creatorName: (createdBy: string | null) => string, rules: SpecialRules = DEFAULT_RULES.special): (string | number | null)[][] {
   return rows.map((p) => {
     let c1 = '';
     let c2 = '';
     let c3 = '';
     if (p.happyCallDate) {
       if (p.durationDays) {
-        const d = computeHerbCallDates(p.happyCallDate, p.durationDays);
-        [c1, c2, c3] = [d.callDate1, d.callDate2, d.callDate3];
+        const d = specialCallDates(rules, p.happyCallDate, p.durationDays);
+        [c1, c2, c3] = [d.callDate1 ?? '', d.callDate2 ?? '', d.callDate3 ?? ''];
       } else {
-        c1 = addDays(p.happyCallDate, 1);
+        c1 = specialSingleCallDate(rules, p.happyCallDate) ?? '';
       }
     }
     return [

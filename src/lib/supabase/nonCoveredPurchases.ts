@@ -3,6 +3,7 @@ import type { GoalCategory, NonCoveredPurchase } from '@/lib/types';
 import {
   createManualEntry,
   getManualEntryStates,
+  type ManualEntryState,
   removeOpenManualEntries,
   renameOpenManualEntries,
   updateUntouchedManualEntry,
@@ -11,7 +12,9 @@ import { addDays } from '@/lib/happyCallStats';
 import { syncPackageForPurchase } from './herbPackages';
 import { autoAddCarePatient } from './careAutoAdd';
 import { deleteDietProgramForPurchase, syncDietProgramForPurchase } from './dietPrograms';
-import { CALL_SLOTS, callTypeForPurchase, desiredCalls, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
+import { loadRules } from './happyCallRules';
+import { CALL_SLOTS, callTypeForPurchase, desiredCalls, opsFromToday, planCallResync, type CallSlot, type ExistingCall } from '@/lib/nonCoveredCalls';
+import type { SpecialRules } from '@/lib/happyCallRules';
 
 const TABLE = 'non_covered_purchases';
 
@@ -143,8 +146,8 @@ function slotIds(purchase: Pick<NonCoveredPurchase, 'happyCallEntryId' | 'happyC
 }
 
 // 구매를 먼저 저장한 뒤 해피콜을 만들고 그 id를 구매에 연결한다. 처방일수가 있으면(한약 수령)
-// 한약 처방 등록과 같은 공식(수령일+1일 / 수령일+처방일수÷2 / 수령일+처방일수-3)으로 3회,
-// 수령일만 있으면 다음날 1회(src/lib/nonCoveredCalls.ts). 해피콜을 만들다 실패하면 구매와 이미 만든
+// 해피콜 규칙(비급여 현황 > 해피콜 규칙, 기본은 수령일+1일 / 수령일+10일 / 약 소진 5일 전)대로 최대 3회,
+// 수령일만 있으면 규칙의 1회(기본은 다음날, src/lib/nonCoveredCalls.ts). 해피콜을 만들다 실패하면 구매와 이미 만든
 // 콜을 되돌린다(최선을 다해 — 되돌리기도 실패할 수 있어 그 경우 메시지로 알린다).
 export async function createNonCoveredPurchase(
   supabase: SupabaseClient,
@@ -179,7 +182,8 @@ export async function createNonCoveredPurchase(
   // 한약 3개월·1개월 결제면 한약 패키지(잔여 일수)를 만든다. 패키지 표 문제가 결제 등록을 막지 않게 오류는 삼킨다.
   await syncPackageForPurchase(supabase, { id: purchase.id, patientName: input.patientName, chartNo: input.chartNo, productName: input.productName, goalCategory: input.goalCategory, durationDays: input.durationDays, purchaseDate: input.purchaseDate }, input.createdBy).catch(() => {});
 
-  const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays, input.goalCategory);
+  const rules = await loadRules(supabase);
+  const calls = desiredCalls(input.productName, input.happyCallDate, input.durationDays, input.goalCategory, rules.special);
   if (calls.length === 0) return purchase;
 
   const createdIds: string[] = [];
@@ -269,7 +273,8 @@ export async function updateNonCoveredPurchase(
     return state ? [{ slot, ...state }] : [];
   });
   // 일반 한약은 해피콜을 처방전에서 만들므로, 이 구매를 고쳐도 이미 있는 해피콜은 건드리지 않는다(새로 만들지도 지우지도 않는다).
-  const ops = patch.goalCategory === 'herb' ? [] : planCallResync(desiredCalls(patch.productName, patch.happyCallDate, patch.durationDays, patch.goalCategory), existingCalls);
+  const rules = await loadRules(supabase);
+  const ops = patch.goalCategory === 'herb' ? [] : planCallResync(desiredCalls(patch.productName, patch.happyCallDate, patch.durationDays, patch.goalCategory, rules.special), existingCalls);
 
   const nextIds: Record<CallSlot, string | null> = { ...current };
   const createdIds: string[] = [];
@@ -360,6 +365,74 @@ export async function deleteNonCoveredPurchase(supabase: SupabaseClient, purchas
   } catch {
     throw new HappyCallSyncError('기록은 삭제했지만 예정된 해피콜을 다 지우지 못했어요. 해피콜 목록을 확인해 주세요.');
   }
+}
+
+export interface ReapplyResult {
+  /** 해피콜을 다시 맞춰 본 구매 수 */
+  checked: number;
+  moved: number;
+  created: number;
+  removed: number;
+}
+
+/**
+ * 해피콜 규칙을 바꾼 뒤, 이미 만든 구매의 해피콜 중 아직 손대지 않은 것을 새 규칙에 맞춘다(구매를 고쳐 저장할 때와 같은 규칙, planCallResync).
+ * 이미 끝났거나 전화를 시도한 해피콜은 건드리지 않고, 지난 날짜로는 만들거나 옮기지 않는다. 일반 한약(처방전 기준)·린다이어트 구매는 여기서 다루지 않는다.
+ */
+export async function reapplyPurchaseCalls(supabase: SupabaseClient, rules: SpecialRules, today: string): Promise<ReapplyResult> {
+  const purchases = (await listNonCoveredPurchases(supabase)).filter((p) => p.happyCallDate && p.goalCategory !== 'herb' && p.goalCategory !== 'diet');
+  const ids = purchases.flatMap((p) => Object.values(slotIds(p)).filter((id): id is string => Boolean(id)));
+  const states: ManualEntryState[] = [];
+  for (let i = 0; i < ids.length; i += 100) states.push(...(await getManualEntryStates(supabase, ids.slice(i, i + 100))));
+  const result: ReapplyResult = { checked: 0, moved: 0, created: 0, removed: 0 };
+
+  for (const purchase of purchases) {
+    const current = slotIds(purchase);
+    const existingCalls: ExistingCall[] = CALL_SLOTS.flatMap((slot) => {
+      const id = current[slot];
+      const state = id ? states.find((s) => s.id === id) : undefined;
+      return id && state ? [{ slot, ...state }] : [];
+    });
+    const desired = desiredCalls(purchase.productName, purchase.happyCallDate, purchase.durationDays, purchase.goalCategory, rules);
+    const ops = opsFromToday(planCallResync(desired, existingCalls), today);
+    result.checked += 1;
+    if (ops.length === 0) continue;
+
+    const nextIds: Record<CallSlot, string | null> = { ...current };
+    const createdIds: string[] = [];
+    try {
+      for (const op of ops) {
+        if (op.type !== 'create') continue;
+        const id = await createManualEntry(supabase, {
+          patientName: purchase.patientName,
+          note: op.note,
+          callDate: op.callDate,
+          createdBy: purchase.createdBy,
+          callType: callTypeForPurchase(purchase.productName, purchase.durationDays),
+          phone: purchase.phone,
+        });
+        createdIds.push(id);
+        nextIds[op.slot] = id;
+      }
+      for (const op of ops) if (op.type === 'remove') nextIds[op.slot] = null;
+      const { error } = await supabase
+        .from(TABLE)
+        .update({ happy_call_entry_id: nextIds[1], happy_call_entry_id_2: nextIds[2], happy_call_entry_id_3: nextIds[3] })
+        .eq('id', purchase.id);
+      if (error) throw error;
+    } catch (err) {
+      await removeOpenManualEntries(supabase, createdIds).catch(() => {});
+      throw err;
+    }
+    for (const op of ops) {
+      if (op.type === 'update' && (await updateUntouchedManualEntry(supabase, op.id, { callDate: op.callDate, note: op.note }))) result.moved += 1;
+    }
+    const removeIds = ops.flatMap((op) => (op.type === 'remove' ? [op.id] : []));
+    await removeOpenManualEntries(supabase, removeIds, { onlyUntouched: true });
+    result.created += createdIds.length;
+    result.removed += removeIds.length;
+  }
+  return result;
 }
 
 export interface KnownPatient {

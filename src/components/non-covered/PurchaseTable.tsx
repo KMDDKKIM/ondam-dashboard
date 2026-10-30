@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { defaultGoalFor } from '@/lib/purchaseFilter';
 import { isDietProgramPurchase } from '@/lib/dietProgram';
 import { DURATION_PRESETS } from '@/lib/supabase/nonCoveredPurchases';
-import { computeHerbCallDates } from '@/lib/happyCallStats';
+import { DEFAULT_RULES, specialCallDates, type HappyCallRules } from '@/lib/happyCallRules';
 import type { EditableNonCoveredPurchase } from '@/lib/supabase/nonCoveredPurchases';
 import type { GoalCategory, NonCoveredProduct, NonCoveredPurchase } from '@/lib/types';
 import { Field, fieldGrid, inputBig } from './Field';
@@ -19,6 +19,8 @@ interface Props {
   staffNames: Record<string, string>;
   /** 활성 진료의(대표원장·부원장) 목록 — doctors 테이블에서 자동으로 맞춰진다. */
   doctorNames: string[];
+  /** 해피콜 규칙 — 수령 칸에 마우스를 올리면 보이는 1·2·3차 날짜에 쓴다. */
+  rules?: HappyCallRules;
   /** 저장이 끝나 편집 상태를 닫아도 되면 true */
   onSave: (existing: NonCoveredPurchase, patch: EditableNonCoveredPurchase) => Promise<boolean>;
   onDelete: (purchase: NonCoveredPurchase) => void;
@@ -162,7 +164,7 @@ function SelectOrCustom({
   );
 }
 
-export function PurchaseTable({ rows, products, categories, staffNames, doctorNames, onSave, onDelete }: Props) {
+export function PurchaseTable({ rows, products, categories, staffNames, doctorNames, rules = DEFAULT_RULES, onSave, onDelete }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -313,7 +315,7 @@ export function PurchaseTable({ rows, products, categories, staffNames, doctorNa
   }
 
   function viewRow(p: NonCoveredPurchase) {
-    const callDates = p.happyCallDate && p.durationDays ? computeHerbCallDates(p.happyCallDate, p.durationDays) : null;
+    const callDates = p.happyCallDate && p.durationDays ? specialCallDates(rules.special, p.happyCallDate, p.durationDays) : null;
     return (
       <tr key={p.id} style={{ borderTop: '1px solid var(--color-line)' }}>
         <td style={cell}>{shortDate(p.purchaseDate)}</td>
@@ -326,7 +328,7 @@ export function PurchaseTable({ rows, products, categories, staffNames, doctorNa
         <td style={{ ...cell, fontWeight: 700 }}>{p.amount != null ? formatAmount(p.amount) : <MissingAmountChip />}</td>
         <td
           style={cell}
-          title={callDates ? `해피콜 1차 ${callDates.callDate1} · 2차 ${callDates.callDate2} · 3차 ${callDates.callDate3}` : undefined}
+          title={callDates ? `해피콜 1차 ${callDates.callDate1 ?? '없음'} · 2차 ${callDates.callDate2 ?? '없음'} · 3차 ${callDates.callDate3 ?? '없음'}` : undefined}
         >
           {p.happyCallDate ? (
             <span>

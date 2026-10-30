@@ -19,6 +19,7 @@ import { reminderDetail } from '@/lib/dietReminders';
 import { groupTodayContacts } from '@/lib/careToday';
 import { listCareDue, type CarePatient } from './herbCare';
 import { createManualEntry, getManualEntryStates, removeOpenManualEntries, renameOpenManualEntries } from './happyCallQueue';
+import { loadRules } from './happyCallRules';
 
 // 린다이어트 프로그램(diet_programs), 원장 카톡 보냄 기록(diet_program_sends), 데스크 해피콜 연결(diet_program_calls).
 // 승인된 직원 전원이 읽고 쓴다. 프로그램은 비급여 현황의 린다이어트 결제에서 만들고(syncDietProgramForPurchase), 데스크 해피콜은 해피콜 목록(happy_call_manual_entries)에 만든다.
@@ -145,7 +146,8 @@ export async function syncDeskCalls(supabase: SupabaseClient, program: DietProgr
     // 해피콜 목록에서 이미 지워진 해피콜은 연결도 없어진 것으로 본다(entry 삭제 시 연결은 cascade로 사라진다).
     return s ? [{ code: r.code, callDate: r.due_date, entryId: r.entry_id, touched: s.closed || s.attempts > 0 }] : [];
   });
-  const ops = planDeskSync(scheduledDeskCalls(program), existing, today);
+  const rules = await loadRules(supabase);
+  const ops = planDeskSync(scheduledDeskCalls(program, rules.diet), existing, today);
   for (const op of ops) {
     if (op.type === 'create') await createDeskCall(supabase, program, op.code, op.callDate, createdBy);
   }
@@ -282,7 +284,8 @@ export async function loadOwnerDue(supabase: SupabaseClient, today: string): Pro
   const programs = (await listDietPrograms(supabase)).filter((p) => p.status === 'active');
   if (programs.length === 0) return { programs, due: [] };
   const sends = await listProgramSends(supabase, today.slice(0, 4) + '-01-01');
-  return { programs, due: ownerDueMessages(programs, today, sends) };
+  const rules = await loadRules(supabase);
+  return { programs, due: ownerDueMessages(programs, today, sends, undefined, { rules: rules.diet }) };
 }
 
 /**

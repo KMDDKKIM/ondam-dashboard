@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callTypeForPurchase, createsCallsFromPurchase, desiredCalls, planCallResync, type ExistingCall } from './nonCoveredCalls';
+import { callTypeForPurchase, createsCallsFromPurchase, desiredCalls, opsFromToday, planCallResync, type CallOp, type ExistingCall } from './nonCoveredCalls';
 
 function existing(slot: 1 | 2 | 3, callDate: string, extra: Partial<ExistingCall> = {}): ExistingCall {
   return { slot, id: `e${slot}`, callDate, note: null, closed: false, attempts: 0, ...extra };
@@ -107,3 +107,16 @@ describe('한약·린다이어트는 비급여 구매에서 해피콜을 만들�
   });
 });
 
+
+describe('opsFromToday — 규칙을 다시 맞출 때 지난 날짜는 건드리지 않는다', () => {
+  it('지난 날짜로 만들거나 옮기는 작업은 빼고, 지우는 작업은 남긴다', () => {
+    const ops: CallOp[] = [
+      { type: 'create', slot: 1, callDate: '2026-10-01', note: 'a' },
+      { type: 'create', slot: 2, callDate: '2026-10-30', note: 'b' },
+      { type: 'update', slot: 3, id: 'e3', callDate: '2026-10-29', note: 'c' },
+      { type: 'update', slot: 1, id: 'e1', callDate: '2026-11-02', note: 'd' },
+      { type: 'remove', slot: 2, id: 'e2' },
+    ];
+    expect(opsFromToday(ops, '2026-10-30').map((o) => `${o.type}:${o.slot}`)).toEqual(['create:2', 'update:1', 'remove:2']);
+  });
+});

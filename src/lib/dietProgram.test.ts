@@ -15,6 +15,7 @@ import {
   scheduledDeskCalls,
   type DietProgram,
 } from './dietProgram';
+import { DEFAULT_RULES } from './happyCallRules';
 import { deskScriptForNote, deskScriptText, fillScript, koDate, OWNER_SCRIPTS, scriptValues } from './dietScripts';
 
 // 환자 이름은 시험용 값이다(공개 저장소).
@@ -27,7 +28,10 @@ function program(p: Partial<DietProgram> = {}): DietProgram {
 }
 const codes = (list: ReturnType<typeof ownerDueMessages>) => list.map((m) => m.code);
 const later = { later: true };
-const weeklyOnly = (p: DietProgram, today: string) => codes(ownerDueMessages([p], today, [])).includes('weekly');
+// 처음 방식(다이어트환 시작일 하루만 안부, 그 다음 날부터 월요일 문안 4주) — 규칙의 "시작 후 매일"을 1일로 둔 것과 같다.
+const legacy = { rules: { ...DEFAULT_RULES.diet, pillDailyDays: 1 } };
+const legacyDue = (programs: DietProgram[], today: string, sends: { programId: string; code: string; dueDate: string }[] = []) => ownerDueMessages(programs, today, sends, undefined, legacy);
+const weeklyOnly = (p: DietProgram, today: string) => codes(legacyDue([p], today)).includes('weekly');
 
 describe('isDietProgramPurchase — 린다이어트 프로그램이 만들어지는 결제', () => {
   it('목표 반영이 다이어트이고 상품명에 린다이어트가 있어야 한다', () => {
@@ -58,40 +62,75 @@ describe('날짜 계산', () => {
 });
 
 describe('ownerDueMessages — 원장 카톡', () => {
-  it('지금은 다이어트환 시작일 안부와 첫 4주의 월요일 문안만 자동으로 올라간다(그 밖의 일정은 꺼 둠)', () => {
+  it('(규칙에서 시작 후 매일을 1일로 두면) 다이어트환 시작일 안부와 첫 4주의 월요일 문안만 자동으로 올라간다(그 밖의 일정은 꺼 둠)', () => {
     expect(LATER_OWNER_MESSAGES).toBe(false);
-    expect(codes(ownerDueMessages([program()], '2026-10-08', []))).toEqual(['pill-start']);
-    expect(codes(ownerDueMessages([program()], '2026-12-23', []))).toEqual([]); // 연복 권유는 만들지 않는다
+    expect(codes(legacyDue([program()], '2026-10-08'))).toEqual(['pill-start']);
+    expect(codes(legacyDue([program()], '2026-12-23'))).toEqual([]); // 연복 권유는 만들지 않는다
   });
 
   it('월요일 문안: 다이어트환 시작 다음 날부터 4주(28일) 동안의 월요일에만', () => {
     // 디톡스 10/5 → 환 시작 10/8(목). 4주 = 10/8 ~ 11/4
-    expect(codes(ownerDueMessages([program()], '2026-10-12', []))).toEqual(['weekly']); // 월
-    expect(codes(ownerDueMessages([program()], '2026-11-02', []))).toEqual(['weekly']); // 월, 마지막 주
-    expect(codes(ownerDueMessages([program()], '2026-11-09', []))).toEqual([]); // 4주 지난 월요일
-    expect(codes(ownerDueMessages([program()], '2026-10-13', []))).toEqual([]); // 화요일
+    expect(codes(legacyDue([program()], '2026-10-12'))).toEqual(['weekly']); // 월
+    expect(codes(legacyDue([program()], '2026-11-02'))).toEqual(['weekly']); // 월, 마지막 주
+    expect(codes(legacyDue([program()], '2026-11-09'))).toEqual([]); // 4주 지난 월요일
+    expect(codes(legacyDue([program()], '2026-10-13'))).toEqual([]); // 화요일
     expect(weeklyOnly(program({ detoxStartDate: '2026-10-05' }), '2026-10-05')).toBe(false); // 아직 환 시작 전 월요일
   });
 
   it('다이어트환 시작일이 월요일이면 그날은 시작 안부만(월요일 문안과 겹치지 않는다)', () => {
     // 디톡스 10/2 → 환 시작 10/5(월)
-    expect(codes(ownerDueMessages([program({ detoxStartDate: '2026-10-02' })], '2026-10-05', []))).toEqual(['pill-start']);
+    expect(codes(legacyDue([program({ detoxStartDate: '2026-10-02' })], '2026-10-05'))).toEqual(['pill-start']);
   });
 
   it('다이어트환 시작일부터 이틀간 보이고, 그 전·그 뒤에는 안 보인다', () => {
-    expect(codes(ownerDueMessages([program()], '2026-10-07', []))).toEqual([]);
-    expect(codes(ownerDueMessages([program()], '2026-10-09', []))).toEqual(['pill-start']);
-    expect(codes(ownerDueMessages([program()], '2026-10-11', []))).toEqual([]);
+    expect(codes(legacyDue([program()], '2026-10-07'))).toEqual([]);
+    expect(codes(legacyDue([program()], '2026-10-09'))).toEqual(['pill-start']);
+    expect(codes(legacyDue([program()], '2026-10-11'))).toEqual([]);
   });
 
   it('보냈거나 건너뛴 것은 다시 안 뜬다, 종료된 환자는 안 뜬다', () => {
     const sends = [{ programId: 'p1', code: 'pill-start', dueDate: '2026-10-08' }];
-    expect(ownerDueMessages([program()], '2026-10-09', sends)).toEqual([]);
-    expect(ownerDueMessages([program({ status: 'ended' })], '2026-10-08', [])).toEqual([]);
+    expect(legacyDue([program()], '2026-10-09', sends)).toEqual([]);
+    expect(legacyDue([program({ status: 'ended' })], '2026-10-08')).toEqual([]);
   });
 
   it('디톡스 시작일이 없으면 아무것도 안 뜬다', () => {
     expect(ownerDueMessages([program({ detoxStartDate: null })], '2026-10-08', [])).toEqual([]);
+  });
+
+  describe('해피콜 규칙(기본: 시작 후 3일 매일, 이후 매주 월요일 4주)', () => {
+    // 디톡스 10/5 → 환 시작 10/8(목)
+    it('다이어트환 시작일은 시작 안부, 그 다음 이틀은 복용 안부', () => {
+      expect(codes(ownerDueMessages([program()], '2026-10-08', []))).toEqual(['pill-start']);
+      expect(codes(ownerDueMessages([program()], '2026-10-09', []))).toEqual(['pill-start', 'pill-daily']); // 시작 안부는 이틀간 보인다
+      // 시작 안부를 이미 보냈으면 복용 안부만 남는다
+      const sent = [{ programId: 'p1', code: 'pill-start', dueDate: '2026-10-08' }];
+      expect(codes(ownerDueMessages([program()], '2026-10-10', sent))).toEqual(['pill-daily']);
+      expect(ownerDueMessages([program()], '2026-10-10', sent).map((m) => m.dueDate)).toEqual(['2026-10-10']);
+    });
+
+    it('매일 연락하는 기간이 끝난 다음 날(11일째)부터 정해진 요일에 문안', () => {
+      expect(codes(ownerDueMessages([program()], '2026-10-11', []))).toEqual([]); // 4일째 — 일요일이라 문안도 아님
+      expect(codes(ownerDueMessages([program()], '2026-10-12', []))).toEqual(['weekly']); // 월
+      expect(codes(ownerDueMessages([program()], '2026-11-02', []))).toEqual(['weekly']); // 월, 3 + 28일 안
+      expect(codes(ownerDueMessages([program()], '2026-11-09', []))).toEqual([]); // 기간 밖
+    });
+
+    it('요일·주 수·매일 일수를 바꿀 수 있다', () => {
+      const rules = { ...DEFAULT_RULES.diet, pillDailyDays: 0, weeklyWeekday: '금' as const, weeklyWeeks: 2 };
+      const due = (today: string) => codes(ownerDueMessages([program()], today, [], undefined, { rules }));
+      expect(due('2026-10-08')).toEqual([]); // 매일 연락 안 함
+      expect(due('2026-10-09')).toEqual(['weekly']); // 금요일, 환 시작 다음 날
+      expect(due('2026-10-16')).toEqual(['weekly']);
+      expect(due('2026-10-23')).toEqual([]); // 2주 지남
+      expect(codes(ownerDueMessages([program()], '2026-10-12', [], undefined, { rules: { ...DEFAULT_RULES.diet, weeklyEnabled: false } }))).toEqual([]);
+    });
+
+    it('디톡스 직원 해피콜 일수: 규칙대로(0~3일)', () => {
+      expect(scheduledDeskCalls(program()).map((c) => c.callDate)).toEqual(['2026-10-05', '2026-10-06', '2026-10-07']);
+      expect(scheduledDeskCalls(program(), { ...DEFAULT_RULES.diet, detoxCallDays: 1 })).toEqual([{ code: 'detox-day1', callDate: '2026-10-05' }]);
+      expect(scheduledDeskCalls(program(), { ...DEFAULT_RULES.diet, detoxCallDays: 0 })).toEqual([]);
+    });
   });
 
   // ---- 꺼 둔 규칙(나중에 켤 때를 위해 규칙 자체는 계속 시험한다) ----
@@ -119,7 +158,7 @@ describe('ownerDueMessages — 원장 카톡', () => {
   it('많이 밀린 것이 위로', () => {
     const a = program({ id: 'a', patientName: '가', detoxStartDate: '2026-10-05' }); // 환 시작 10/8, 오늘 10/9 → 1일 밀림
     const b = program({ id: 'b', patientName: '나', detoxStartDate: '2026-10-06' }); // 환 시작 10/9 → 오늘
-    expect(ownerDueMessages([b, a], '2026-10-09', []).map((m) => m.programId)).toEqual(['a', 'b']);
+    expect(legacyDue([b, a], '2026-10-09').map((m) => m.programId)).toEqual(['a', 'b']);
   });
 });
 

@@ -2298,3 +2298,26 @@ create policy "approved staff can update leandiet_excluded_patients" on leandiet
 drop policy if exists "approved staff can delete leandiet_excluded_patients" on leandiet_excluded_patients;
 create policy "approved staff can delete leandiet_excluded_patients" on leandiet_excluded_patients
   for delete to authenticated using (public.is_approved_staff());
+
+-- ===== 해피콜 규칙 설정 (migration_happy_call_rules.sql) =====
+create table if not exists happy_call_rules (
+  id text primary key default 'main' check (id = 'main'),
+  config jsonb not null,
+  updated_by uuid references staff(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  -- 마지막으로 "아직 안 건 해피콜에도 적용"을 누른 시각
+  applied_at timestamptz
+);
+alter table happy_call_rules enable row level security;
+drop policy if exists "approved staff can read happy_call_rules" on happy_call_rules;
+create policy "approved staff can read happy_call_rules" on happy_call_rules
+  for select to authenticated using (public.is_approved_staff());
+drop policy if exists "owner can insert happy_call_rules" on happy_call_rules;
+create policy "owner can insert happy_call_rules" on happy_call_rules
+  for insert to authenticated with check (public.is_owner());
+drop policy if exists "owner can update happy_call_rules" on happy_call_rules;
+create policy "owner can update happy_call_rules" on happy_call_rules
+  for update to authenticated using (public.is_owner()) with check (public.is_owner());
+
+-- 일반 한약 처방전에서도 내원 유도(약 소진 전 연락) 해피콜을 만들 수 있게 세 번째 연결 칸을 둔다.
+alter table herb_compounding_orders add column if not exists call_entry_id_3 uuid references happy_call_manual_entries(id) on delete set null;
